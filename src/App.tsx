@@ -115,8 +115,8 @@ function App() {
     }, 600)
     
     try {
-      // 使用模拟数据
-      const videoUrl = await simulateVideoGeneration()
+      // 调用真实API
+      const videoUrl = await generateVideoAPI(prompt, selectedModel)
       
       setGeneratedVideo(videoUrl)
       setProgress(100)
@@ -128,7 +128,7 @@ function App() {
     } catch (error) {
       console.error('生成失败:', error)
       setApiStatus('error')
-      alert('视频生成失败，请稍后重试')
+      alert('视频生成失败，请检查API配置')
     } finally {
       clearInterval(progressInterval)
       setTimeout(() => { setIsGenerating(false); setProgress(0) }, 500)
