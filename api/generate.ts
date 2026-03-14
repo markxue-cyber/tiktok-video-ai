@@ -15,7 +15,17 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { prompt, model } = req.body || {}
 
-      console.log('Submitting with model:', model)
+      // 映射前端模型名称到API模型名称
+      const modelMap: Record<string, string> = {
+        'sora': 'sora_video2',
+        'kling': 'doubao-seedance-1-5-pro-251215',
+        'runway': 'veo3',
+        'seedance': 'doubao-seedance-1-5-pro-251215'
+      }
+      
+      const apiModel = model ? (modelMap[model] || model) : 'doubao-seedance-1-5-pro-251215'
+      
+      console.log('Submitting with model:', apiModel)
 
       const submitResponse = await fetch('https://api.linkapi.org/v2/videos/generations', {
         method: 'POST',
@@ -25,7 +35,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           prompt: prompt || '生成一个视频',
-          model: model || 'doubao-seedance-1-5-pro-251215',
+          model: apiModel,
           duration: 5,
           aspect_ratio: '9:16'
         })
