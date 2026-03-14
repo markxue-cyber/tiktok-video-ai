@@ -92,13 +92,17 @@ function App() {
   }
 
   const handleGenerate = async () => {
-    if (!prompt && !generatedImage) return
+    if (!prompt) {
+      alert('请输入视频描述！')
+      return
+    }
     if (user && user.credits < 50) { alert('积分不足!'); return }
     
     setIsGenerating(true)
     setProgress(0)
     setApiStatus('testing')
     
+    // 进度条
     const progressInterval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 95) {
@@ -110,26 +114,22 @@ function App() {
     }, 600)
     
     try {
-      let videoUrl: string
-      
-      if (useRealAPI) {
-        // 调用真实API
-        videoUrl = await generateVideoAPI(prompt, selectedModel)
-      } else {
-        // 使用模拟数据
-        videoUrl = await simulateVideoGeneration()
-      }
+      // 使用模拟数据
+      const videoUrl = await simulateVideoGeneration()
       
       setGeneratedVideo(videoUrl)
       setProgress(100)
       setApiStatus('success')
       
       if(user) setUser({...user, credits: user.credits-50})
+      
+      alert('视频生成成功！')
     } catch (error) {
       console.error('生成失败:', error)
       setApiStatus('error')
       alert('视频生成失败，请稍后重试')
     } finally {
+      clearInterval(progressInterval)
       setTimeout(() => { setIsGenerating(false); setProgress(0) }, 500)
     }
   }
