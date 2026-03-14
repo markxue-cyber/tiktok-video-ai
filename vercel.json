@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/generate-video" }
+    { "source": "/api/(.*)", "destination": "/api/generate" }
   ]
 }
