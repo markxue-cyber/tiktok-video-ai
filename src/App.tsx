@@ -39,12 +39,13 @@ const generateVideoAPI = async (prompt: string, model: string): Promise<string> 
   }
 }
 
-// 模拟视频生成（备用）
+// 模拟视频生成
 const simulateVideoGeneration = async (): Promise<string> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve('https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4')
-    }, 5000)
+      // 使用更稳定的示例视频
+      resolve('https://www.w3schools.com/html/mov_bbb.mp4')
+    }, 3000)
   })
 }
 
