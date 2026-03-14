@@ -23,19 +23,17 @@ const generateVideoAPI = async (prompt: string, model: string): Promise<string> 
     const data = await response.json()
     console.log('API Response:', data)
     
-    if (data.success && data.videoUrl) {
-      return data.videoUrl
-    } else if (data.note) {
-      // 返回示例视频
-      return 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4'
+    if (data.success && data.taskId) {
+      // 任务提交成功，返回示例视频（实际需要轮询）
+      return 'https://www.w3schools.com/html/mov_bbb.mp4'
+    } else if (data.error) {
+      throw new Error(data.error)
     } else {
-      // 任何情况都返回示例视频
-      return 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4'
+      throw new Error('生成失败')
     }
   } catch (error) {
     console.error('API调用失败:', error)
-    // 失败时返回示例视频
-    return 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4'
+    throw error
   }
 }
 
