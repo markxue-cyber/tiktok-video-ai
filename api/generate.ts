@@ -19,7 +19,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           prompt: prompt || '生成一个视频',
-          model: model || 'kling',
+          model: 'doubao-seedance-1-5-pro-251215',
           duration: 5,
           aspect_ratio: '9:16'
         })
