@@ -7,33 +7,37 @@ import {
 } from 'lucide-react'
 
 // 视频生成API调用
-const generateVideoAPI = async (prompt: string, model: string): Promise<string> => {
-  try {
-    const response = await fetch('/api/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        prompt, 
-        model 
-      })
-    })
-    
-    const data = await response.json()
-    console.log('API Response:', data)
-    
-    if (data.success && data.taskId) {
-      // 任务提交成功，返回示例视频（实际需要轮询）
-      return 'https://www.w3schools.com/html/mov_bbb.mp4'
-    } else if (data.error) {
-      throw new Error(data.error)
-    } else {
-      throw new Error('生成失败')
-    }
-  } catch (error) {
-    console.error('API调用失败:', error)
-    throw error
+const generateVideoAPI = async (prompt: string, model: string): Promise<{videoUrl: string, taskId: string, message: string}> => {
+  // 提交任务
+  const response = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, model })
+  })
+  
+  const data = await response.json()
+  console.log('Submit Response:', data)
+  
+  if (!data.success) {
+    throw new Error(data.error || '提交失败')
+  }
+  
+  // 返回任务ID和消息
+  return {
+    videoUrl: '',
+    taskId: data.taskId,
+    message: data.message || '视频生成中，预计需要3-5分钟'
+  }
+}
+
+// 查询视频状态
+const checkVideoStatus = async (taskId: string): Promise<{status: string, videoUrl: string, progress: string}> => {
+  const response = await fetch(`/api/generate?taskId=${taskId}`)
+  const data = await response.json()
+  return {
+    status: data.status,
+    videoUrl: data.videoUrl || '',
+    progress: data.progress || '0%'
   }
 }
 
@@ -100,36 +104,51 @@ function App() {
     setIsGenerating(true)
     setProgress(0)
     setApiStatus('testing')
-    
-    // 进度条
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 95) {
-          clearInterval(progressInterval)
-          return prev
-        }
-        return prev + Math.random() * 20
-      })
-    }, 600)
+    setGeneratedVideo('')
     
     try {
-      // 调用真实API
-      const videoUrl = await generateVideoAPI(prompt, selectedModel)
+      // 提交任务
+      const result = await generateVideoAPI(prompt, selectedModel)
       
-      setGeneratedVideo(videoUrl)
-      setProgress(100)
-      setApiStatus('success')
+      // 显示等待消息
+      alert(result.message)
       
-      if(user) setUser({...user, credits: user.credits-50})
+      // 轮询查询状态
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await checkVideoStatus(result.taskId)
+          setProgress(parseInt(status.progress) || 0)
+          
+          if (status.status === 'SUCCESS' && status.videoUrl) {
+            clearInterval(pollInterval)
+            setGeneratedVideo(status.videoUrl)
+            setProgress(100)
+            setApiStatus('success')
+            if (user) setUser({...user, credits: user.credits - 50})
+            alert('视频生成成功！')
+          } else if (status.status === 'FAILURE') {
+            clearInterval(pollInterval)
+            setApiStatus('error')
+            alert('视频生成失败：' + (status.videoUrl || '未知错误'))
+          }
+        } catch (e) {
+          console.error('查询失败:', e)
+        }
+      }, 5000) // 每5秒查询一次
       
-      alert('视频生成成功！')
+      // 最多轮询10分钟
+      setTimeout(() => {
+        clearInterval(pollInterval)
+        if (apiStatus === 'testing') {
+          setIsGenerating(false)
+        }
+      }, 10 * 60 * 1000)
+      
     } catch (error) {
       console.error('生成失败:', error)
       setApiStatus('error')
-      alert('视频生成失败，请检查API配置')
-    } finally {
-      clearInterval(progressInterval)
-      setTimeout(() => { setIsGenerating(false); setProgress(0) }, 500)
+      alert('视频生成失败：' + (error as Error).message)
+      setIsGenerating(false)
     }
   }
 
