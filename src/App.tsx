@@ -153,18 +153,41 @@ function App() {
   }
 
   const handleClone = async () => {
-    if (!uploadedVideo) return
+    if (!uploadedVideo) { alert('请先上传视频！'); return }
     if (user && user.credits < 80) { alert('积分不足!'); return }
     setIsGenerating(true)
     setProgress(0)
-    const interval = setInterval(() => setProgress(p => { if(p>=95){clearInterval(interval);return p} return p+Math.random()*15 }), 600)
+    setGeneratedVideo('')
+    
     try {
-      const v = useRealAPI ? await generateVideoAPI('', selectedModel) : await simulateVideoGeneration()
-      setGeneratedVideo(v)
-      setProgress(100)
-      if(user) setUser({...user, credits: user.credits-80})
-    } finally {
-      setTimeout(() => { setIsGenerating(false); setProgress(0) }, 500)
+      const result = await generateVideoAPI('', selectedModel)
+      alert(result.message)
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await checkVideoStatus(result.taskId)
+          setProgress(parseInt(status.progress) || 0)
+          
+          if (status.status === 'SUCCESS' && status.videoUrl) {
+            clearInterval(pollInterval)
+            setGeneratedVideo(status.videoUrl)
+            setProgress(100)
+            if (user) setUser({...user, credits: user.credits - 80})
+            alert('视频生成成功！')
+          } else if (status.status === 'FAILURE') {
+            clearInterval(pollInterval)
+            alert('视频生成失败')
+          }
+        } catch (e) {
+          console.error('查询失败:', e)
+        }
+      }, 5000)
+      
+      setTimeout(() => { clearInterval(pollInterval); setIsGenerating(false) }, 10 * 60 * 1000)
+      
+    } catch (error) {
+      alert('提交失败：' + (error as Error).message)
+      setIsGenerating(false)
     }
   }
 
