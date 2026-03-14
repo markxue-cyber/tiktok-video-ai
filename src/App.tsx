@@ -78,7 +78,7 @@ function App() {
   const [showPayment, setShowPayment] = useState(false)
   const [selectedPackage, setSelectedPackage] = useState<number|null>(null)
   const [apiStatus, setApiStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
-  const [useRealAPI, setUseRealAPI] = useState(true) // 默认使用真实API
+  const [useRealAPI, setUseRealAPI] = useState(false) // 默认使用模拟模式（开发测试用）
 
   const handleLogin = () => {
     setUser({ name: '产品经理', email: 'demo@example.com', credits: 800 })
