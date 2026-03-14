@@ -52,7 +52,7 @@ const simulateVideoGeneration = async (): Promise<string> => {
 }
 
 const MODELS = [
-  { id: 'sora', name: 'OpenAI Sora', icon: '🚀', desc: '最新一代 AI' },
+  { id: 'sora', name: 'OpenAI Sora', icon: '🚀', desc: '文生视频首选' },
   { id: 'kling', name: '快手 Kling', icon: '⚡', desc: '性价比高' },
   { id: 'runway', name: 'Runway', icon: '🎬', desc: '专业视频' },
   { id: 'seedance', name: '字节 Seedance', icon: '🏠', desc: '国产优质' },

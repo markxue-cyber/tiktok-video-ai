@@ -1,60 +1,42 @@
 // 视频生成API调用
-const generateVideoAPI = async (prompt: string, model: string): Promise<string> => {
-  try {
-    // 调用Vercel Serverless Function
-    const response = await fetch('/api/generate-video', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        prompt, 
-        model 
-      })
-    })
-    
-    const data = await response.json()
-    
-    if (data.success && data.videoUrl) {
-      return data.videoUrl
-    } else if (data.taskId) {
-      // 异步任务，轮询获取结果
-      return await pollVideoResult(data.taskId)
-    } else if (data.error) {
-      throw new Error(data.error)
-    } else {
-      throw new Error('生成失败')
-    }
-  } catch (error) {
-    console.error('API调用失败:', error)
-    throw error
+const generateVideoAPI = async (prompt: string, model: string): Promise<{videoUrl: string, taskId: string, message: string}> => {
+  // 映射UI模型到API模型
+  const modelMap: Record<string, string> = {
+    'sora': 'sora_video2',
+    'kling': 'doubao-seedance-1-5-pro-251215', // kling不可用，用seedance
+    'runway': 'veo3',
+    'seedance': 'doubao-seedance-1-5-pro-251215'
+  }
+  
+  const apiModel = modelMap[model] || 'doubao-seedance-1-5-pro-251215'
+  
+  const response = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, model: apiModel })
+  })
+  
+  const data = await response.json()
+  console.log('Submit Response:', data)
+  
+  if (!data.success) {
+    throw new Error(data.error || '提交失败')
+  }
+  
+  return {
+    videoUrl: '',
+    taskId: data.taskId,
+    message: data.message || '视频生成中，预计需要3-5分钟'
   }
 }
 
-// 轮询视频生成结果
-const pollVideoResult = async (taskId: string): Promise<string> => {
-  const maxAttempts = 30 // 最多等待30次
-  const interval = 5000 // 每次等待5秒
-  
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(resolve => setTimeout(resolve, interval))
-    
-    try {
-      const response = await fetch(`/api/get-video?taskId=${taskId}`)
-      const data = await response.json()
-      
-      if (data.success && data.videoUrl) {
-        return data.videoUrl
-      }
-      if (data.status === 'failed') {
-        throw new Error('视频生成失败')
-      }
-    } catch (e) {
-      console.log('轮询中...')
-    }
+// 查询视频状态
+const checkVideoStatus = async (taskId: string): Promise<{status: string, videoUrl: string, progress: string}> => {
+  const response = await fetch(`/api/generate?taskId=${taskId}`)
+  const data = await response.json()
+  return {
+    status: data.status,
+    videoUrl: data.videoUrl || '',
+    progress: data.progress || '0%'
   }
-  
-  throw new Error('等待超时')
 }
-
-export { generateVideoAPI }
