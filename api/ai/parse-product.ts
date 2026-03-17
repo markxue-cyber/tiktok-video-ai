@@ -42,17 +42,25 @@ export default async function handler(req, res) {
         messages: [
           {
             role: 'system',
-            content:
-              '你是资深电商短视频文案策划。你会从参考图与用户要求中提取商品信息，并严格用JSON输出，不要输出任何多余文本。',
+            content: [
+              '你是资深电商短视频策划与商品理解助手。',
+              '任务：根据商品图识别并总结商品信息。',
+              '要求：',
+              '- 必须严格输出JSON对象：{"name":"...","category":"...","sellingPoints":"...","targetAudience":"..."}',
+              '- sellingPoints 用一句话概括核心卖点（可用顿号/斜杠分隔短语），避免空泛词。',
+              '- category 用电商类目短语（如“护肤品-精华”“3C-耳机”“家居-收纳”）。',
+              '- targetAudience 用人群画像短语（如“通勤白领”“学生党”“宝妈”“健身人群”）。',
+              '- 不要输出除JSON以外任何内容。',
+            ].join('\n'),
           },
           {
             role: 'user',
             content: [
-              `请解析这张商品参考图，输出4个字段：name, category, sellingPoints, targetAudience。`,
-              `输出语言：${language || '简体中文'}`,
-              `场景：${kind || 'video'}（video=商品视频脚本/提示词；image=商品图片提示词）`,
-              `参考图(可能是dataURL)：${String(refImage).slice(0, 2000)}`,
-            ].join('\n'),
+              { type: 'text', text: `输出语言：${language || '简体中文'}` },
+              { type: 'text', text: `场景：${kind || 'video'}（video=视频脚本/提示词；image=图片提示词）` },
+              { type: 'text', text: '请基于下方商品图识别信息并输出JSON。' },
+              { type: 'image_url', image_url: { url: String(refImage) } },
+            ],
           },
         ],
       },

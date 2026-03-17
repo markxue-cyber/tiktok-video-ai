@@ -281,6 +281,9 @@ function VideoGenerator() {
   const [modalStep, setModalStep] = useState(1)
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
   const [scripts, setScripts] = useState<string[]>([])
+  const [scriptBatches, setScriptBatches] = useState<string[][]>([])
+  const [scriptBatchIdx, setScriptBatchIdx] = useState(0)
+  const [scriptRefreshCount, setScriptRefreshCount] = useState(0)
   const [selectedScript, setSelectedScript] = useState('')
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -316,8 +319,11 @@ function VideoGenerator() {
       setModalStep(2)
       setIsAiBusy(true)
       try {
-        const r = await generateVideoScripts({ product: productInfo, language: productInfo.language })
+        const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage })
         setScripts(r.scripts)
+        setScriptBatches([r.scripts])
+        setScriptBatchIdx(0)
+        setScriptRefreshCount(0)
         setSelectedScript(r.scripts[0] || '')
       } catch (e: any) {
         setAiError(e?.message || '脚本生成失败')
@@ -335,6 +341,39 @@ function VideoGenerator() {
     setPrompt(optimizedPrompt || selectedScript)
   }
 
+  const handlePrev = () => {
+    if (modalStep === 1) return
+    if (modalStep === 2) setModalStep(1)
+    else setModalStep(2)
+  }
+
+  const handleRefreshScripts = async () => {
+    if (modalStep !== 2) return
+    setAiError('')
+    if (scriptBatches.length >= 3) {
+      const nextIdx = (scriptBatchIdx + 1) % 3
+      setScriptBatchIdx(nextIdx)
+      const next = scriptBatches[nextIdx] || []
+      setScripts(next)
+      setSelectedScript(next[0] || '')
+      return
+    }
+
+    setIsAiBusy(true)
+    try {
+      const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage })
+      setScriptBatches((prev) => [...prev, r.scripts])
+      setScriptBatchIdx(scriptBatches.length)
+      setScriptRefreshCount((c) => Math.min(2, c + 1))
+      setScripts(r.scripts)
+      setSelectedScript(r.scripts[0] || '')
+    } catch (e: any) {
+      setAiError(e?.message || '脚本生成失败')
+    } finally {
+      setIsAiBusy(false)
+    }
+  }
+
   const handleOptimize = async (tag: string) => {
     const newTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]
     setTags(newTags)
@@ -350,8 +389,21 @@ function VideoGenerator() {
     }
   }
 
+  const finalVideoPrompt = useMemo(() => {
+    const base = optimizedPrompt || selectedScript || prompt
+    const info = `产品名称：${productInfo.name}\n产品类目：${productInfo.category}\n核心卖点：${productInfo.sellingPoints}\n目标人群：${productInfo.targetAudience}\n语言：${productInfo.language}`
+    return [
+      '你是电商短视频导演，请生成一条适合TikTok竖屏的写实商品视频。',
+      '要求：10-15秒、镜头节奏快、画面干净高级、突出商品细节与使用场景、避免夸大功效与违规表述。',
+      `参考商品信息：\n${info}`,
+      `脚本/提示词：\n${base}`,
+      `参数：画幅${size}，分辨率${resolution}，时长${durationSec}s。`,
+    ].join('\n\n')
+  }, [optimizedPrompt, selectedScript, prompt, productInfo, size, resolution, durationSec])
+
   const handleGenerate = async () => {
-    if (!prompt) { alert('请输入视频描述'); return }
+    if (!refImage) { alert('请先上传参考图'); return }
+    if (!prompt) { alert('请输入视频文案描述'); return }
     stopPollingRef.current = false
     setIsGenerating(true)
     setGeneratedVideo('')
@@ -361,7 +413,7 @@ function VideoGenerator() {
     setTaskId('')
 
     try {
-      const submit = await generateVideoAPI(prompt, model, { aspectRatio: size, durationSec, resolution })
+      const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage })
       setTaskId(submit.taskId)
       setStatusText(submit.message || '视频生成中...')
 
@@ -400,7 +452,7 @@ function VideoGenerator() {
   if (showModal) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
           <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">一键生成提示词</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
           <div className="px-6 py-4 border-b bg-gray-50 flex items-center">
             {['商品信息解析', '视频脚本', '提示词优化'].map((s, i) => (
@@ -415,10 +467,68 @@ function VideoGenerator() {
           </div>
           <div className="p-6">
             {modalStep === 1 && (<div className="space-y-4">{refImage && <img src={refImage} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">视频语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option><option>日本語</option></select></div></div>)}
-            {modalStep === 2 && (<div className="space-y-4"><p className="text-sm text-gray-500">选择或编辑视频脚本：</p>{scripts.map((s, i) => (<div key={i} className={`p-4 border-2 rounded-lg cursor-pointer ${selectedScript === s ? 'border-purple-500 bg-purple-50' : ''}`} onClick={() => setSelectedScript(s)}><div className="flex items-center"><div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 ${selectedScript === s ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>{selectedScript === s && <Check className="w-3 h-3 text-white" />}</div><p>{s}</p></div></div>))}<button onClick={() => { setScripts(['新脚本1', '新脚本2', '新脚本3']); setSelectedScript('新脚本1') }} className="text-purple-600 text-sm flex items-center"><RefreshCw className="w-4 h-4 mr-1" /> 换一批</button></div>)}
+            {modalStep === 2 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-500">选择或编辑视频脚本：</p>
+                  <button onClick={handleRefreshScripts} className="text-purple-600 text-sm flex items-center">
+                    <RefreshCw className="w-4 h-4 mr-1" /> 换一批
+                  </button>
+                </div>
+                <div className="text-xs text-gray-400">
+                  批次：{scriptBatchIdx + 1}/{Math.max(1, scriptBatches.length)}（最多生成3批，之后循环切换）
+                </div>
+                {scripts.map((s, i) => (
+                  <div
+                    key={i}
+                    className={`p-4 border-2 rounded-lg ${selectedScript === s ? 'border-purple-500 bg-purple-50' : 'border-gray-200'}`}
+                    onClick={() => setSelectedScript(s)}
+                  >
+                    <div className="flex items-start">
+                      <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 ${selectedScript === s ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>
+                        {selectedScript === s && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <textarea
+                        value={s}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setScripts((prev) => prev.map((x, idx) => (idx === i ? v : x)))
+                          setScriptBatches((prev) => prev.map((batch, bi) => (bi === scriptBatchIdx ? batch.map((x, idx) => (idx === i ? v : x)) : batch)))
+                          if (selectedScript === s) setSelectedScript(v)
+                        }}
+                        className="w-full bg-transparent outline-none text-sm leading-6 resize-none"
+                        rows={4}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {modalStep === 3 && (<div className="space-y-4"><div className="p-4 bg-gray-50 rounded-lg"><p className="text-sm text-gray-500 mb-2">当前脚本</p><p>{selectedScript}</p></div><div><p className="text-sm font-medium mb-2">提示词美化</p><div className="flex flex-wrap gap-2">{['真人感', '高端', '简洁', '详实', '电影感', 'TikTok风格'].map(tag => (<button key={tag} onClick={() => handleOptimize(tag)} className={`px-3 py-1 rounded-full text-sm ${tags.includes(tag) ? 'bg-purple-500 text-white' : 'bg-gray-100'}`}>{tag}</button>))}</div></div>{optimizedPrompt && <div className="p-4 bg-purple-50 rounded-lg"><p className="text-sm text-purple-600 mb-1">优化后</p><p>{optimizedPrompt}</p></div>}</div>)}
+            {!!aiError && <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{aiError}</div>}
           </div>
-          <div className="p-6 border-t flex justify-end space-x-3"><button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg">取消</button><button onClick={handleNext} className="px-4 py-2 bg-purple-500 text-white rounded-lg">{modalStep === 3 ? '确认' : '下一步'}</button></div>
+          {isAiBusy && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+              <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center">
+                <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
+                <div>
+                  <div className="font-medium">商品信息AI解析中</div>
+                  <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="p-6 border-t flex items-center justify-between">
+            <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg">取消</button>
+            <div className="flex items-center gap-3">
+              {modalStep > 1 && (
+                <button onClick={handlePrev} className="px-4 py-2 border rounded-lg">上一步</button>
+              )}
+              <button disabled={isAiBusy} onClick={handleNext} className="px-4 py-2 bg-purple-500 text-white rounded-lg disabled:opacity-50">
+                {isAiBusy ? '处理中...' : modalStep === 3 ? '确认' : '下一步'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     )

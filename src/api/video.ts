@@ -5,7 +5,7 @@ export type VideoStatusResult = { status: string; videoUrl: string; progress: st
 export const generateVideoAPI = async (
   prompt: string,
   model: string,
-  opts?: { durationSec?: number; aspectRatio?: '9:16' | '16:9'; resolution?: '720p' | '1080p' },
+  opts?: { durationSec?: number; aspectRatio?: '9:16' | '16:9'; resolution?: '720p' | '1080p'; refImage?: string },
 ): Promise<VideoSubmitResult> => {
   // 映射UI模型到API模型
   const modelMap: Record<string, string> = {
@@ -26,6 +26,7 @@ export const generateVideoAPI = async (
       duration: opts?.durationSec,
       aspect_ratio: opts?.aspectRatio,
       resolution: opts?.resolution,
+      refImage: opts?.refImage,
     }),
   })
   

@@ -1,4 +1,11 @@
-type OpenAICompatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+type OpenAICompatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+type OpenAICompatMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string | OpenAICompatContentPart[]
+}
 
 export type OpenAICompatChatRequest = {
   model: string
@@ -39,7 +46,16 @@ export async function callOpenAICompatJSON<T>({
   try {
     return JSON.parse(content) as T
   } catch {
-    throw new Error('LLM未返回JSON，请检查prompt或response_format支持情况')
+    // 兼容模型偶尔在JSON外包裹说明文字的情况
+    const m = content.match(/\{[\s\S]*\}/)
+    if (m?.[0]) {
+      try {
+        return JSON.parse(m[0]) as T
+      } catch {
+        // fallthrough
+      }
+    }
+    throw new Error('LLM未返回可解析的JSON，请检查prompt或response_format支持情况')
   }
 }
 
