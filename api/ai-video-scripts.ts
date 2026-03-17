@@ -47,6 +47,10 @@ async function callOpenAICompatJSON<T>({
     (data as any)?.choices?.[0]?.text ??
     (data as any)?.output_text ??
     (data as any)?.data?.output_text
+  const refusal = (data as any)?.choices?.[0]?.message?.refusal
+  if (refusal && typeof refusal === 'string') {
+    throw new Error(`LLM拒绝响应：${refusal}`)
+  }
   if (!content || typeof content !== 'string') {
     const snippet = rawText.slice(0, 300)
     throw new Error(`LLM响应为空（raw: ${snippet}）`)
@@ -96,7 +100,7 @@ export default async function handler(req, res) {
           {
             role: 'system',
             content: [
-              '你是电商带货短视频编导（TikTok风格），擅长输出“可直接拍摄”的镜头脚本。请基于商品图与商品信息生成 3 条短视频脚本。',
+              '你是电商短视频编导（TikTok风格），擅长输出“可直接拍摄”的镜头脚本。请基于商品图与商品信息生成 3 条短视频脚本。',
               '',
               '输出要求（必须严格）：',
               '- 只输出 JSON：{"scripts":[...]}，scripts 必须是长度为3的字符串数组',
@@ -112,14 +116,14 @@ export default async function handler(req, res) {
               '【镜头2】画面：<…>｜字幕：<…>｜口播：<…>',
               '...',
               '【镜头6】画面：<…>｜字幕：<…>｜口播：<…>',
-              '【收尾CTA】<1行>',
+              '【收尾CTA】<1行（中性引导：收藏/关注/了解更多/去看看；避免强引导下单/承诺收益）>',
               '',
               '4) 卖点覆盖：sellingPoints 中前 3 个卖点必须至少各出现 1 次，并且要用“画面证明”方式呈现（特写/演示/对比）。',
               '5) 三条脚本风格必须明显不同：',
               '   - 脚本1：开箱测评风（开箱→细节→上手→总结）',
               '   - 脚本2：痛点对比风（痛点→对比→解决→结果）',
               '   - 脚本3：场景种草风（目标人群场景→体验→推荐理由）',
-              '6) 合规：避免医疗、绝对化、夸大承诺；不要暗示“治愈/100%有效/永久”等。',
+              '6) 合规：避免医疗、绝对化、夸大承诺；不要暗示“治愈/100%有效/永久”等；不要包含歧视/暴力/成人/政治内容。',
               '',
               '语言：按用户要求语言输出。',
             ].join('\n'),
