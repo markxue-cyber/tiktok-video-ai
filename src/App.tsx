@@ -3,11 +3,24 @@ import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, M
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 
+// 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
-  { id: 'sora', name: 'Sora 2.0' },
-  { id: 'seedance', name: 'Seedance 1.5' },
-  { id: 'kling', name: 'Kling' },
-  { id: 'runway', name: 'Veo 3' },
+  { id: 'sora-2', name: 'Sora 2.0' },
+  { id: 'sora-2-pro', name: 'Sora 2.0 Pro' },
+  { id: 'sora-2-vip', name: 'Sora 2.0 VIP' },
+  { id: 'sora_video2', name: 'Sora Video2' },
+  { id: 'gpt-video-2', name: 'GPT Video 2' },
+  { id: 'gpt-video-2-pro', name: 'GPT Video 2 Pro' },
+  { id: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 Pro' },
+  { id: 'doubao-seedance-1-0-pro-250528', name: 'Seedance 1.0 Pro' },
+  { id: 'veo3', name: 'Veo 3' },
+  { id: 'veo3-fast', name: 'Veo 3 Fast' },
+  { id: 'veo3-pro', name: 'Veo 3 Pro' },
+  { id: 'veo2', name: 'Veo 2' },
+  { id: 'veo2-fast', name: 'Veo 2 Fast' },
+  { id: 'wan2.6-t2v', name: 'Wan 2.6 T2V' },
+  { id: 'wan2.6-i2v', name: 'Wan 2.6 I2V' },
+  { id: 'wan2.6-r2v', name: 'Wan 2.6 R2V' },
 ]
 const IMAGE_MODELS = [
   { id: 'seedream', name: 'Seedream 4.5' },
@@ -268,7 +281,7 @@ function VideoGenerator() {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
-  const [model, setModel] = useState('sora')
+  const [model, setModel] = useState('sora-2')
   const [size, setSize] = useState<'9:16' | '16:9'>('9:16')
   const [resolution, setResolution] = useState<'720p' | '1080p'>('720p')
   const [durationSec, setDurationSec] = useState<10 | 15>(10)

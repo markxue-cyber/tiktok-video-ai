@@ -9,13 +9,14 @@ export const generateVideoAPI = async (
 ): Promise<VideoSubmitResult> => {
   // 映射UI模型到API模型
   const modelMap: Record<string, string> = {
-    'sora': 'sora-video',
+    'sora': 'sora-2',
     'kling': 'doubao-seedance-1-5-pro-251215', // kling不可用，用seedance
     'runway': 'veo3',
     'seedance': 'doubao-seedance-1-5-pro-251215'
   }
-  
-  const apiModel = modelMap[model] || 'doubao-seedance-1-5-pro-251215'
+
+  // 如果传入的本身就是聚合API支持的模型字符串，则直接透传
+  const apiModel = modelMap[model] || model || 'doubao-seedance-1-5-pro-251215'
   
   const response = await fetch('/api/generate', {
     method: 'POST',
