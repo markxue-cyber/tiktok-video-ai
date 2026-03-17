@@ -303,7 +303,69 @@ function VideoGenerator() {
   const [tags, setTags] = useState<string[]>([])
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const stopPollingRef = useRef(false)
+
+  const renderScriptStructured = (raw: string) => {
+    const lines = String(raw || '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+
+    const hook = lines.find((l) => l.includes('【开场钩子】'))?.replace('【开场钩子】', '').trim()
+    const cta = lines.find((l) => l.includes('【收尾CTA】'))?.replace('【收尾CTA】', '').trim()
+    const shots = lines
+      .filter((l) => l.startsWith('【镜头'))
+      .map((l) => {
+        const m = l.match(/^【镜头(\d+)】(.*)$/)
+        const idx = m?.[1] || ''
+        const rest = (m?.[2] || '').trim()
+        const parts = rest.split('｜').map((p) => p.trim())
+        const get = (prefix: string) => parts.find((p) => p.startsWith(prefix))?.slice(prefix.length).trim() || ''
+        return { idx, scene: get('画面：'), subtitle: get('字幕：'), voice: get('口播：') }
+      })
+
+    return (
+      <div className="space-y-3">
+        {hook && (
+          <div className="rounded-xl bg-white/60 border border-purple-200 p-3">
+            <div className="text-xs text-purple-600 font-medium mb-1">开场钩子</div>
+            <div className="text-sm text-gray-900">{hook}</div>
+          </div>
+        )}
+        {shots.length > 0 && (
+          <div className="rounded-xl bg-white/60 border border-gray-200 overflow-hidden">
+            <div className="px-3 py-2 bg-gray-50 text-xs font-medium text-gray-600">镜头清单</div>
+            <div className="divide-y">
+              {shots.map((s, i) => (
+                <div key={i} className="p-3 grid grid-cols-12 gap-3">
+                  <div className="col-span-2">
+                    <div className="inline-flex items-center px-2 py-1 rounded-lg bg-purple-100 text-purple-700 text-xs font-semibold">
+                      镜头{s.idx || i + 1}
+                    </div>
+                  </div>
+                  <div className="col-span-10 space-y-1 text-sm">
+                    {s.scene && <div><span className="text-gray-500">画面：</span><span className="text-gray-900">{s.scene}</span></div>}
+                    {s.subtitle && <div><span className="text-gray-500">字幕：</span><span className="text-gray-900">{s.subtitle}</span></div>}
+                    {s.voice && <div><span className="text-gray-500">口播：</span><span className="text-gray-900">{s.voice}</span></div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {cta && (
+          <div className="rounded-xl bg-white/60 border border-emerald-200 p-3">
+            <div className="text-xs text-emerald-700 font-medium mb-1">收尾 CTA</div>
+            <div className="text-sm text-gray-900">{cta}</div>
+          </div>
+        )}
+        {!hook && shots.length === 0 && !cta && (
+          <div className="text-sm text-gray-700 whitespace-pre-wrap">{raw}</div>
+        )}
+      </div>
+    )
+  }
 
   useEffect(() => {
     return () => {
@@ -502,17 +564,36 @@ function VideoGenerator() {
                       <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 ${selectedScript === s ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>
                         {selectedScript === s && <Check className="w-3 h-3 text-white" />}
                       </div>
-                      <textarea
-                        value={s}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          setScripts((prev) => prev.map((x, idx) => (idx === i ? v : x)))
-                          setScriptBatches((prev) => prev.map((batch, bi) => (bi === scriptBatchIdx ? batch.map((x, idx) => (idx === i ? v : x)) : batch)))
-                          if (selectedScript === s) setSelectedScript(v)
-                        }}
-                        className="w-full bg-transparent outline-none text-sm leading-6 resize-none"
-                        rows={4}
-                      />
+                      <div className="w-full">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs text-gray-500">脚本{i + 1}</div>
+                          <button
+                            className="text-xs text-purple-700 hover:text-purple-800"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingIdx((cur) => (cur === i ? null : i))
+                            }}
+                          >
+                            {editingIdx === i ? '完成编辑' : '编辑'}
+                          </button>
+                        </div>
+                        {editingIdx === i ? (
+                          <textarea
+                            value={s}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              setScripts((prev) => prev.map((x, idx) => (idx === i ? v : x)))
+                              setScriptBatches((prev) => prev.map((batch, bi) => (bi === scriptBatchIdx ? batch.map((x, idx) => (idx === i ? v : x)) : batch)))
+                              if (selectedScript === s) setSelectedScript(v)
+                            }}
+                            className="w-full bg-white/70 border rounded-xl px-3 py-2 outline-none text-sm leading-6 resize-y"
+                            rows={10}
+                          />
+                        ) : (
+                          renderScriptStructured(s)
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
