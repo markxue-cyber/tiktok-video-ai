@@ -39,7 +39,11 @@ export async function generateVideoScripts(params: { product: ProductInfo; langu
     }
   })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `脚本生成失败(${resp.status})`)
-  return { scripts: data.scripts || data.data?.scripts || [], _mock: data._mock }
+  const scriptsRaw = data.scripts || data.data?.scripts || []
+  const scripts = Array.isArray(scriptsRaw)
+    ? scriptsRaw.map((x: any) => (typeof x === 'string' ? x : x?.script || x?.text || x?.content || JSON.stringify(x)))
+    : []
+  return { scripts, _mock: data._mock }
 }
 
 export async function beautifyScript(params: { script: string; tags: string[]; language: string }): Promise<{ optimized: string; _mock?: boolean }> {

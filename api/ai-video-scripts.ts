@@ -85,7 +85,7 @@ export default async function handler(req, res) {
       })
     }
 
-    const data = await callOpenAICompatJSON<{ scripts: string[] }>({
+    const data = await callOpenAICompatJSON<{ scripts: any[] }>({
       apiKey,
       baseUrl,
       request: {
@@ -120,7 +120,18 @@ export default async function handler(req, res) {
       },
     })
 
-    const scripts = Array.isArray(data.scripts) ? data.scripts.filter(Boolean).slice(0, 3) : []
+    const scriptsRaw = Array.isArray(data.scripts) ? data.scripts.filter(Boolean).slice(0, 3) : []
+    const scripts = scriptsRaw.map((item) => {
+      if (typeof item === 'string') return item
+      if (item && typeof item === 'object') {
+        const title = (item as any).title || (item as any).name || (item as any).style
+        const body = (item as any).script || (item as any).text || (item as any).content
+        if (title && body) return `${title}\n${body}`
+        if (body) return String(body)
+        return JSON.stringify(item)
+      }
+      return String(item)
+    })
     if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
 
     return res.status(200).json({ success: true, scripts })
