@@ -58,6 +58,20 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {
+    if (req.query?.mock === '1') {
+      return res.status(200).json({
+        success: true,
+        data: {
+          name: 'Mock产品',
+          category: 'Mock类目',
+          sellingPoints: 'Mock卖点',
+          targetAudience: 'Mock人群',
+          language: '简体中文',
+          kind: 'video',
+          _mock: true,
+        },
+      })
+    }
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
