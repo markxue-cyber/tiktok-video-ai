@@ -12,7 +12,14 @@ export async function parseProductInfo(params: { refImage: string; language: str
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  const data = await resp.json()
+  const text = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { success: false, error: text }
+    }
+  })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `解析失败(${resp.status})`)
   return data.data
 }
@@ -23,7 +30,14 @@ export async function generateVideoScripts(params: { product: ProductInfo; langu
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  const data = await resp.json()
+  const text = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { success: false, error: text }
+    }
+  })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `脚本生成失败(${resp.status})`)
   return { scripts: data.scripts || data.data?.scripts || [], _mock: data._mock }
 }
@@ -34,7 +48,14 @@ export async function beautifyScript(params: { script: string; tags: string[]; l
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  const data = await resp.json()
+  const text = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { success: false, error: text }
+    }
+  })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `优化失败(${resp.status})`)
   return { optimized: data.optimized, _mock: data._mock }
 }
@@ -45,7 +66,14 @@ export async function generateImagePrompt(params: { product: ProductInfo; langua
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  const data = await resp.json()
+  const text = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { success: false, error: text }
+    }
+  })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `提示词生成失败(${resp.status})`)
   return { prompt: data.prompt, _mock: data._mock }
 }
