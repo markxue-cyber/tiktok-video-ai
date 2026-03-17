@@ -433,6 +433,15 @@ function VideoGenerator() {
       .replace(/\[镜头(\d+)\]/g, '【镜头$1】')
       .replace(/\s*\|\s*/g, '｜')
 
+    // 一次性解决：模型经常把整条脚本输出成“一段话”，但内部含有【镜头X】标记
+    // 这里把这些标记强制断行，确保结构化解析稳定
+    text = text
+      .replace(/\s*(【开场钩子】)/g, '\n$1')
+      .replace(/\s*(【镜头\d+】)/g, '\n$1')
+      .replace(/\s*(【收尾CTA】)/g, '\n$1')
+      .replace(/^\s*\n/, '')
+      .replace(/\n{2,}/g, '\n')
+
     const lines = text
       .split(/\r?\n/)
       .map((l) => l.trim())
