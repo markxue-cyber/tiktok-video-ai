@@ -97,7 +97,7 @@ export default async function handler(req, res) {
       '- 不要输出任何解释、Markdown、前后缀',
       '',
       '硬约束：',
-      '1) 禁止编造参数/材质/功效/认证/优惠信息。只能使用商品信息里给定卖点 + 图片可见内容。拿不准就不要写。',
+      '1) 禁止编造参数/材质/功效/认证/价格优惠信息。只能使用商品信息里给定卖点 + 图片可见内容。拿不准就不要写。',
       '2) 每条脚本适配 10-15 秒竖屏：总共 7-9 行（每行一句），节奏快、口语化。',
       '3) 每条脚本必须是“镜头化”格式，严格用以下模板（每行都要可拍摄）：',
       '',
@@ -114,6 +114,7 @@ export default async function handler(req, res) {
       '   - 脚本2：痛点对比风（痛点→对比→解决→结果）',
       '   - 脚本3：场景体验风（目标场景→体验→推荐理由）',
       '6) 合规：避免医疗、绝对化、夸大承诺；不要包含歧视/暴力/成人/政治内容。',
+      '7) 对于“图片或包装上的宣称”（例如续航/功效），如需提及，请使用“包装/页面宣称/标注”为前缀的保守表述，避免下结论。',
       '',
       '语言：按用户要求语言输出。',
     ].join('\n')
@@ -124,6 +125,7 @@ export default async function handler(req, res) {
       '必须严格只输出 JSON：{"scripts":[...]}，scripts 是长度为3的字符串数组。',
       '不要出现“带货/下单/优惠/返钱/赚钱/必买”等强营销词；CTA 只允许中性引导（收藏/关注/了解更多/去看看）。',
       '禁止编造：任何参数、功效、认证、价格、优惠、对比指标；不确定就用更保守描述。',
+      '如卖点包含“宣称类信息”，请用“标注/包装宣称”前缀进行保守表达。',
       '',
       '格式必须严格为：',
       '【开场钩子】…',
@@ -132,6 +134,43 @@ export default async function handler(req, res) {
       '【镜头6】画面：…｜字幕：…｜口播：…',
       '【收尾CTA】…',
     ].join('\n')
+
+    const localFallback = (p: any, lang: string) => {
+      const name = String(p?.name || '这款产品')
+      const category = String(p?.category || '未知类目')
+      const sp = String(p?.sellingPoints || '')
+        .split('/')
+        .map((x) => x.trim())
+        .filter(Boolean)
+      const points = (sp.length ? sp : ['核心卖点1', '核心卖点2', '核心卖点3']).slice(0, 3)
+      const ta = String(p?.targetAudience || '')
+        .split('/')
+        .map((x) => x.trim())
+        .filter(Boolean)
+      const audience = (ta.length ? ta : ['日常使用人群']).slice(0, 2).join(' / ')
+      const L = lang || '简体中文'
+
+      const mk = (hook: string, s1: string, s2: string, s3: string) =>
+        [
+          `【开场钩子】${hook}`,
+          `【镜头1】画面：商品整体外观/摆放场景｜字幕：${name}｜口播：给你看一下这款${name}（${category}）`,
+          `【镜头2】画面：细节特写（按键/材质/结构）｜字幕：细节一眼见｜口播：先看细节做工和设计`,
+          `【镜头3】画面：功能/使用动作演示｜字幕：上手演示｜口播：用起来大概是这样操作`,
+          `【镜头4】画面：卖点1对应特写/演示｜字幕：标注：${points[0] || '卖点1'}｜口播：标注上写的这个点是重点`,
+          `【镜头5】画面：卖点2对应场景/对比镜头（不量化）｜字幕：标注：${points[1] || '卖点2'}｜口播：第二个点更贴近日常场景`,
+          `【镜头6】画面：卖点3补充+回到场景收尾｜字幕：标注：${points[2] || '卖点3'}｜口播：最后再补充一个细节，整体更省心`,
+          `【收尾CTA】想看更具体的使用场景，先收藏关注～`,
+        ].join('\n')
+
+      return {
+        scripts: [
+          mk('值不值得入？咱们用镜头说话。', points[0] || '', points[1] || '', points[2] || ''),
+          mk('如果你也在意这些点，可能会用得上。', points[0] || '', points[1] || '', points[2] || ''),
+          mk(`适合谁？我觉得 ${audience} 可以看看。`, points[0] || '', points[1] || '', points[2] || ''),
+        ].map((x) => (L === '简体中文' ? x : x)),
+        _local_fallback: true,
+      }
+    }
 
     const userMsg: OpenAICompatMessage = {
       role: 'user',
@@ -172,7 +211,16 @@ export default async function handler(req, res) {
     } catch (err: any) {
       const msg = String(err?.message || '')
       if (msg.includes('LLM拒绝响应')) {
-        data = await run(safeFallbackSystem, 0.4)
+        try {
+          data = await run(safeFallbackSystem, 0.4)
+        } catch (err2: any) {
+          const msg2 = String(err2?.message || '')
+          if (msg2.includes('LLM拒绝响应')) {
+            const fallback = localFallback(product, language || product.language || '简体中文')
+            return res.status(200).json({ success: true, scripts: fallback.scripts, _local_fallback: true })
+          }
+          throw err2
+        }
       } else {
         throw err
       }
@@ -236,12 +284,22 @@ export default async function handler(req, res) {
 
     // 如果脚本结构不完整（只返回钩子/段落），自动走更稳的降级提示词再生成一次
     if (scripts.some((s) => !isStoryboardScript(s))) {
-      const repaired = await run(
-        safeFallbackSystem +
-          '\n\n额外要求：每条脚本必须同时包含【镜头1】到【镜头6】以及【收尾CTA】；不要省略镜头行。',
-        0.4,
-      )
-      scripts = normalizeScripts(repaired)
+      try {
+        const repaired = await run(
+          safeFallbackSystem +
+            '\n\n额外要求：每条脚本必须同时包含【镜头1】到【镜头6】以及【收尾CTA】；不要省略镜头行。',
+          0.4,
+        )
+        scripts = normalizeScripts(repaired)
+      } catch (err3: any) {
+        const msg3 = String(err3?.message || '')
+        if (msg3.includes('LLM拒绝响应')) {
+          const fallback = localFallback(product, language || product.language || '简体中文')
+          scripts = fallback.scripts
+        } else {
+          throw err3
+        }
+      }
     }
 
     if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
