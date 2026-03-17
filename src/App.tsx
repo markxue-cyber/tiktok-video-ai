@@ -22,6 +22,46 @@ const VIDEO_MODELS = [
   { id: 'wan2.6-i2v', name: 'Wan 2.6 I2V' },
   { id: 'wan2.6-r2v', name: 'Wan 2.6 R2V' },
 ]
+
+type VideoAspect = '9:16' | '16:9'
+type VideoRes = '720p' | '1080p'
+type VideoDur = 10 | 15
+
+type VideoModelCaps = {
+  aspectRatios: VideoAspect[]
+  resolutions: VideoRes[]
+  durations: VideoDur[]
+  defaults: { aspectRatio: VideoAspect; resolution: VideoRes; durationSec: VideoDur }
+}
+
+// 不同模型对参数支持范围不同（后续可按聚合API返回进一步精细化）
+const VIDEO_MODEL_CAPS: Record<string, VideoModelCaps> = {
+  // Sora 系列：一般支持横竖屏 + 720/1080 + 10/15
+  'sora-2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'sora-2-pro': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'sora-2-vip': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
+  'sora_video2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+
+  // GPT Video
+  'gpt-video-2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'gpt-video-2-pro': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
+
+  // Seedance
+  'doubao-seedance-1-5-pro-251215': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'doubao-seedance-1-0-pro-250528': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+
+  // Veo
+  'veo3': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '1080p', durationSec: 10 } },
+  'veo3-fast': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
+  'veo3-pro': { aspectRatios: ['9:16', '16:9'], resolutions: ['1080p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '1080p', durationSec: 10 } },
+  'veo2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
+  'veo2-fast': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
+
+  // Wan：通常更保守（先给 720p + 10s 默认；仍允许 15s 以便用户试）
+  'wan2.6-t2v': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'wan2.6-i2v': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'wan2.6-r2v': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+}
 const IMAGE_MODELS = [
   { id: 'seedream', name: 'Seedream 4.5' },
   { id: 'midjourney', name: 'Midjourney' },
@@ -282,9 +322,9 @@ function VideoGenerator() {
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
-  const [size, setSize] = useState<'9:16' | '16:9'>('9:16')
-  const [resolution, setResolution] = useState<'720p' | '1080p'>('720p')
-  const [durationSec, setDurationSec] = useState<10 | 15>(10)
+  const [size, setSize] = useState<VideoAspect>('9:16')
+  const [resolution, setResolution] = useState<VideoRes>('720p')
+  const [durationSec, setDurationSec] = useState<VideoDur>(10)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedVideo, setGeneratedVideo] = useState('')
   const [taskId, setTaskId] = useState('')
@@ -305,6 +345,25 @@ function VideoGenerator() {
   const [aiError, setAiError] = useState('')
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const stopPollingRef = useRef(false)
+
+  const caps = useMemo<VideoModelCaps>(() => {
+    return (
+      VIDEO_MODEL_CAPS[model] || {
+        aspectRatios: ['9:16', '16:9'],
+        resolutions: ['720p', '1080p'],
+        durations: [10, 15],
+        defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 },
+      }
+    )
+  }, [model])
+
+  // 模型切换时：如果当前选择不被支持，自动回落到该模型默认值
+  useEffect(() => {
+    if (!caps.aspectRatios.includes(size)) setSize(caps.defaults.aspectRatio)
+    if (!caps.resolutions.includes(resolution)) setResolution(caps.defaults.resolution)
+    if (!caps.durations.includes(durationSec)) setDurationSec(caps.defaults.durationSec)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model])
 
   const renderScriptStructured = (raw: string) => {
     let text = String(raw || '')
@@ -750,8 +809,11 @@ function VideoGenerator() {
           <div>
             <label className="block text-sm font-medium mb-1">尺寸</label>
             <select value={size} onChange={e => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              <option value="9:16">竖版 9:16</option>
-              <option value="16:9">横版 16:9</option>
+              {caps.aspectRatios.map((ar) => (
+                <option key={ar} value={ar}>
+                  {ar === '9:16' ? '竖版 9:16' : '横版 16:9'}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -760,15 +822,21 @@ function VideoGenerator() {
           <div>
             <label className="block text-sm font-medium mb-1">分辨率</label>
             <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              <option value="720p">720p</option>
-              <option value="1080p">1080p</option>
+              {caps.resolutions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">时长</label>
             <select value={durationSec} onChange={e => setDurationSec(Number(e.target.value) as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              <option value={10}>10s</option>
-              <option value={15}>15s</option>
+              {caps.durations.map((d) => (
+                <option key={d} value={d}>
+                  {d}s
+                </option>
+              ))}
             </select>
           </div>
         </div>
