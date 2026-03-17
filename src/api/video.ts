@@ -9,7 +9,7 @@ export const generateVideoAPI = async (
 ): Promise<VideoSubmitResult> => {
   // 映射UI模型到API模型
   const modelMap: Record<string, string> = {
-    'sora': 'sora_video2',
+    'sora': 'sora-video',
     'kling': 'doubao-seedance-1-5-pro-251215', // kling不可用，用seedance
     'runway': 'veo3',
     'seedance': 'doubao-seedance-1-5-pro-251215'

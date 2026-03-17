@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
       // 映射前端模型名称到API模型名称
       const modelMap: Record<string, string> = {
-        'sora': 'sora_video2',
+        'sora': 'sora-video',
         'kling': 'doubao-seedance-1-5-pro-251215',
         'runway': 'veo3',
         'seedance': 'doubao-seedance-1-5-pro-251215'
