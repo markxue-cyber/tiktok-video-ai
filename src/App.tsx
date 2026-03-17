@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown } from 'lucide-react'
+import { checkVideoStatus, generateVideoAPI } from './api/video'
 
 const VIDEO_MODELS = [{ id: 'sora', name: 'Sora 2.0' }, { id: 'seedance', name: 'Seedance 1.5' }, { id: 'kling', name: 'Kling' }, { id: 'runway', name: 'Veo 3' }]
 const IMAGE_MODELS = [{ id: 'seedream', name: 'Seedream 4.5' }, { id: 'midjourney', name: 'Midjourney' }, { id: 'flux', name: 'Flux' }]
@@ -109,6 +110,10 @@ function VideoGenerator() {
   const [size, setSize] = useState('9:16')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedVideo, setGeneratedVideo] = useState('')
+  const [taskId, setTaskId] = useState('')
+  const [progress, setProgress] = useState('0%')
+  const [statusText, setStatusText] = useState('')
+  const [errorText, setErrorText] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
   const [productInfo, setProductInfo] = useState({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
@@ -116,6 +121,13 @@ function VideoGenerator() {
   const [selectedScript, setSelectedScript] = useState('')
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  const stopPollingRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      stopPollingRef.current = true
+    }
+  }, [])
 
   const handlePromptGen = async () => {
     if (!refImage) { alert('请先上传参考图'); return }
@@ -139,10 +151,49 @@ function VideoGenerator() {
 
   const handleGenerate = async () => {
     if (!prompt) { alert('请输入视频描述'); return }
-    setIsGenerating(true); setGeneratedVideo('')
-    await new Promise(r => setTimeout(r, 3000))
-    setGeneratedVideo('https://www.w3schools.com/html/mov_bbb.mp4')
-    setIsGenerating(false)
+    stopPollingRef.current = false
+    setIsGenerating(true)
+    setGeneratedVideo('')
+    setErrorText('')
+    setProgress('0%')
+    setStatusText('任务提交中...')
+    setTaskId('')
+
+    try {
+      const submit = await generateVideoAPI(prompt, model)
+      setTaskId(submit.taskId)
+      setStatusText(submit.message || '视频生成中...')
+
+      for (let i = 0; i < 120; i++) { // 最多轮询约10分钟
+        if (stopPollingRef.current) return
+        await new Promise(r => setTimeout(r, 5000))
+        if (stopPollingRef.current) return
+
+        const s = await checkVideoStatus(submit.taskId)
+        setProgress(s.progress || '0%')
+
+        const status = (s.status || '').toLowerCase()
+        if (status === 'succeeded' || status === 'success' || status === 'completed') {
+          if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
+          setGeneratedVideo(s.videoUrl)
+          setStatusText('生成完成')
+          setIsGenerating(false)
+          return
+        }
+
+        if (status === 'failed' || status === 'error') {
+          throw new Error(s.failReason || '生成失败')
+        }
+
+        setStatusText(`生成中... ${s.progress || ''}`.trim())
+      }
+
+      throw new Error('生成超时，请稍后在任务列表中查看')
+    } catch (e: any) {
+      setErrorText(e?.message || '生成失败')
+      setIsGenerating(false)
+      setStatusText('')
+    }
   }
 
   if (showModal) {
@@ -150,7 +201,17 @@ function VideoGenerator() {
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">一键生成提示词</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
-          <div className="px-6 py-4 border-b bg-gray-50 flex items-center">{['商品信息解析', '视频脚本', '提示词优化'].map((s, i) => (<div key={i} className="flex items-center"><div className={`w-8 h-8 rounded-full flex items-center justify-center ${modalStep > i + 1 ? 'bg-green-500 text-white' : modalStep === i + 1 ? 'bg-purple-500 text-white' : 'bg-gray-300'}`}>{modalStep > i + 1 ? <Check className="w-4 h-4" /> : i + 1}</div><span className={`ml-2 text-sm ${modalStep === i + 1 ? 'font-medium' : 'text-gray-400'}`}>{s}</span>{i < 2 && <div className="flex-1 h-0.5 bg-gray-200 mx-4" />}</div></div>))}</div>
+          <div className="px-6 py-4 border-b bg-gray-50 flex items-center">
+            {['商品信息解析', '视频脚本', '提示词优化'].map((s, i) => (
+              <div key={i} className="flex items-center flex-1">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${modalStep > i + 1 ? 'bg-green-500 text-white' : modalStep === i + 1 ? 'bg-purple-500 text-white' : 'bg-gray-300'}`}>
+                  {modalStep > i + 1 ? <Check className="w-4 h-4" /> : i + 1}
+                </div>
+                <span className={`ml-2 text-sm ${modalStep === i + 1 ? 'font-medium' : 'text-gray-400'}`}>{s}</span>
+                {i < 2 && <div className="flex-1 h-0.5 bg-gray-200 mx-4" />}
+              </div>
+            ))}
+          </div>
           <div className="p-6">
             {modalStep === 1 && (<div className="space-y-4">{refImage && <img src={refImage} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">视频语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option><option>日本語</option></select></div></div>)}
             {modalStep === 2 && (<div className="space-y-4"><p className="text-sm text-gray-500">选择或编辑视频脚本：</p>{scripts.map((s, i) => (<div key={i} className={`p-4 border-2 rounded-lg cursor-pointer ${selectedScript === s ? 'border-purple-500 bg-purple-50' : ''}`} onClick={() => setSelectedScript(s)}><div className="flex items-center"><div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 ${selectedScript === s ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>{selectedScript === s && <Check className="w-3 h-3 text-white" />}</div><p>{s}</p></div></div>))}<button onClick={() => { setScripts(['新脚本1', '新脚本2', '新脚本3']); setSelectedScript('新脚本1') }} className="text-purple-600 text-sm flex items-center"><RefreshCw className="w-4 h-4 mr-1" /> 换一批</button></div>)}
@@ -174,7 +235,32 @@ function VideoGenerator() {
       </div>
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">生成结果</h2>
-        {isGenerating ? <div className="h-96 flex flex-col items-center justify-center bg-gray-50 rounded-xl"><RefreshCw className="w-16 h-16 animate-spin text-purple-500" /><p className="mt-4 text-lg text-purple-600 font-medium">视频生成中...</p><p className="text-sm text-gray-500">预计需要3-5分钟，请稍候</p></div> : generatedVideo ? <div><video src={generatedVideo} className="w-full rounded-xl" controls /><div className="grid grid-cols-2 gap-4 mt-4"><button className="py-3 bg-gray-100 rounded-xl flex items-center justify-center"><Play className="w-5 h-5 mr-2" />预览</button><button className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center"><Download className="w-5 h-5 mr-2" />下载</button></div></div> : <div className="h-96 flex items-center justify-center text-gray-400 border-2 border-dashed rounded-xl"><Video className="w-16 h-16 opacity-50" /></div>}
+        {isGenerating ? (
+          <div className="h-96 flex flex-col items-center justify-center bg-gray-50 rounded-xl px-6 text-center">
+            <RefreshCw className="w-16 h-16 animate-spin text-purple-500" />
+            <p className="mt-4 text-lg text-purple-600 font-medium">{statusText || '视频生成中...'}</p>
+            <p className="text-sm text-gray-500 mt-1">进度：{progress}</p>
+            {taskId && <p className="text-xs text-gray-400 mt-3 break-all">任务ID：{taskId}</p>}
+          </div>
+        ) : errorText ? (
+          <div className="h-96 flex flex-col items-center justify-center text-center bg-red-50 rounded-xl px-6">
+            <p className="text-red-600 font-medium">生成失败</p>
+            <p className="text-sm text-red-500 mt-2 break-words">{errorText}</p>
+            {taskId && <p className="text-xs text-red-400 mt-3 break-all">任务ID：{taskId}</p>}
+          </div>
+        ) : generatedVideo ? (
+          <div>
+            <video src={generatedVideo} className="w-full rounded-xl" controls />
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <button className="py-3 bg-gray-100 rounded-xl flex items-center justify-center"><Play className="w-5 h-5 mr-2" />预览</button>
+              <a href={generatedVideo} download className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center">
+                <Download className="w-5 h-5 mr-2" />下载
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="h-96 flex items-center justify-center text-gray-400 border-2 border-dashed rounded-xl"><Video className="w-16 h-16 opacity-50" /></div>
+        )}
       </div>
     </div>
   )
@@ -217,7 +303,17 @@ function ImageGenerator() {
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-2xl w-full max-w-2xl">
           <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">一键生成提示词</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
-          <div className="px-6 py-4 border-b bg-gray-50 flex items-center">{['商品信息解析', '图片优化提示词'].map((s, i) => (<div key={i} className="flex items-center"><div className={`w-8 h-8 rounded-full flex items-center justify-center ${modalStep > i + 1 ? 'bg-green-500 text-white' : modalStep === i + 1 ? 'bg-purple-500 text-white' : 'bg-gray-300'}`}>{modalStep > i + 1 ? <Check className="w-4 h-4" /> : i + 1}</div><span className={`ml-2 text-sm ${modalStep === i + 1 ? 'font-medium' : 'text-gray-400'}`}>{s}</span>{i < 1 && <div className="flex-1 h-0.5 bg-gray-200 mx-4" />}</div></div>))}</div>
+          <div className="px-6 py-4 border-b bg-gray-50 flex items-center">
+            {['商品信息解析', '图片优化提示词'].map((s, i) => (
+              <div key={i} className="flex items-center flex-1">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${modalStep > i + 1 ? 'bg-green-500 text-white' : modalStep === i + 1 ? 'bg-purple-500 text-white' : 'bg-gray-300'}`}>
+                  {modalStep > i + 1 ? <Check className="w-4 h-4" /> : i + 1}
+                </div>
+                <span className={`ml-2 text-sm ${modalStep === i + 1 ? 'font-medium' : 'text-gray-400'}`}>{s}</span>
+                {i < 1 && <div className="flex-1 h-0.5 bg-gray-200 mx-4" />}
+              </div>
+            ))}
+          </div>
           <div className="p-6">
             {modalStep === 1 && (<div className="space-y-4">{refImage && <img src={refImage} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">图片语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option></select></div></div>)}
             {modalStep === 2 && (<div className="space-y-4"><label className="block text-sm font-medium mb-1">图片优化提示词</label><textarea value={optimizedPrompt} onChange={e => setOptimizedPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[150px]" /></div>)}
@@ -248,8 +344,42 @@ function ImageGenerator() {
 
 function Packages() {
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-8 text-center">选择您的套餐</h2>
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {PACKAGES.map(pkg => (
-          <div key={pkg.id} className={`bg-white rounded-2xl p-6 shadow-lg border-2 ${pkg.id === 'basic' ?
+        {PACKAGES.map((pkg) => (
+          <div
+            key={pkg.id}
+            className={`bg-white rounded-2xl p-6 shadow-lg border-2 ${pkg.id === 'basic' ? 'border-purple-500' : 'border-transparent'}`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg">{pkg.name}</h3>
+              {pkg.id === 'basic' && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">推荐</span>}
+            </div>
+            <div className="mt-4">
+              <div className="text-3xl font-extrabold">{pkg.price}</div>
+            </div>
+            <ul className="mt-4 space-y-2 text-sm text-gray-600">
+              {pkg.features.map((f) => (
+                <li key={f} className="flex items-center">
+                  <Check className="w-4 h-4 text-green-500 mr-2" />
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              className={`mt-6 w-full py-3 rounded-xl font-bold ${
+                pkg.id === 'trial' ? 'bg-gray-100 text-gray-700' : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
+              }`}
+              onClick={() => alert('支付/订阅流程未接入')}
+            >
+              {pkg.id === 'trial' ? '当前试用' : '立即开通'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default App
