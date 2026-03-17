@@ -42,8 +42,15 @@ async function callOpenAICompatJSON<T>({
     throw new Error(msg)
   }
 
-  const content = (data as any)?.choices?.[0]?.message?.content
-  if (!content || typeof content !== 'string') throw new Error('LLM响应为空')
+  const content =
+    (data as any)?.choices?.[0]?.message?.content ??
+    (data as any)?.choices?.[0]?.text ??
+    (data as any)?.output_text ??
+    (data as any)?.data?.output_text
+  if (!content || typeof content !== 'string') {
+    const snippet = rawText.slice(0, 300)
+    throw new Error(`LLM响应为空（raw: ${snippet}）`)
+  }
 
   try {
     return JSON.parse(content) as T
