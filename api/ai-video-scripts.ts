@@ -158,6 +158,14 @@ export default async function handler(req, res) {
         },
       })
 
+    const isStoryboardScript = (s: string) => {
+      const text = String(s || '')
+      const hasHook = /【开场钩子】/.test(text)
+      const hasCta = /【收尾CTA】/.test(text)
+      const hasShots = [1, 2, 3, 4, 5, 6].every((n) => new RegExp(`【镜头${n}】`).test(text))
+      return hasHook && hasCta && hasShots
+    }
+
     let data: { scripts: any[] }
     try {
       data = await run(primarySystem, 0.7)
@@ -170,8 +178,41 @@ export default async function handler(req, res) {
       }
     }
 
-    const scriptsRaw = Array.isArray(data.scripts) ? data.scripts.filter(Boolean).slice(0, 3) : []
-    const scripts = scriptsRaw.map((item) => {
+    const normalizeScripts = (raw: any) => {
+      const scriptsRaw = Array.isArray(raw?.scripts) ? raw.scripts.filter(Boolean).slice(0, 3) : []
+      const scripts = scriptsRaw.map((item: any) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          const title = (item as any).title || (item as any).name || (item as any).style
+          const body = (item as any).script || (item as any).text || (item as any).content
+          if (title && body) return `${title}\n${body}`
+          if (body) return String(body)
+          return JSON.stringify(item)
+        }
+        return String(item)
+      })
+      return scripts
+    }
+
+    let scripts = normalizeScripts(data)
+    if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
+
+    // 如果脚本结构不完整（只返回钩子/段落），自动走更稳的降级提示词再生成一次
+    if (scripts.some((s) => !isStoryboardScript(s))) {
+      const repaired = await run(
+        safeFallbackSystem +
+          '\n\n额外要求：每条脚本必须同时包含【镜头1】到【镜头6】以及【收尾CTA】；不要省略镜头行。',
+        0.4,
+      )
+      scripts = normalizeScripts(repaired)
+    }
+
+    if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
+    if (scripts.some((s) => !isStoryboardScript(s))) throw new Error('脚本未按分镜模板生成完整内容，请点击“换一批”重试')
+
+    // legacy mapping below (kept minimal)
+    const scriptsRaw = scripts
+    const scriptsOut = scriptsRaw.map((item) => {
       if (typeof item === 'string') return item
       if (item && typeof item === 'object') {
         const title = (item as any).title || (item as any).name || (item as any).style
@@ -182,9 +223,9 @@ export default async function handler(req, res) {
       }
       return String(item)
     })
-    if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
+    if (scriptsOut.length < 3) throw new Error('脚本生成结果不足3条')
 
-    return res.status(200).json({ success: true, scripts })
+    return res.status(200).json({ success: true, scripts: scriptsOut })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }

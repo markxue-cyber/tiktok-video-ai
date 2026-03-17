@@ -360,8 +360,11 @@ function VideoGenerator() {
             <div className="text-sm text-gray-900">{cta}</div>
           </div>
         )}
-        {!hook && shots.length === 0 && !cta && (
-          <div className="text-sm text-gray-700 whitespace-pre-wrap">{raw}</div>
+        {(shots.length === 0 || !cta) && raw && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+            <div className="text-xs font-medium text-amber-700 mb-1">原文（未完整解析为分镜）</div>
+            <div className="text-sm text-gray-800 whitespace-pre-wrap">{raw}</div>
+          </div>
         )}
       </div>
     )
