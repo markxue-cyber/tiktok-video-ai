@@ -23,9 +23,13 @@ const VIDEO_MODELS = [
   { id: 'wan2.6-r2v', name: 'Wan 2.6 R2V' },
 ]
 
-type VideoAspect = '9:16' | '16:9'
-type VideoRes = '720p' | '1080p'
-type VideoDur = 10 | 15
+const VIDEO_ASPECT_OPTIONS = ['9:16', '16:9', '1:1', '4:3', '3:4', '21:9'] as const
+const VIDEO_RES_OPTIONS = ['480p', '720p', '1080p', '1440p', '2160p'] as const // 2160p=4K
+const VIDEO_DUR_OPTIONS = [4, 5, 6, 8, 10, 12, 15, 20, 30] as const
+
+type VideoAspect = (typeof VIDEO_ASPECT_OPTIONS)[number]
+type VideoRes = (typeof VIDEO_RES_OPTIONS)[number]
+type VideoDur = (typeof VIDEO_DUR_OPTIONS)[number]
 
 type VideoModelCaps = {
   aspectRatios: VideoAspect[]
@@ -37,30 +41,30 @@ type VideoModelCaps = {
 // 不同模型对参数支持范围不同（后续可按聚合API返回进一步精细化）
 const VIDEO_MODEL_CAPS: Record<string, VideoModelCaps> = {
   // Sora 系列：一般支持横竖屏 + 720/1080 + 10/15
-  'sora-2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
-  'sora-2-pro': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
-  'sora-2-vip': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
-  'sora_video2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'sora-2': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'sora-2-pro': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
+  'sora-2-vip': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
+  'sora_video2': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
 
   // GPT Video
-  'gpt-video-2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
-  'gpt-video-2-pro': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
+  'gpt-video-2': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'gpt-video-2-pro': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '1080p', durationSec: 10 } },
 
   // Seedance
-  'doubao-seedance-1-5-pro-251215': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
-  'doubao-seedance-1-0-pro-250528': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'doubao-seedance-1-5-pro-251215': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'doubao-seedance-1-0-pro-250528': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: ['480p', '720p', '1080p'], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
 
   // Veo
-  'veo3': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '1080p', durationSec: 10 } },
-  'veo3-fast': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
-  'veo3-pro': { aspectRatios: ['9:16', '16:9'], resolutions: ['1080p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '1080p', durationSec: 10 } },
-  'veo2': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p', '1080p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
-  'veo2-fast': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
+  'veo3': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '16:9', resolution: '1080p', durationSec: 10 } },
+  'veo3-fast': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: ['480p', '720p', '1080p'], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
+  'veo3-pro': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: ['720p', '1080p', '1440p', '2160p'], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '16:9', resolution: '2160p', durationSec: 10 } },
+  'veo2': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: [...VIDEO_RES_OPTIONS], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '16:9', resolution: '1080p', durationSec: 10 } },
+  'veo2-fast': { aspectRatios: [...VIDEO_ASPECT_OPTIONS], resolutions: ['480p', '720p', '1080p'], durations: [...VIDEO_DUR_OPTIONS], defaults: { aspectRatio: '16:9', resolution: '720p', durationSec: 10 } },
 
   // Wan：通常更保守（先给 720p + 10s 默认；仍允许 15s 以便用户试）
-  'wan2.6-t2v': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
-  'wan2.6-i2v': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
-  'wan2.6-r2v': { aspectRatios: ['9:16', '16:9'], resolutions: ['720p'], durations: [10, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'wan2.6-t2v': { aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4'], resolutions: ['480p', '720p', '1080p'], durations: [4, 5, 6, 8, 10, 12, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'wan2.6-i2v': { aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4'], resolutions: ['480p', '720p', '1080p'], durations: [4, 5, 6, 8, 10, 12, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
+  'wan2.6-r2v': { aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4'], resolutions: ['480p', '720p', '1080p'], durations: [4, 5, 6, 8, 10, 12, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
 }
 const IMAGE_MODELS = [
   { id: 'seedream', name: 'Seedream 4.5' },
