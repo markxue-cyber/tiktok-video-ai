@@ -133,7 +133,8 @@ export default async function handler(req, res) {
               '- name：',
               '  - 尽量写“品牌 + 品名 + 关键规格/型号（如有）”',
               '  - 品名要具体（如“电动牙刷”“真无线耳机”“保温杯”“洗衣液”“防晒霜”），不要只写“产品/商品”',
-              '  - 若品牌不清晰：不要猜品牌；只写品名+规格；仍不清晰则“未知”',
+              '  - 若品牌不清晰：不要猜品牌；只写品名+规格；只有当“连品名/品类都无法判断”时才输出“未知”',
+              '  - “未知”只能单独作为字段值出现，禁止输出类似“未知 床头灯/未知-耳机”这种混合形式',
               '- category（电商类目路径风格，尽量两级）：',
               '  - 示例：3C-耳机/耳麦；个护-电动牙刷；家清-洗衣液；美妆-口红；家居-收纳；食品-坚果',
               '  - 若只能确定大类，写到大类；都不确定则“未知”',
@@ -163,10 +164,19 @@ export default async function handler(req, res) {
       },
     })
 
+    const normalizedName = (() => {
+      const v = String((data as any)?.name || '').trim()
+      if (!v) return '未知'
+      const m = v.match(/^未知[\s\-:：,，/]+(.+)$/)
+      if (m?.[1]?.trim()) return m[1].trim()
+      return v
+    })()
+
     return res.status(200).json({
       success: true,
       data: {
         ...data,
+        name: normalizedName,
         language: language || '简体中文',
         kind: kind || 'video',
       },
