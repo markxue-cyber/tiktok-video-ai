@@ -1,4 +1,32 @@
-import { callOpenAICompatJSON } from './lib/openaiCompat'
+async function callOpenAICompatJSON<T>({
+  apiKey,
+  baseUrl,
+  request,
+}: {
+  apiKey: string
+  baseUrl: string
+  request: { model: string; messages: { role: 'system' | 'user' | 'assistant'; content: string }[]; temperature?: number; response_format?: any }
+}): Promise<T> {
+  const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  const rawText = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(rawText)
+    } catch {
+      return { _raw: rawText }
+    }
+  })()
+  if (!resp.ok) throw new Error((data as any)?.error?.message || (data as any)?.message || `LLM请求失败(${resp.status})`)
+  const content = (data as any)?.choices?.[0]?.message?.content
+  if (!content || typeof content !== 'string') throw new Error('LLM响应为空')
+  const m = content.match(/\{[\s\S]*\}/)
+  return JSON.parse(m?.[0] || content) as T
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })

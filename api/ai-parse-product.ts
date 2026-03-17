@@ -1,4 +1,58 @@
-import { callOpenAICompatJSON } from './lib/openaiCompat'
+type OpenAICompatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+type OpenAICompatMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string | OpenAICompatContentPart[]
+}
+
+async function callOpenAICompatJSON<T>({
+  apiKey,
+  baseUrl,
+  request,
+}: {
+  apiKey: string
+  baseUrl: string
+  request: {
+    model: string
+    messages: OpenAICompatMessage[]
+    temperature?: number
+    response_format?: { type: 'json_object' } | { type: 'text' }
+  }
+}): Promise<T> {
+  const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+
+  const rawText = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(rawText)
+    } catch {
+      return { _raw: rawText }
+    }
+  })()
+
+  if (!resp.ok) {
+    const msg = (data as any)?.error?.message || (data as any)?.message || `LLM请求失败(${resp.status})`
+    throw new Error(msg)
+  }
+
+  const content = (data as any)?.choices?.[0]?.message?.content
+  if (!content || typeof content !== 'string') throw new Error('LLM响应为空')
+
+  try {
+    return JSON.parse(content) as T
+  } catch {
+    const m = content.match(/\{[\s\S]*\}/)
+    if (m?.[0]) return JSON.parse(m[0]) as T
+    throw new Error('LLM未返回可解析的JSON')
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
