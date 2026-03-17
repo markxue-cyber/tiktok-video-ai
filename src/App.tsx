@@ -599,7 +599,51 @@ function VideoGenerator() {
                 ))}
               </div>
             )}
-            {modalStep === 3 && (<div className="space-y-4"><div className="p-4 bg-gray-50 rounded-lg"><p className="text-sm text-gray-500 mb-2">当前脚本</p><p>{selectedScript}</p></div><div><p className="text-sm font-medium mb-2">提示词美化</p><div className="flex flex-wrap gap-2">{['真人感', '高端', '简洁', '详实', '电影感', 'TikTok风格'].map(tag => (<button key={tag} onClick={() => handleOptimize(tag)} className={`px-3 py-1 rounded-full text-sm ${tags.includes(tag) ? 'bg-purple-500 text-white' : 'bg-gray-100'}`}>{tag}</button>))}</div></div>{optimizedPrompt && <div className="p-4 bg-purple-50 rounded-lg"><p className="text-sm text-purple-600 mb-1">优化后</p><p>{optimizedPrompt}</p></div>}</div>)}
+            {modalStep === 3 && (
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-500 mb-2">当前脚本</p>
+                  <p className="whitespace-pre-wrap text-sm text-gray-900">{selectedScript}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">提示词美化（风格标签）</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      '真人感',
+                      '高端',
+                      '简洁',
+                      '详实',
+                      '电影感',
+                      '强钩子',
+                      '痛点对比',
+                      '测评感',
+                      '种草口吻',
+                      'TikTok风格',
+                      '口播优先',
+                      '字幕更强',
+                      '价格友好（不报价格）',
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => handleOptimize(tag)}
+                        className={`px-3 py-1 rounded-full text-sm ${
+                          tags.includes(tag) ? 'bg-purple-500 text-white' : 'bg-gray-100'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">提示：可多选组合风格；优化会保持镜头结构不变，仅调整表达与镜头语言。</p>
+                </div>
+                {optimizedPrompt && (
+                  <div className="p-4 bg-purple-50 rounded-lg">
+                    <p className="text-sm text-purple-600 mb-1">优化后</p>
+                    <p className="whitespace-pre-wrap text-sm text-gray-900">{optimizedPrompt}</p>
+                  </div>
+                )}
+              </div>
+            )}
             {!!aiError && <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{aiError}</div>}
           </div>
           {isAiBusy && (
