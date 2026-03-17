@@ -20,7 +20,7 @@ export const generateVideoAPI = async (
   
   const response = await fetch('/api/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Confirm-Billable': 'true' },
     body: JSON.stringify({
       prompt,
       model: apiModel,

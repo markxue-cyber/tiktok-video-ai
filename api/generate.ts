@@ -13,6 +13,11 @@ export default async function handler(req, res) {
 
     // 提交视频生成任务
     if (req.method === 'POST') {
+      // 保险栓：防止非用户确认的请求触发计费
+      const billableConfirmed = String(req.headers?.['x-confirm-billable'] || '').toLowerCase() === 'true'
+      if (!billableConfirmed) {
+        return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
+      }
       const { prompt, model, duration, aspect_ratio, resolution, refImage } = req.body || {}
 
       const pickFirstString = (v: any): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
