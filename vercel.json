@@ -1,3 +1,8 @@
 {
-  "rewrites": []
+  "rewrites": [
+    { "source": "/api/ai/parse-product", "destination": "/api/ai-parse-product" },
+    { "source": "/api/ai/video-scripts", "destination": "/api/ai-video-scripts" },
+    { "source": "/api/ai/beautify-script", "destination": "/api/ai-beautify-script" },
+    { "source": "/api/ai/image-prompt", "destination": "/api/ai-image-prompt" }
+  ]
 }
