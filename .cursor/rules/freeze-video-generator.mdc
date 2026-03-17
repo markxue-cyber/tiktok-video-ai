@@ -1,0 +1,22 @@
+---
+description: Freeze VideoGenerator module unless explicitly requested
+globs: src/App.tsx,src/api/video.ts,api/generate.ts,api/ai-video-scripts.ts
+alwaysApply: false
+---
+
+# Freeze: 视频生成模块（VideoGenerator）
+
+除非用户**明确要求修改“视频生成模块/视频生成页面/VideoGenerator/视频模型参数/视频生成接口”**，否则：
+
+- 不要改动 `src/App.tsx` 中 `VideoGenerator` 组件及其相关 UI/状态/逻辑
+- 不要改动视频生成调用链相关文件：
+  - `src/api/video.ts`
+  - `api/generate.ts`
+  - `api/ai-video-scripts.ts`
+
+如果用户要求改其他模块而碰到依赖冲突：
+
+- 优先通过**新增代码路径**或**在其他模块内部适配**解决
+- 不要为了“顺手重构/顺手优化”而改动上述冻结区域
+- 若确实必须修改冻结区域才能完成用户需求，先在回复中点名说明“将影响视频生成模块”，并等待用户明确同意后再动手
+
