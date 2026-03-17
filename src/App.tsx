@@ -265,7 +265,8 @@ function NavSecondary({ icon, label, active, onClick }: any) {
 }
 
 function VideoGenerator() {
-  const [refImage, setRefImage] = useState('')
+  const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
+  const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora')
   const [size, setSize] = useState<'9:16' | '16:9'>('9:16')
@@ -298,13 +299,13 @@ function VideoGenerator() {
   }, [])
 
   const handlePromptGen = async () => {
-    if (!refImage) { alert('请先上传参考图'); return }
+    if (!refImageDataUrl) { alert('请先上传参考图'); return }
     setShowModal(true)
     setModalStep(1)
     setAiError('')
     setIsAiBusy(true)
     try {
-      const parsed = await parseProductInfo({ refImage, language: productInfo.language || '简体中文', kind: 'video' })
+      const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'video' })
       setProductInfo(parsed)
     } catch (e: any) {
       setAiError(e?.message || '解析失败')
@@ -319,7 +320,7 @@ function VideoGenerator() {
       setModalStep(2)
       setIsAiBusy(true)
       try {
-        const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage })
+        const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage: refImageDataUrl })
         setScripts(r.scripts)
         setScriptBatches([r.scripts])
         setScriptBatchIdx(0)
@@ -361,7 +362,7 @@ function VideoGenerator() {
 
     setIsAiBusy(true)
     try {
-      const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage })
+      const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage: refImageDataUrl })
       setScriptBatches((prev) => [...prev, r.scripts])
       setScriptBatchIdx(scriptBatches.length)
       setScriptRefreshCount((c) => Math.min(2, c + 1))
@@ -402,7 +403,7 @@ function VideoGenerator() {
   }, [optimizedPrompt, selectedScript, prompt, productInfo, size, resolution, durationSec])
 
   const handleGenerate = async () => {
-    if (!refImage) { alert('请先上传参考图'); return }
+    if (!refImageDataUrl) { alert('请先上传参考图'); return }
     if (!prompt) { alert('请输入视频文案描述'); return }
     stopPollingRef.current = false
     setIsGenerating(true)
@@ -413,7 +414,7 @@ function VideoGenerator() {
     setTaskId('')
 
     try {
-      const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage })
+      const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage: refImageDataUrl })
       setTaskId(submit.taskId)
       setStatusText(submit.message || '视频生成中...')
 
@@ -466,7 +467,7 @@ function VideoGenerator() {
             ))}
           </div>
           <div className="p-6">
-            {modalStep === 1 && (<div className="space-y-4">{refImage && <img src={refImage} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">视频语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option><option>日本語</option></select></div></div>)}
+            {modalStep === 1 && (<div className="space-y-4">{refImagePreviewUrl && <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">视频语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option><option>日本語</option></select></div></div>)}
             {modalStep === 2 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -538,7 +539,33 @@ function VideoGenerator() {
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">创建视频</h2>
-        <div className="mb-6"><label className="block text-sm font-medium mb-2">上传参考图</label><div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center relative"><input type="file" accept="image/*" onChange={(e: any) => e.target.files?.[0] && setRefImage(URL.createObjectURL(e.target.files[0]))} className="absolute inset-0 opacity-0 cursor-pointer" />{refImage ? <img src={refImage} alt="参考图" className="max-h-40 mx-auto" /> : <><Upload className="w-10 h-10 mx-auto text-gray-400" /><p className="text-gray-500 mt-2">点击上传参考图</p></>}</div></div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">上传参考图</label>
+          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center relative">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e: any) => {
+                const f: File | undefined = e.target.files?.[0]
+                if (!f) return
+                const preview = URL.createObjectURL(f)
+                setRefImagePreviewUrl(preview)
+                const reader = new FileReader()
+                reader.onload = () => setRefImageDataUrl(String(reader.result || ''))
+                reader.readAsDataURL(f)
+              }}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+            {refImagePreviewUrl ? (
+              <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto" />
+            ) : (
+              <>
+                <Upload className="w-10 h-10 mx-auto text-gray-400" />
+                <p className="text-gray-500 mt-2">点击上传参考图</p>
+              </>
+            )}
+          </div>
+        </div>
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">视频文案描述</label>
@@ -620,7 +647,8 @@ function VideoGenerator() {
 }
 
 function ImageGenerator() {
-  const [refImage, setRefImage] = useState('')
+  const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
+  const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('seedream')
   const [size, setSize] = useState<'1:1' | '3:4' | '4:3' | '9:16' | '16:9'>('1:1')
@@ -635,7 +663,7 @@ function ImageGenerator() {
   const [aiError, setAiError] = useState('')
 
   const handlePromptGen = async () => {
-    if (!refImage) {
+    if (!refImageDataUrl) {
       alert('请先上传参考图')
       return
     }
@@ -644,7 +672,7 @@ function ImageGenerator() {
     setAiError('')
     setIsAiBusy(true)
     try {
-      const parsed = await parseProductInfo({ refImage, language: productInfo.language || '简体中文', kind: 'image' })
+      const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
       setProductInfo(parsed)
     } catch (e: any) {
       setAiError(e?.message || '解析失败')
@@ -701,7 +729,7 @@ function ImageGenerator() {
             ))}
           </div>
           <div className="p-6">
-            {modalStep === 1 && (<div className="space-y-4">{refImage && <img src={refImage} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">图片语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option></select></div></div>)}
+            {modalStep === 1 && (<div className="space-y-4">{refImagePreviewUrl && <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">图片语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option></select></div></div>)}
             {modalStep === 2 && (<div className="space-y-4"><label className="block text-sm font-medium mb-1">图片优化提示词</label><textarea value={optimizedPrompt} onChange={e => setOptimizedPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[150px]" /></div>)}
             {!!aiError && <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{aiError}</div>}
           </div>
@@ -720,7 +748,33 @@ function ImageGenerator() {
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">创建图片</h2>
-        <div className="mb-6"><label className="block text-sm font-medium mb-2">上传参考图</label><div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center relative"><input type="file" accept="image/*" onChange={(e: any) => e.target.files?.[0] && setRefImage(URL.createObjectURL(e.target.files[0]))} className="absolute inset-0 opacity-0 cursor-pointer" />{refImage ? <img src={refImage} alt="参考图" className="max-h-40 mx-auto" /> : <><Upload className="w-10 h-10 mx-auto text-gray-400" /><p className="text-gray-500 mt-2">点击上传参考图</p></>}</div></div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">上传参考图</label>
+          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center relative">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e: any) => {
+                const f: File | undefined = e.target.files?.[0]
+                if (!f) return
+                const preview = URL.createObjectURL(f)
+                setRefImagePreviewUrl(preview)
+                const reader = new FileReader()
+                reader.onload = () => setRefImageDataUrl(String(reader.result || ''))
+                reader.readAsDataURL(f)
+              }}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+            {refImagePreviewUrl ? (
+              <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto" />
+            ) : (
+              <>
+                <Upload className="w-10 h-10 mx-auto text-gray-400" />
+                <p className="text-gray-500 mt-2">点击上传参考图</p>
+              </>
+            )}
+          </div>
+        </div>
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">图片文案描述</label>
