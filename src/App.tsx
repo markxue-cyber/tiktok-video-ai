@@ -352,6 +352,7 @@ function VideoGenerator() {
 
   const [capsByModel, setCapsByModel] = useState<Record<string, Partial<VideoModelCaps>>>({})
   const [capsLoadingModel, setCapsLoadingModel] = useState('')
+  const [capsReady, setCapsReady] = useState(false)
 
   const fetchCaps = async (m: string) => {
     if (!m) return
@@ -390,6 +391,47 @@ function VideoGenerator() {
     }
   }
 
+  // 启动时批量探测全部模型能力，形成严格白名单（避免出现选10s但实际8s）
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const modelIds = VIDEO_MODELS.map((x) => x.id)
+        const resp = await fetch('/api/video-capabilities-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ models: modelIds }),
+        })
+        const text = await resp.text()
+        const data = (() => {
+          try {
+            return JSON.parse(text)
+          } catch {
+            return { success: false, error: text }
+          }
+        })()
+        if (!resp.ok || !data?.success) throw new Error(data?.error || `能力批量探测失败(${resp.status})`)
+
+        const next: Record<string, Partial<VideoModelCaps>> = {}
+        for (const id of modelIds) {
+          const r = data?.data?.[id]
+          const ar = Array.isArray(r?.caps?.aspectRatios) ? r.caps.aspectRatios.filter(Boolean) : []
+          const rs = Array.isArray(r?.caps?.resolutions) ? r.caps.resolutions.filter(Boolean) : []
+          const ds = Array.isArray(r?.caps?.durations) ? r.caps.durations.filter((x: any) => Number.isFinite(Number(x))) : []
+          next[id] = {
+            aspectRatios: (ar.length ? ar : undefined) as any,
+            resolutions: (rs.length ? rs : undefined) as any,
+            durations: (ds.length ? ds.map((x: any) => Number(x)) : undefined) as any,
+          }
+        }
+        setCapsByModel((prev) => ({ ...prev, ...next }))
+      } catch {
+        // ignore: 若批量探测失败，仍可按单个模型懒加载
+      } finally {
+        setCapsReady(true)
+      }
+    })()
+  }, [])
+
   const caps = useMemo<VideoModelCaps>(() => {
     const base =
       VIDEO_MODEL_CAPS[model] || {
@@ -399,11 +441,12 @@ function VideoGenerator() {
         defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 },
       }
     const remote = capsByModel[model] || {}
+    // 严格白名单：一旦探测到非空白名单，就只允许白名单；否则临时用本地默认避免空白
     const aspectRatios = (remote.aspectRatios?.length ? remote.aspectRatios : base.aspectRatios) as any
     const resolutions = (remote.resolutions?.length ? remote.resolutions : base.resolutions) as any
     const durations = (remote.durations?.length ? remote.durations : base.durations) as any
     return { ...base, aspectRatios, resolutions, durations }
-  }, [model])
+  }, [model, capsByModel])
 
   // 模型切换时：如果当前选择不被支持，自动回落到该模型默认值
   useEffect(() => {
