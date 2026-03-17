@@ -15,6 +15,35 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { prompt, model, duration, aspect_ratio, resolution, refImage } = req.body || {}
 
+      const pickFirstString = (v: any): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
+      const findTaskIdDeep = (obj: any): string => {
+        if (!obj || typeof obj !== 'object') return ''
+        // 常见字段
+        const direct =
+          pickFirstString((obj as any).task_id) ||
+          pickFirstString((obj as any).taskId) ||
+          pickFirstString((obj as any).taskID) ||
+          pickFirstString((obj as any).id) ||
+          pickFirstString((obj as any).job_id) ||
+          pickFirstString((obj as any).jobId)
+        if (direct) return direct
+        // 常见嵌套层级
+        const candidates = [(obj as any).data, (obj as any).result, (obj as any).output, (obj as any).response, (obj as any).payload]
+        for (const c of candidates) {
+          const found = findTaskIdDeep(c)
+          if (found) return found
+        }
+        // 兜底遍历（限制深度与键数）
+        const entries = Object.entries(obj).slice(0, 50)
+        for (const [, val] of entries) {
+          if (val && typeof val === 'object') {
+            const found = findTaskIdDeep(val)
+            if (found) return found
+          }
+        }
+        return ''
+      }
+
       // 映射前端模型名称到API模型名称
       const modelMap: Record<string, string> = {
         'sora': 'sora-2',
@@ -57,14 +86,14 @@ export default async function handler(req, res) {
         })
       }
 
-      // 尝试多种可能的字段名
-      const taskId = submitData.task_id || submitData.taskId || submitData.id || submitData.taskID
+      // 尝试多种可能的字段名/嵌套结构
+      const taskId = findTaskIdDeep(submitData)
       
       if (!taskId) {
         return res.status(200).json({ 
           success: false, 
-          error: '无法获取任务ID',
-          raw: JSON.stringify(submitData)
+          error: '无法获取任务ID（聚合API未返回可识别的task_id/id）',
+          raw: submitData
         })
       }
 
