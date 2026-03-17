@@ -303,7 +303,11 @@ export default async function handler(req, res) {
     }
 
     if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
-    if (scripts.some((s) => !isStoryboardScript(s))) throw new Error('脚本未按分镜模板生成完整内容，请点击“换一批”重试')
+    if (scripts.some((s) => !isStoryboardScript(s))) {
+      // 最终兜底：不让前端报错卡死，直接返回本地规则分镜
+      const fallback = localFallback(product, language || product.language || '简体中文')
+      return res.status(200).json({ success: true, scripts: fallback.scripts, _local_fallback: true })
+    }
 
     return res.status(200).json({ success: true, scripts })
   } catch (e: any) {
