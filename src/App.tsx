@@ -307,7 +307,25 @@ function VideoGenerator() {
   const stopPollingRef = useRef(false)
 
   const renderScriptStructured = (raw: string) => {
-    const lines = String(raw || '')
+    let text = String(raw || '')
+    // 兼容服务端/模型偶发把 {"scripts":[...]} 整段塞进单条脚本
+    if (text.trim().startsWith('{') && text.includes('"scripts"')) {
+      try {
+        const parsed = JSON.parse(text)
+        if (Array.isArray(parsed?.scripts) && parsed.scripts[0]) text = String(parsed.scripts[0])
+      } catch {
+        // ignore
+      }
+    }
+
+    // 兼容 [镜头1]/[开场钩子] + 英文管道符
+    text = text
+      .replace(/\[开场钩子\]/g, '【开场钩子】')
+      .replace(/\[收尾CTA\]/g, '【收尾CTA】')
+      .replace(/\[镜头(\d+)\]/g, '【镜头$1】')
+      .replace(/\s*\|\s*/g, '｜')
+
+    const lines = text
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean)
@@ -655,7 +673,7 @@ function VideoGenerator() {
                 <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
                 <div>
               <div className="font-medium">
-                {modalStep === 3 ? '视频脚本AI优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
+                {modalStep === 3 ? '视频脚本优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
               </div>
                   <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
                 </div>

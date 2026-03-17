@@ -178,20 +178,57 @@ export default async function handler(req, res) {
       }
     }
 
+    const normalizeOneScriptText = (text: string) => {
+      let s = String(text || '').trim()
+      // 兼容模型输出的 [] 版本标签
+      s = s.replace(/\[开场钩子\]/g, '【开场钩子】')
+      s = s.replace(/\[收尾CTA\]/g, '【收尾CTA】')
+      s = s.replace(/\[镜头(\d+)\]/g, '【镜头$1】')
+      // 兼容英文管道符
+      s = s.replace(/\s*\|\s*/g, '｜')
+      // 兼容“镜头行缺少分隔符”的情况（尽量不破坏已有正确输出）
+      s = s.replace(/(【镜头\d+】)\s*画面：/g, '$1画面：')
+      return s
+    }
+
+    const tryExtractScriptsFromJSONString = (maybeJson: string): string[] | null => {
+      const t = String(maybeJson || '').trim()
+      if (!t) return null
+      if (!t.includes('"scripts"') && !t.includes("'scripts'")) return null
+      try {
+        const parsed = JSON.parse(t)
+        if (Array.isArray((parsed as any)?.scripts)) {
+          return (parsed as any).scripts.map((x: any) => normalizeOneScriptText(typeof x === 'string' ? x : JSON.stringify(x)))
+        }
+      } catch {
+        // ignore
+      }
+      return null
+    }
+
     const normalizeScripts = (raw: any) => {
-      const scriptsRaw = Array.isArray(raw?.scripts) ? raw.scripts.filter(Boolean).slice(0, 3) : []
-      const scripts = scriptsRaw.map((item: any) => {
-        if (typeof item === 'string') return item
+      const scriptsRaw = Array.isArray(raw?.scripts) ? raw.scripts.filter(Boolean) : []
+      const out: string[] = []
+      for (const item of scriptsRaw) {
+        if (typeof item === 'string') {
+          const extracted = tryExtractScriptsFromJSONString(item)
+          if (extracted?.length) out.push(...extracted)
+          else out.push(normalizeOneScriptText(item))
+          continue
+        }
         if (item && typeof item === 'object') {
           const title = (item as any).title || (item as any).name || (item as any).style
           const body = (item as any).script || (item as any).text || (item as any).content
-          if (title && body) return `${title}\n${body}`
-          if (body) return String(body)
-          return JSON.stringify(item)
+          if (body && typeof body === 'string') {
+            out.push(normalizeOneScriptText(title ? `${title}\n${body}` : body))
+            continue
+          }
+          out.push(normalizeOneScriptText(JSON.stringify(item)))
+          continue
         }
-        return String(item)
-      })
-      return scripts
+        out.push(normalizeOneScriptText(String(item)))
+      }
+      return out.filter(Boolean).slice(0, 3)
     }
 
     let scripts = normalizeScripts(data)
@@ -210,22 +247,7 @@ export default async function handler(req, res) {
     if (scripts.length < 3) throw new Error('脚本生成结果不足3条')
     if (scripts.some((s) => !isStoryboardScript(s))) throw new Error('脚本未按分镜模板生成完整内容，请点击“换一批”重试')
 
-    // legacy mapping below (kept minimal)
-    const scriptsRaw = scripts
-    const scriptsOut = scriptsRaw.map((item) => {
-      if (typeof item === 'string') return item
-      if (item && typeof item === 'object') {
-        const title = (item as any).title || (item as any).name || (item as any).style
-        const body = (item as any).script || (item as any).text || (item as any).content
-        if (title && body) return `${title}\n${body}`
-        if (body) return String(body)
-        return JSON.stringify(item)
-      }
-      return String(item)
-    })
-    if (scriptsOut.length < 3) throw new Error('脚本生成结果不足3条')
-
-    return res.status(200).json({ success: true, scripts: scriptsOut })
+    return res.status(200).json({ success: true, scripts })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }
