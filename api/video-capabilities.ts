@@ -3,6 +3,10 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {
+    // IMPORTANT: 该探测会调用计费的 videos/generations。默认关闭，避免误触发扣费。
+    if (process.env.ALLOW_BILLABLE_CAPS_PROBE !== 'true') {
+      return res.status(403).json({ success: false, error: '能力探测已禁用（可能产生计费）。如需开启请设置 ALLOW_BILLABLE_CAPS_PROBE=true' })
+    }
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
     if (!apiKey) return res.status(500).json({ success: false, error: 'API Key未配置' })
 

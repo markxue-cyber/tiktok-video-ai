@@ -350,87 +350,7 @@ function VideoGenerator() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const stopPollingRef = useRef(false)
 
-  const [capsByModel, setCapsByModel] = useState<Record<string, Partial<VideoModelCaps>>>({})
-  const [capsLoadingModel, setCapsLoadingModel] = useState('')
-  const [capsReady, setCapsReady] = useState(false)
-
-  const fetchCaps = async (m: string) => {
-    if (!m) return
-    if (capsByModel[m]?.aspectRatios?.length && capsByModel[m]?.resolutions?.length && capsByModel[m]?.durations?.length) return
-    setCapsLoadingModel(m)
-    try {
-      const resp = await fetch(`/api/video-capabilities?model=${encodeURIComponent(m)}`)
-      const text = await resp.text()
-      const data = (() => {
-        try {
-          return JSON.parse(text)
-        } catch {
-          return { success: false, error: text }
-        }
-      })()
-      if (!resp.ok || !data?.success) throw new Error(data?.error || `能力探测失败(${resp.status})`)
-
-      const ar = Array.isArray(data?.caps?.aspectRatios) ? data.caps.aspectRatios.filter(Boolean) : []
-      const rs = Array.isArray(data?.caps?.resolutions) ? data.caps.resolutions.filter(Boolean) : []
-      const ds = Array.isArray(data?.caps?.durations) ? data.caps.durations.filter((x: any) => Number.isFinite(Number(x))) : []
-
-      // 严格适配：只使用“探测到的白名单”；如果探测不到（空），退回到本地默认配置避免空下拉
-      setCapsByModel((prev) => ({
-        ...prev,
-        [m]: {
-          aspectRatios: (ar.length ? ar : undefined) as any,
-          resolutions: (rs.length ? rs : undefined) as any,
-          durations: (ds.length ? ds.map((x: any) => Number(x)) : undefined) as any,
-        },
-      }))
-    } catch (e) {
-      // 探测失败：不打断生成流程，继续使用本地默认配置
-      setCapsByModel((prev) => ({ ...prev, [m]: prev[m] || {} }))
-    } finally {
-      setCapsLoadingModel('')
-    }
-  }
-
-  // 启动时批量探测全部模型能力，形成严格白名单（避免出现选10s但实际8s）
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const modelIds = VIDEO_MODELS.map((x) => x.id)
-        const resp = await fetch('/api/video-capabilities-all', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ models: modelIds }),
-        })
-        const text = await resp.text()
-        const data = (() => {
-          try {
-            return JSON.parse(text)
-          } catch {
-            return { success: false, error: text }
-          }
-        })()
-        if (!resp.ok || !data?.success) throw new Error(data?.error || `能力批量探测失败(${resp.status})`)
-
-        const next: Record<string, Partial<VideoModelCaps>> = {}
-        for (const id of modelIds) {
-          const r = data?.data?.[id]
-          const ar = Array.isArray(r?.caps?.aspectRatios) ? r.caps.aspectRatios.filter(Boolean) : []
-          const rs = Array.isArray(r?.caps?.resolutions) ? r.caps.resolutions.filter(Boolean) : []
-          const ds = Array.isArray(r?.caps?.durations) ? r.caps.durations.filter((x: any) => Number.isFinite(Number(x))) : []
-          next[id] = {
-            aspectRatios: (ar.length ? ar : undefined) as any,
-            resolutions: (rs.length ? rs : undefined) as any,
-            durations: (ds.length ? ds.map((x: any) => Number(x)) : undefined) as any,
-          }
-        }
-        setCapsByModel((prev) => ({ ...prev, ...next }))
-      } catch {
-        // ignore: 若批量探测失败，仍可按单个模型懒加载
-      } finally {
-        setCapsReady(true)
-      }
-    })()
-  }, [])
+  // NOTE: 能力探测会触发聚合API计费请求，已在后端默认禁用。
 
   const caps = useMemo<VideoModelCaps>(() => {
     const base =
@@ -440,17 +360,11 @@ function VideoGenerator() {
         durations: [10, 15],
         defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 },
       }
-    const remote = capsByModel[model] || {}
-    // 严格白名单：一旦探测到非空白名单，就只允许白名单；否则临时用本地默认避免空白
-    const aspectRatios = (remote.aspectRatios?.length ? remote.aspectRatios : base.aspectRatios) as any
-    const resolutions = (remote.resolutions?.length ? remote.resolutions : base.resolutions) as any
-    const durations = (remote.durations?.length ? remote.durations : base.durations) as any
-    return { ...base, aspectRatios, resolutions, durations }
-  }, [model, capsByModel])
+    return base
+  }, [model])
 
   // 模型切换时：如果当前选择不被支持，自动回落到该模型默认值
   useEffect(() => {
-    fetchCaps(model)
     if (!caps.aspectRatios.includes(size)) setSize(caps.defaults.aspectRatio)
     if (!caps.resolutions.includes(resolution)) setResolution(caps.defaults.resolution)
     if (!caps.durations.includes(durationSec)) setDurationSec(caps.defaults.durationSec)
