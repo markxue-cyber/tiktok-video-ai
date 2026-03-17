@@ -723,7 +723,59 @@ function VideoGenerator() {
             ))}
           </div>
           <div className="p-6">
-            {modalStep === 1 && (<div className="space-y-4">{refImagePreviewUrl && <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">视频语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option><option>日本語</option></select></div></div>)}
+            {modalStep === 1 && (
+              <div className="space-y-4">
+                {refImagePreviewUrl && <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 rounded-lg" />}
+                {['name', 'category', 'sellingPoints', 'targetAudience'].map((f) => (
+                  <div key={f}>
+                    <label className="block text-sm font-medium mb-1">
+                      {f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}
+                    </label>
+                    <input
+                      value={productInfo[f as keyof typeof productInfo]}
+                      onChange={(e) => setProductInfo({ ...productInfo, [f]: e.target.value })}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-sm font-medium mb-1">视频语言</label>
+                  <select
+                    value={productInfo.language}
+                    onChange={(e) => setProductInfo({ ...productInfo, language: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg"
+                  >
+                    <option>简体中文</option>
+                    <option>English</option>
+                    <option>日本語</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">视频尺寸</label>
+                    <select value={size} onChange={(e) => setSize(e.target.value as any)} className="w-full px-4 py-2 border rounded-lg">
+                      {caps.aspectRatios.map((ar) => (
+                        <option key={ar} value={ar}>
+                          {ar}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">视频时长</label>
+                    <select value={durationSec} onChange={(e) => setDurationSec(Number(e.target.value) as any)} className="w-full px-4 py-2 border rounded-lg">
+                      {caps.durations.map((d) => (
+                        <option key={d} value={d}>
+                          {d}s
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500">提示：尺寸/时长将用于脚本节奏与最终视频生成参数。</div>
+              </div>
+            )}
             {modalStep === 2 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -890,17 +942,21 @@ function VideoGenerator() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">视频文案描述</label>
-            <button
-              onClick={handlePromptGen}
-              className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
-            >
-              <Sparkles className="w-4 h-4 mr-1" /> 一键生成提示词
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">尺寸 {size}</span>
+              <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">时长 {durationSec}s</span>
+              <button
+                onClick={handlePromptGen}
+                className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
+              >
+                <Sparkles className="w-4 h-4 mr-1" /> 一键生成提示词
+              </button>
+            </div>
           </div>
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入商品卖点/场景/风格，或使用一键生成提示词..." />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium mb-1">AI模型</label>
             <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
@@ -908,34 +964,11 @@ function VideoGenerator() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">尺寸</label>
-            <select value={size} onChange={e => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {caps.aspectRatios.map((ar) => (
-                <option key={ar} value={ar}>
-                  {ar === '9:16' ? '竖版 9:16' : '横版 16:9'}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
             <label className="block text-sm font-medium mb-1">分辨率</label>
             <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
               {caps.resolutions.map((r) => (
                 <option key={r} value={r}>
                   {r}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">时长</label>
-            <select value={durationSec} onChange={e => setDurationSec(Number(e.target.value) as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {caps.durations.map((d) => (
-                <option key={d} value={d}>
-                  {d}s
                 </option>
               ))}
             </select>
