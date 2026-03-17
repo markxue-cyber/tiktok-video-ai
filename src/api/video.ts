@@ -34,7 +34,8 @@ export const generateVideoAPI = async (
   const data = await response.json()
 
   if (!response.ok || !data?.success) {
-    throw new Error(data?.error || `提交失败(${response.status})`)
+    const raw = data?.raw ? `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}` : ''
+    throw new Error((data?.error || `提交失败(${response.status})`) + raw)
   }
 
   if (!data.taskId) {
