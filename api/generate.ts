@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
     // 提交视频生成任务
     if (req.method === 'POST') {
-      const { prompt, model } = req.body || {}
+      const { prompt, model, duration, aspect_ratio, resolution } = req.body || {}
 
       // 映射前端模型名称到API模型名称
       const modelMap: Record<string, string> = {
@@ -36,8 +36,9 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           prompt: prompt || '生成一个视频',
           model: apiModel,
-          duration: 5,
-          aspect_ratio: '9:16'
+          duration: Number(duration) || 10,
+          aspect_ratio: aspect_ratio || '9:16',
+          resolution: resolution || '720p'
         })
       })
 

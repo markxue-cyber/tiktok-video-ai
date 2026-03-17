@@ -2,7 +2,11 @@ export type VideoSubmitResult = { taskId: string; message: string }
 export type VideoStatusResult = { status: string; videoUrl: string; progress: string; failReason?: string }
 
 // 视频生成API调用
-export const generateVideoAPI = async (prompt: string, model: string): Promise<VideoSubmitResult> => {
+export const generateVideoAPI = async (
+  prompt: string,
+  model: string,
+  opts?: { durationSec?: number; aspectRatio?: '9:16' | '16:9'; resolution?: '720p' | '1080p' },
+): Promise<VideoSubmitResult> => {
   // 映射UI模型到API模型
   const modelMap: Record<string, string> = {
     'sora': 'sora_video2',
@@ -16,7 +20,13 @@ export const generateVideoAPI = async (prompt: string, model: string): Promise<V
   const response = await fetch('/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model: apiModel })
+    body: JSON.stringify({
+      prompt,
+      model: apiModel,
+      duration: opts?.durationSec,
+      aspect_ratio: opts?.aspectRatio,
+      resolution: opts?.resolution,
+    }),
   })
   
   const data = await response.json()
