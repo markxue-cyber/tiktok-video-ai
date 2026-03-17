@@ -654,7 +654,9 @@ function VideoGenerator() {
               <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center">
                 <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
                 <div>
-              <div className="font-medium">{modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}</div>
+              <div className="font-medium">
+                {modalStep === 3 ? '视频脚本AI优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
+              </div>
                   <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
                 </div>
               </div>
