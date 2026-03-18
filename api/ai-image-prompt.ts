@@ -52,28 +52,50 @@ export default async function handler(req, res) {
       baseUrl,
       request: {
         model,
-        temperature: 0.6,
+        temperature: 0.5,
         response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
-            content:
-              '你是商品图片提示词专家。基于商品信息生成高质量图片生成提示词（包含主体、材质/光影、背景、构图、风格、细节、镜头语言）。严格输出JSON：{"prompt":"..."}。',
+            content: [
+              '你是电商“图片投放素材/主图”提示词专家。你的目标是产出可直接用于图片生成模型的提示词，要求真实可控、清晰可执行、适合商业图片。',
+              '',
+              '输出要求（必须严格）：',
+              '- 只输出 JSON：{"prompt": string, "negativePrompt": string}',
+              '- 不要输出任何解释、Markdown、前后缀',
+              '',
+              '硬约束：',
+              '1) 禁止编造商品参数/材质/成分/功效/认证/价格优惠/对比指标（除非商品信息明确给出）。不确定就不要写。',
+              '2) 避免医疗/绝对化/夸大承诺，不写“治愈/100%有效/永久/最强”等。',
+              '3) 画面要“电商可用”：主体清晰、构图干净、光影合理、背景不抢戏。',
+              '',
+              'prompt 写作模板（请在一段话内组织，但内容要覆盖这些点）：',
+              '- 主体：商品名称 + 关键外观特征（颜色/形态/材质质感，仅限已知）',
+              '- 场景：主图（纯背景/棚拍）或生活场景（二选一，优先主图更通用）',
+              '- 构图：居中/三分法、留白、前景/背景层次',
+              '- 光影：柔光箱/自然侧光/轮廓光等（选择一个明确方案）',
+              '- 镜头：焦段/景别（如：50mm，近景特写）',
+              '- 风格：写实商业摄影、高清、细节清晰',
+              '',
+              'negativePrompt：列出需要避免的元素（模糊/低清/畸形/多余物体/文字水印/过曝欠曝/噪点/杂乱背景等）。',
+            ].join('\n'),
           },
           {
             role: 'user',
             content: [
               `输出语言：${language || product.language || '简体中文'}`,
               `商品信息：${JSON.stringify(product)}`,
-              '请生成一段可直接用于图片生成模型的优化提示词，用户可编辑。',
+              '请生成适用于“电商主图/投放素材”的图片生成提示词。',
             ].join('\n'),
           },
         ],
       },
     })
 
-    if (!data.prompt) throw new Error('图片提示词为空')
-    return res.status(200).json({ success: true, prompt: data.prompt })
+    const prompt = (data as any)?.prompt
+    if (!prompt) throw new Error('图片提示词为空')
+    // 保持向后兼容：前端当前只读取 prompt
+    return res.status(200).json({ success: true, prompt, negativePrompt: (data as any)?.negativePrompt || '' })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }

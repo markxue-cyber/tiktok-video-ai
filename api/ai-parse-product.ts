@@ -155,7 +155,13 @@ export default async function handler(req, res) {
             role: 'user',
             content: [
               { type: 'text', text: `输出语言：${language || '简体中文'}` },
-              { type: 'text', text: '场景：电商带货短视频（用于生成脚本与视频生成提示词）' },
+              {
+                type: 'text',
+                text:
+                  kind === 'image'
+                    ? '场景：电商图片投放/主图生成（用于生成图片提示词与素材）'
+                    : '场景：电商带货短视频（用于生成脚本与视频生成提示词）',
+              },
               { type: 'text', text: '请根据下方商品图抽取信息。任何不清晰或不可见的信息请填“未知”，不要猜测。' },
               { type: 'image_url', image_url: { url: String(refImage) } },
             ],
