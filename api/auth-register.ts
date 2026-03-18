@@ -50,7 +50,9 @@ export default async function handler(req, res) {
 
     if (!signupResp.ok) {
       const msg = signupJson?.error_description || signupJson?.msg || signupJson?.message || signupText || `signup failed(${signupResp.status})`
-      const isRateLimit = /rate limit/i.test(msg)
+      // Supabase error message may include non-breaking spaces or hyphen.
+      // Make matching robust for: "rate limit", "rate-limit", "rate&nbsp;limit".
+      const isRateLimit = /rate[\s-]*limit/i.test(String(msg))
       if (isRateLimit) {
         return sendJson(res, 429, { success: false, error: '触发注册限流，请稍后 15 分钟再试' })
       }
