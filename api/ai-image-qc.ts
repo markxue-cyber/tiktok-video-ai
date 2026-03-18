@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const billableConfirmed = String(req.headers?.['x-confirm-billable'] || '').toLowerCase() === 'true'
     if (!billableConfirmed) return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
     // LLM 成本控制：需要登录 + 额度
-    const { checkAndConsume } = await import('./_billing')
+    const { checkAndConsume } = await import('./_billing.js')
     const consumed = await checkAndConsume(req, { type: 'llm' })
     if (consumed.already) return res.status(200).json({ success: true, qc: (consumed.result || {}).qc })
 
@@ -119,7 +119,7 @@ export default async function handler(req, res) {
       },
     })
 
-    const { finalizeConsumption } = await import('./_billing')
+    const { finalizeConsumption } = await import('./_billing.js')
     await finalizeConsumption(req, { qc })
     return res.status(200).json({ success: true, qc })
   } catch (e: any) {

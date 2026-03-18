@@ -33,7 +33,7 @@ export default async function handler(req, res) {
 
   try {
     // LLM 成本控制：需要登录 + 额度（AI精修属于计费动作）
-    const { checkAndConsume, finalizeConsumption } = await import('./_billing')
+    const { checkAndConsume, finalizeConsumption } = await import('./_billing.js')
     const consumed = await checkAndConsume(req, { type: 'llm' })
     if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
