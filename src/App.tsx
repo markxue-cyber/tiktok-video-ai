@@ -66,11 +66,40 @@ const VIDEO_MODEL_CAPS: Record<string, VideoModelCaps> = {
   'wan2.6-i2v': { aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4'], resolutions: ['480p', '720p', '1080p'], durations: [4, 5, 6, 8, 10, 12, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
   'wan2.6-r2v': { aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4'], resolutions: ['480p', '720p', '1080p'], durations: [4, 5, 6, 8, 10, 12, 15], defaults: { aspectRatio: '9:16', resolution: '720p', durationSec: 10 } },
 }
+// 图片模型列表：先覆盖聚合端常见可用项（可按账号权限增减）
 const IMAGE_MODELS = [
   { id: 'seedream', name: 'Seedream 4.5' },
+  { id: 'seedream-4.5', name: 'Seedream 4.5 (Alt)' },
+  { id: 'flux', name: 'FLUX' },
+  { id: 'flux-dev', name: 'FLUX Dev' },
+  { id: 'flux-pro', name: 'FLUX Pro' },
+  { id: 'sdxl', name: 'SDXL' },
+  { id: 'dalle-3', name: 'DALL·E 3' },
   { id: 'midjourney', name: 'Midjourney' },
-  { id: 'flux', name: 'Flux' },
 ]
+
+const IMAGE_ASPECT_OPTIONS = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2'] as const
+const IMAGE_RES_OPTIONS = ['1024', '1536', '2048', '4096'] as const // 通用档位（部分模型会映射到2k/4k）
+
+type ImageAspect = (typeof IMAGE_ASPECT_OPTIONS)[number]
+type ImageRes = (typeof IMAGE_RES_OPTIONS)[number]
+
+type ImageModelCaps = {
+  aspectRatios: ImageAspect[]
+  resolutions: ImageRes[]
+  defaults: { aspectRatio: ImageAspect; resolution: ImageRes }
+}
+
+const IMAGE_MODEL_CAPS: Record<string, ImageModelCaps> = {
+  seedream: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['2048', '4096'], defaults: { aspectRatio: '1:1', resolution: '2048' } },
+  'seedream-4.5': { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['2048', '4096'], defaults: { aspectRatio: '1:1', resolution: '2048' } },
+  flux: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '1536', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
+  'flux-dev': { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '1536'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
+  'flux-pro': { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '1536', '2048'], defaults: { aspectRatio: '1:1', resolution: '1536' } },
+  sdxl: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '1536'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
+  'dalle-3': { aspectRatios: ['1:1', '9:16', '16:9'], resolutions: ['1024', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
+  midjourney: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
+}
 const PACKAGES = [{ id: 'trial', name: '试用版', price: '¥0', features: ['每天3次', '基础功能'] }, { id: 'basic', name: '基础版', price: '¥69/月', features: ['每天20次', '全部模型'] }, { id: 'pro', name: '专业版', price: '¥249/月', features: ['无限次数', '4K输出'] }, { id: 'enterprise', name: '旗舰版', price: '¥1199/月', features: ['企业级', 'API接入'] }]
 
 function App() {
@@ -972,8 +1001,8 @@ function ImageGenerator() {
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('seedream')
-  const [size, setSize] = useState<'1:1' | '3:4' | '4:3' | '9:16' | '16:9'>('1:1')
-  const [resolution, setResolution] = useState<'2k' | '4k'>('2k')
+  const [size, setSize] = useState<ImageAspect>('1:1')
+  const [resolution, setResolution] = useState<ImageRes>('2048')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedImage, setGeneratedImage] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -982,6 +1011,22 @@ function ImageGenerator() {
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
+
+  const imageCaps = useMemo<ImageModelCaps>(() => {
+    return (
+      IMAGE_MODEL_CAPS[model] || {
+        aspectRatios: [...IMAGE_ASPECT_OPTIONS],
+        resolutions: [...IMAGE_RES_OPTIONS],
+        defaults: { aspectRatio: '1:1', resolution: '1024' },
+      }
+    )
+  }, [model])
+
+  useEffect(() => {
+    if (!imageCaps.aspectRatios.includes(size)) setSize(imageCaps.defaults.aspectRatio)
+    if (!imageCaps.resolutions.includes(resolution)) setResolution(imageCaps.defaults.resolution)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model])
 
   const handlePromptGen = async () => {
     if (!refImageDataUrl) {
@@ -1119,11 +1164,11 @@ function ImageGenerator() {
           <div>
             <label className="block text-sm font-medium mb-1">尺寸</label>
             <select value={size} onChange={e => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              <option value="1:1">1:1</option>
-              <option value="3:4">3:4</option>
-              <option value="4:3">4:3</option>
-              <option value="9:16">9:16</option>
-              <option value="16:9">16:9</option>
+              {imageCaps.aspectRatios.map((ar) => (
+                <option key={ar} value={ar}>
+                  {ar}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -1131,8 +1176,11 @@ function ImageGenerator() {
         <div className="mb-6">
           <label className="block text-sm font-medium mb-1">分辨率</label>
           <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-            <option value="2k">2k</option>
-            <option value="4k">4k</option>
+            {imageCaps.resolutions.map((r) => (
+              <option key={r} value={r}>
+                {r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : r}
+              </option>
+            ))}
           </select>
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成图片'}</button>
