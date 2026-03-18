@@ -1015,6 +1015,7 @@ function ImageGenerator() {
   const [optimizedNegativePrompt, setOptimizedNegativePrompt] = useState('')
   const [promptParts, setPromptParts] = useState<any>({})
   const [sceneMode, setSceneMode] = useState<'clean' | 'lite'>('clean')
+  const [categoryHint, setCategoryHint] = useState('other')
   const [qcResult, setQcResult] = useState<any>(null)
   const [isQcBusy, setIsQcBusy] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
@@ -1114,6 +1115,7 @@ function ImageGenerator() {
     setOptimizedNegativePrompt('')
     setPromptParts({})
     setSceneMode('clean')
+    setCategoryHint('other')
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
@@ -1134,7 +1136,10 @@ function ImageGenerator() {
         const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution, sceneMode })
         setOptimizedPrompt(r.prompt)
         setOptimizedNegativePrompt(r.negativePrompt || '')
-        const initialParts = applySceneModePreset(sceneMode, r.parts || {})
+        const hint = String((r as any)?.categoryHint || 'other')
+        setCategoryHint(hint)
+        const presetParts = applySceneModePreset(sceneMode, r.parts || {})
+        const initialParts = applyLearnedTweaks(hint, presetParts)
         setPromptParts(initialParts)
         setOptimizedPrompt(r.prompt || buildPromptFromParts(initialParts))
       } catch (e: any) {
@@ -1202,6 +1207,38 @@ function ImageGenerator() {
       const scene = '电商投放轻场景：加入1–2个弱化场景元素/道具（虚化/弱化、不抢主体），背景依然干净'
       next.scene = String(next.scene || '').trim() ? `${String(next.scene).trim()}；${scene}` : scene
     }
+    return next
+  }
+
+  const LS_KEY_IMG_TWEAKS = 'tikgen.imgTweaks.v1'
+  const loadCategoryTweaks = (hint: string) => {
+    try {
+      const raw = localStorage.getItem(LS_KEY_IMG_TWEAKS)
+      const obj = raw ? JSON.parse(raw) : {}
+      return obj?.[hint] || null
+    } catch {
+      return null
+    }
+  }
+  const saveCategoryTweaks = (hint: string, patch: any) => {
+    try {
+      const raw = localStorage.getItem(LS_KEY_IMG_TWEAKS)
+      const obj = raw ? JSON.parse(raw) : {}
+      const prev = obj?.[hint] || {}
+      obj[hint] = { ...prev, ...patch, updatedAt: Date.now() }
+      localStorage.setItem(LS_KEY_IMG_TWEAKS, JSON.stringify(obj))
+    } catch {
+      // ignore
+    }
+  }
+
+  const applyLearnedTweaks = (hint: string, parts: any) => {
+    const t = loadCategoryTweaks(hint)
+    if (!t) return parts
+    const next = { ...(parts || {}) }
+    if (t.compositionAdd) next.composition = String(next.composition || '').trim() ? `${String(next.composition).trim()}；${t.compositionAdd}` : t.compositionAdd
+    if (t.sceneAdd) next.scene = String(next.scene || '').trim() ? `${String(next.scene).trim()}；${t.sceneAdd}` : t.sceneAdd
+    if (t.negativeAdd) setOptimizedNegativePrompt((prev) => mergeNegative(prev, t.negativeAdd))
     return next
   }
 
@@ -1283,6 +1320,23 @@ function ImageGenerator() {
     if (!qcResult) return
     const addNeg = String(qcResult?.fix?.addToNegative || '').trim()
     const tweaks = qcResult?.fix?.promptTweaks || {}
+
+    // 轻量学习：将本次质检常见问题转成“下次同品类默认微调”
+    try {
+      const issues: string[] = Array.isArray(qcResult?.issues) ? qcResult.issues.map(String) : []
+      const hint = String(categoryHint || 'other')
+      const patch: any = {}
+      if (issues.some((x) => x.includes('主体') && (x.includes('偏小') || x.includes('占比')))) {
+        patch.compositionAdd = '主体占比更高（约70–80%），减少无关留白，突出主体'
+      }
+      if (issues.some((x) => x.includes('背景') && (x.includes('简单') || x.includes('缺少场景') || x.includes('场景')))) {
+        patch.sceneAdd = '在不抢主体前提下加入1–2个弱化场景元素/道具并虚化，增强场景感'
+      }
+      if (addNeg) patch.negativeAdd = addNeg
+      if (Object.keys(patch).length) saveCategoryTweaks(hint, patch)
+    } catch {
+      // ignore
+    }
 
     const nextParts = { ...(promptParts || {}) }
     ;['subject', 'scene', 'composition', 'lighting', 'camera', 'style', 'quality', 'extra'].forEach((k) => {

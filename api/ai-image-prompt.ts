@@ -48,6 +48,7 @@ export default async function handler(req, res) {
     }
 
     const data = await callOpenAICompatJSON<{
+      categoryHint?: string
       prompt: string
       negativePrompt?: string
       parts?: {
@@ -75,7 +76,7 @@ export default async function handler(req, res) {
               '',
               '输出要求（必须严格）：',
               '- 只输出 JSON，字段如下：',
-              '  {"prompt": string, "negativePrompt": string, "parts": {"subject": string, "scene": string, "composition": string, "lighting": string, "camera": string, "style": string, "quality": string, "extra": string}}',
+              '  {"categoryHint": string, "prompt": string, "negativePrompt": string, "parts": {"subject": string, "scene": string, "composition": string, "lighting": string, "camera": string, "style": string, "quality": string, "extra": string}}',
               '- 不要输出任何解释、Markdown、前后缀',
               '',
               '硬约束：',
@@ -84,6 +85,35 @@ export default async function handler(req, res) {
               '3) 画面要“电商可用”：主体清晰、构图干净、光影合理、背景不抢戏。',
               '4) 禁止在画面中生成任何新增文字/水印/Logo（除非商品信息里明确包含且“参考图”本身可见，仍需尽量保守）。',
               '5) 电商默认标准（必须纳入第一次生成，避免质检后重来）：主体占画面 60–80%，对焦锐利，背景干净；如需要场景感，也必须是“轻场景元素”，且虚化/弱化不抢主体。',
+              '',
+              '品类自适配（非常重要）：你必须输出 categoryHint，并基于不同品类的拍法生成 parts。',
+              'categoryHint 必须从下列枚举中选择一个最匹配的：',
+              '- lamp（灯具/台灯/氛围灯）',
+              '- fishing_rod（钓鱼竿/渔具）',
+              '- skincare（护肤/美妆）',
+              '- haircare（洗护发/个人护理）',
+              '- snack（零食/食品）',
+              '- beverage（饮品/咖啡/茶）',
+              '- apparel（服饰/鞋靴/箱包）',
+              '- jewelry（首饰/手表）',
+              '- 3c_accessory（3C配件/数码小物）',
+              '- home_kitchen（家居/厨具/小家电/收纳）',
+              '- cleaning（清洁/家清）',
+              '- pet（宠物用品）',
+              '- baby（母婴）',
+              '- sports_outdoor（运动户外，非钓鱼竿）',
+              '- other（以上都不匹配）',
+              '',
+              '各品类拍法要点（用于生成 parts；遵循“主图干净/轻场景”模式）：',
+              '- lamp：强调灯光氛围与材质质感（开灯暖光/柔光），展示灯罩/底座/触控或调光细节；轻场景可选床头/书桌但要虚化。',
+              '- fishing_rod：展示竿身延展与导环/握把细节，斜线构图体现长度；轻场景可选水边/户外但背景虚化；避免多根竿/结构畸形。',
+              '- skincare：干净高端棚拍，玻璃/金属反光控制，允许少量“洁净道具”（水滴/叶片/石材）但不杂乱；避免夸大功效文案。',
+              '- haircare：浴室/梳妆台轻场景可用但保持干净，突出瓶身材质与泵头/盖子细节；避免泡沫遮挡主体。',
+              '- snack/beverage：突出包装与口感联想（少量道具如坚果/咖啡豆/冰块），但主体占比仍要高；避免脏乱油腻。',
+              '- apparel/jewelry：自然柔光、材质纹理清晰；服饰建议平铺或挂拍主图；首饰强调高光与细节，背景更干净。',
+              '- 3c_accessory：科技感棚拍，边缘轮廓光，材质纹理与接口细节清晰；避免多余反光与多件重复。',
+              '- home_kitchen/cleaning：干净明亮，强调功能相关场景但弱化背景；主体占比高。',
+              '- pet/baby：明亮温和，安全干净，轻场景可用但不出现复杂人脸/文字。',
               '',
               'prompt 写作模板（请用 parts 分段写清楚，再在 prompt 中合并为一段）：',
               '- 主体：商品名称 + 关键外观特征（颜色/形态/材质质感，仅限已知）',
@@ -121,6 +151,7 @@ export default async function handler(req, res) {
     // 保持向后兼容：前端当前只读取 prompt
     return res.status(200).json({
       success: true,
+      categoryHint: (data as any)?.categoryHint || 'other',
       prompt,
       negativePrompt: (data as any)?.negativePrompt || '',
       parts: (data as any)?.parts || {},
