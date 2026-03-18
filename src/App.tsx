@@ -1007,8 +1007,6 @@ function ImageGenerator() {
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [genProgress, setGenProgress] = useState(0)
-  const genProgressTimerRef = useRef<number | null>(null)
   const [generatedImage, setGeneratedImage] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
@@ -1018,6 +1016,7 @@ function ImageGenerator() {
   const [promptParts, setPromptParts] = useState<any>({})
   const [qcResult, setQcResult] = useState<any>(null)
   const [isQcBusy, setIsQcBusy] = useState(false)
+  const [genProgress, setGenProgress] = useState(0)
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
@@ -1190,26 +1189,19 @@ function ImageGenerator() {
       alert('请输入图片描述')
       return
     }
-    // reset progress + start a smooth fake progress (real completion will snap to 100%)
-    setGenProgress(0)
-    if (genProgressTimerRef.current) {
-      window.clearInterval(genProgressTimerRef.current)
-      genProgressTimerRef.current = null
-    }
-    const startAt = Date.now()
-    genProgressTimerRef.current = window.setInterval(() => {
-      const elapsed = (Date.now() - startAt) / 1000
-      // Ease-out towards 90% within ~60s, then creep slowly (never exceed 95% before real completion)
-      const eased = 90 * (1 - Math.exp(-elapsed / 12))
-      setGenProgress((p) => {
-        const next = Math.max(p, Math.min(95, Math.floor(eased + p * 0.05)))
-        return next
-      })
-    }, 250)
-
     setIsGenerating(true)
     setGeneratedImage('')
     setQcResult(null)
+    setGenProgress(1)
+    const startedAt = Date.now()
+    const timer = setInterval(() => {
+      setGenProgress((p) => {
+        // ease-out: 快到 70%，再慢慢到 90%
+        const target = p < 70 ? 70 : 90
+        const step = p < 70 ? 6 : 2
+        return Math.min(target, p + step)
+      })
+    }, 700)
     try {
       const r = await generateImageAPI({
         prompt,
@@ -1219,8 +1211,15 @@ function ImageGenerator() {
         resolution,
         refImage: refImageDataUrl || undefined,
       })
-      setGenProgress(100)
       setGeneratedImage(r.imageUrl)
+      clearInterval(timer)
+      // 如果生成很快，给用户一个“完成感”
+      const elapsed = Date.now() - startedAt
+      if (elapsed < 1200) {
+        setGenProgress(92)
+        await new Promise((rr) => setTimeout(rr, 350))
+      }
+      setGenProgress(100)
       // 仅在生成成功后做一次电商质检（仍需用户点击生成触发，且有计费保险栓）
       setIsQcBusy(true)
       try {
@@ -1240,11 +1239,9 @@ function ImageGenerator() {
       }
     } catch (e: any) {
       alert(e?.message || '生成失败')
+      clearInterval(timer)
+      setGenProgress(0)
     } finally {
-      if (genProgressTimerRef.current) {
-        window.clearInterval(genProgressTimerRef.current)
-        genProgressTimerRef.current = null
-      }
       setIsGenerating(false)
     }
   }
@@ -1280,6 +1277,15 @@ function ImageGenerator() {
     setIsGenerating(true)
     setGeneratedImage('')
     setQcResult(null)
+    setGenProgress(1)
+    const startedAt = Date.now()
+    const timer = setInterval(() => {
+      setGenProgress((p) => {
+        const target = p < 70 ? 70 : 90
+        const step = p < 70 ? 6 : 2
+        return Math.min(target, p + step)
+      })
+    }, 700)
     try {
       const r = await generateImageAPI({
         prompt: buildPromptFromParts(nextParts),
@@ -1290,6 +1296,13 @@ function ImageGenerator() {
         refImage: refImageDataUrl || undefined,
       })
       setGeneratedImage(r.imageUrl)
+      clearInterval(timer)
+      const elapsed = Date.now() - startedAt
+      if (elapsed < 1200) {
+        setGenProgress(92)
+        await new Promise((rr) => setTimeout(rr, 350))
+      }
+      setGenProgress(100)
       setIsQcBusy(true)
       try {
         const qc = await qcEcommerceImage({
@@ -1308,6 +1321,8 @@ function ImageGenerator() {
       }
     } catch (e: any) {
       alert(e?.message || '修复重试失败')
+      clearInterval(timer)
+      setGenProgress(0)
     } finally {
       setIsGenerating(false)
     }
@@ -1500,20 +1515,18 @@ function ImageGenerator() {
           <div className="h-96 flex flex-col items-center justify-center bg-gray-50 rounded-xl px-6 text-center">
             <RefreshCw className="w-16 h-16 animate-spin text-purple-500" />
             <p className="mt-4 text-lg text-purple-600 font-medium">图片生成中，请稍等...</p>
-            <div className="w-full max-w-sm mt-6">
+            <div className="w-full max-w-md mt-6">
               <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
                 <span>生成进度</span>
-                <span className="font-medium tabular-nums">{Math.max(0, Math.min(99, genProgress))}%</span>
+                <span className="tabular-nums">{Math.max(1, Math.min(99, genProgress))}%</span>
               </div>
-              <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-3 bg-white rounded-full border overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.max(2, Math.min(99, genProgress))}%` }}
+                  className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all"
+                  style={{ width: `${Math.max(1, Math.min(99, genProgress))}%` }}
                 />
               </div>
-              <div className="mt-3 text-xs text-gray-500">
-                预计耗时因模型与画幅而异，完成后将自动展示结果。
-              </div>
+              <div className="mt-2 text-xs text-gray-500">生成完成后会自动进行一次电商主图质检</div>
             </div>
           </div>
         ) : generatedImage ? (
