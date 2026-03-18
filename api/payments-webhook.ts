@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { getSupabaseAdmin } from './_supabase'
+import { getSupabaseAdmin } from './_supabase.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()

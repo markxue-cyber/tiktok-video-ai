@@ -1,4 +1,4 @@
-import { getSupabaseAnon, getSupabaseAdmin } from './_supabase'
+import { getSupabaseAnon, getSupabaseAdmin } from './_supabase.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })

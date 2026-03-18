@@ -1,4 +1,4 @@
-import { getSupabaseAdmin, requireUser } from './_supabase'
+import { getSupabaseAdmin, requireUser } from './_supabase.js'
 
 const nowIso = () => new Date().toISOString()
 

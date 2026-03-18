@@ -1,4 +1,4 @@
-import { getSupabaseAdmin, requireUser } from './_supabase'
+import { getSupabaseAdmin, requireUser } from './_supabase.js'
 
 const PLAN_LIMITS: Record<string, { imagePerDay: number; videoPerDay: number; llmPerDay: number }> = {
   trial: { imagePerDay: 3, videoPerDay: 3, llmPerDay: 30 },
