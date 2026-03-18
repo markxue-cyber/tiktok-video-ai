@@ -69,7 +69,8 @@ export default async function handler(req, res) {
     // 参考图字段：尽量覆盖常见聚合适配；按家族做一丢丢偏好，提升命中率
     const refFields = (() => {
       if (!refImage) return {}
-      // 一些模型/适配更偏好数组或 image_url；这里先保守同时透传
+      // 注意：部分上游实现对数组类型字段处理不严谨，可能触发类型断言 panic。
+      // 这里优先只透传“字符串字段”，避免 images/input_images 这类数组字段导致上游崩溃。
       const base = {
         image: refImage,
         input_image: refImage,
@@ -77,8 +78,6 @@ export default async function handler(req, res) {
         image_url: refImage,
         input_image_url: refImage,
         reference_image_url: refImage,
-        images: [refImage],
-        input_images: [refImage],
       }
       if (modelFamily === 'flux') {
         return { ...base, image: refImage, input_image: refImage }
