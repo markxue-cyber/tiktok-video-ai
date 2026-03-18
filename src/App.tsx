@@ -665,29 +665,7 @@ function VideoGenerator() {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">视频尺寸</label>
-                    <select value={size} onChange={(e) => setSize(e.target.value as any)} className="w-full px-4 py-2 border rounded-lg">
-                      {caps.aspectRatios.map((ar) => (
-                        <option key={ar} value={ar}>
-                          {ar}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">视频时长</label>
-                    <select value={durationSec} onChange={(e) => setDurationSec(Number(e.target.value) as any)} className="w-full px-4 py-2 border rounded-lg">
-                      {caps.durations.map((d) => (
-                        <option key={d} value={d}>
-                          {d}s
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500">提示：尺寸/时长将用于脚本节奏与最终视频生成参数。</div>
+                {/* 尺寸/时长已移到主页面参考图下方配置 */}
               </div>
             )}
             {modalStep === 2 && (
@@ -853,33 +831,20 @@ function VideoGenerator() {
             )}
           </div>
         </div>
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">视频文案描述</label>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">尺寸 {size}</span>
-              <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">时长 {durationSec}s</span>
-              <button
-                onClick={handlePromptGen}
-                className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
-              >
-                <Sparkles className="w-4 h-4 mr-1" /> 一键生成提示词
-              </button>
-            </div>
-          </div>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入商品卖点/场景/风格，或使用一键生成提示词..." />
-        </div>
-
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium mb-1">AI模型</label>
-            <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {VIDEO_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+              {VIDEO_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">分辨率</label>
-            <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <select value={resolution} onChange={(e) => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
               {caps.resolutions.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -887,6 +852,44 @@ function VideoGenerator() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">视频时长</label>
+            <select value={durationSec} onChange={(e) => setDurationSec(Number(e.target.value) as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+              {caps.durations.map((d) => (
+                <option key={d} value={d}>
+                  {d}s
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">尺寸</label>
+            <select value={size} onChange={(e) => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+              {caps.aspectRatios.map((ar) => (
+                <option key={ar} value={ar}>
+                  {ar}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium">视频文案描述</label>
+            <button
+              onClick={handlePromptGen}
+              className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
+            >
+              <Sparkles className="w-4 h-4 mr-1" /> 一键生成提示词
+            </button>
+          </div>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="w-full px-4 py-3 border rounded-xl min-h-[140px]"
+            placeholder="输入商品卖点/场景/风格，或使用一键生成提示词..."
+          />
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成视频'}</button>
       </div>
