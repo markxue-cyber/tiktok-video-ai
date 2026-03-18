@@ -490,7 +490,14 @@ function VideoGenerator() {
       setModalStep(2)
       setIsAiBusy(true)
       try {
-        const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage: refImageDataUrl })
+        const r = await generateVideoScripts({
+          product: productInfo,
+          language: productInfo.language,
+          refImage: refImageDataUrl,
+          durationSec,
+          aspectRatio: size,
+          resolution,
+        })
         setScripts(r.scripts)
         setScriptBatches([r.scripts])
         setScriptBatchIdx(0)
@@ -532,7 +539,14 @@ function VideoGenerator() {
 
     setIsAiBusy(true)
     try {
-      const r = await generateVideoScripts({ product: productInfo, language: productInfo.language, refImage: refImageDataUrl })
+      const r = await generateVideoScripts({
+        product: productInfo,
+        language: productInfo.language,
+        refImage: refImageDataUrl,
+        durationSec,
+        aspectRatio: size,
+        resolution,
+      })
       setScriptBatches((prev) => [...prev, r.scripts])
       setScriptBatchIdx(scriptBatches.length)
       setScriptRefreshCount((c) => Math.min(2, c + 1))

@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
 
-    const { product, language, refImage } = req.body || {}
+    const { product, language, refImage, durationSec, aspectRatio, resolution } = req.body || {}
     if (!product) return res.status(400).json({ success: false, error: '缺少product' })
     if (!refImage) return res.status(400).json({ success: false, error: '缺少refImage' })
 
@@ -89,6 +89,10 @@ export default async function handler(req, res) {
       })
     }
 
+    const targetDuration = Number(durationSec) || 10
+    const targetAspect = String(aspectRatio || '9:16')
+    const targetResolution = String(resolution || '自动')
+
     const primarySystem = [
       '你是短视频分镜编导，擅长输出“可直接拍摄”的镜头脚本。请基于商品图与商品信息生成 3 条短视频脚本。',
       '',
@@ -98,7 +102,7 @@ export default async function handler(req, res) {
       '',
       '硬约束：',
       '1) 禁止编造参数/材质/功效/认证/价格优惠信息。只能使用商品信息里给定卖点 + 图片可见内容。拿不准就不要写。',
-      '2) 每条脚本适配 10-15 秒竖屏：总共 7-9 行（每行一句），节奏快、口语化。',
+      `2) 每条脚本适配约 ${targetDuration} 秒竖屏视频：总行数保持在 7-9 行（每行一句），整体节奏紧凑、不拖沓。`,
       '3) 每条脚本必须是“镜头化”格式，严格用以下模板（每行都要可拍摄）：',
       '',
       '【开场钩子】<1行>',
@@ -117,6 +121,7 @@ export default async function handler(req, res) {
       '7) 对于“图片或包装上的宣称”（例如续航/功效），如需提及，请使用“包装/页面宣称/标注”为前缀的保守表述，避免下结论。',
       '',
       '语言：按用户要求语言输出。',
+      `目标参数：时长约 ${targetDuration}s，画幅 ${targetAspect}，分辨率 ${targetResolution}（仅用于控制镜头节奏与构图，不需要在文案里直接写出）。`,
     ].join('\n')
 
     const safeFallbackSystem = [
@@ -126,6 +131,7 @@ export default async function handler(req, res) {
       '不要出现“带货/下单/优惠/返钱/赚钱/必买”等强营销词；CTA 只允许中性引导（收藏/关注/了解更多/去看看）。',
       '禁止编造：任何参数、功效、认证、价格、优惠、对比指标；不确定就用更保守描述。',
       '如卖点包含“宣称类信息”，请用“标注/包装宣称”前缀进行保守表达。',
+      `脚本需要整体适配约 ${targetDuration}s 的视频长度，保持镜头信息量与节奏与时长匹配。`,
       '',
       '格式必须严格为：',
       '【开场钩子】…',
@@ -176,8 +182,9 @@ export default async function handler(req, res) {
       role: 'user',
       content: [
         { type: 'text', text: `输出语言：${language || product.language || '简体中文'}` },
+        { type: 'text', text: `目标视频参数：时长约 ${targetDuration}s，画幅 ${targetAspect}，分辨率 ${targetResolution}` },
         { type: 'text', text: `商品信息（必须遵守，不要编造）：\n${JSON.stringify(product)}` },
-        { type: 'text', text: '请结合商品图的外观与使用场景生成 3 条“镜头化脚本”。' },
+        { type: 'text', text: '请结合商品图的外观与使用场景生成 3 条“镜头化脚本”，整体时长与镜头节奏需要与目标视频参数匹配。' },
         { type: 'image_url', image_url: { url: String(refImage) } },
       ],
     }

@@ -24,7 +24,14 @@ export async function parseProductInfo(params: { refImage: string; language: str
   return data.data
 }
 
-export async function generateVideoScripts(params: { product: ProductInfo; language: string; refImage: string }): Promise<{ scripts: string[]; _mock?: boolean }> {
+export async function generateVideoScripts(params: {
+  product: ProductInfo
+  language: string
+  refImage: string
+  durationSec?: number
+  aspectRatio?: string
+  resolution?: string
+}): Promise<{ scripts: string[]; _mock?: boolean }> {
   const resp = await fetch('/api/ai/video-scripts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
