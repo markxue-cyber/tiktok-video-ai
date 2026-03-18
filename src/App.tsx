@@ -1011,15 +1011,58 @@ function ImageGenerator() {
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
+  const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const resp = await fetch('/api/models')
+        const text = await resp.text()
+        const data = (() => {
+          try {
+            return JSON.parse(text)
+          } catch {
+            return { success: false, error: text }
+          }
+        })()
+        if (!resp.ok || !data?.success) return
+        const list = data?.data?.data
+        if (!Array.isArray(list)) return
+        const imgs = list
+          .filter((m: any) => Array.isArray(m?.supported_endpoint_types) && m.supported_endpoint_types.includes('image-generation'))
+          .map((m: any) => ({ id: String(m.id), name: String(m.id) }))
+        if (imgs.length) {
+          // merge with friendly names
+          const friendly = new Map(IMAGE_MODELS.map((x) => [x.id, x.name]))
+          const merged = imgs.map((x: any) => ({ id: x.id, name: friendly.get(x.id) || x.name }))
+          setImageModels(merged)
+          if (!merged.some((x: any) => x.id === model)) setModel(merged[0].id)
+        }
+      } catch {
+        // ignore
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const imageCaps = useMemo<ImageModelCaps>(() => {
-    return (
+    // 若模型ID包含明确分辨率后缀（如 *-2k/*-4k/*-512px），优先按后缀限制分辨率
+    const id = String(model || '')
+    const bySuffix = (() => {
+      if (/-4k\b/i.test(id)) return { resolutions: ['4096'] as ImageRes[], defaults: { aspectRatio: '1:1' as ImageAspect, resolution: '4096' as ImageRes } }
+      if (/-2k\b/i.test(id)) return { resolutions: ['2048'] as ImageRes[], defaults: { aspectRatio: '1:1' as ImageAspect, resolution: '2048' as ImageRes } }
+      if (/512px/i.test(id)) return { resolutions: ['1024'] as ImageRes[], defaults: { aspectRatio: '1:1' as ImageAspect, resolution: '1024' as ImageRes } }
+      return null
+    })()
+
+    const base =
       IMAGE_MODEL_CAPS[model] || {
         aspectRatios: [...IMAGE_ASPECT_OPTIONS],
         resolutions: [...IMAGE_RES_OPTIONS],
         defaults: { aspectRatio: '1:1', resolution: '1024' },
       }
-    )
+    if (bySuffix) return { ...base, resolutions: bySuffix.resolutions, defaults: { ...base.defaults, ...bySuffix.defaults } }
+    return base
   }, [model])
 
   useEffect(() => {
@@ -1158,7 +1201,7 @@ function ImageGenerator() {
           <div>
             <label className="block text-sm font-medium mb-1">AI模型</label>
             <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {IMAGE_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {imageModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div>
