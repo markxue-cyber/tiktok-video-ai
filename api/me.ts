@@ -1,3 +1,5 @@
+import { createClient } from '@supabase/supabase-js'
+
 const nowIso = () => new Date().toISOString()
 
 function sendJson(res: any, status: number, payload: any) {
@@ -18,7 +20,6 @@ async function requireUser(req: any) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !serviceKey) throw new Error('Supabase 未配置（缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY）')
 
-  const { createClient } = await import('@supabase/supabase-js')
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
   const { data, error } = await admin.auth.getUser(token)
   if (error || !data?.user) throw new Error('登录已失效，请重新登录')

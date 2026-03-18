@@ -1,3 +1,5 @@
+import { createClient } from '@supabase/supabase-js'
+
 function sendJson(res: any, status: number, payload: any) {
   try {
     if (typeof res?.status === 'function' && typeof res?.json === 'function') return res.status(status).json(payload)
@@ -18,7 +20,6 @@ export default async function handler(req, res) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!url || !anonKey) throw new Error('Supabase 未配置（缺少 SUPABASE_URL / SUPABASE_ANON_KEY）')
 
-    const { createClient } = await import('@supabase/supabase-js')
     const supaAnon = createClient(url, anonKey, { auth: { persistSession: false } })
     const { data, error } = await supaAnon.auth.signInWithPassword({ email: String(email), password: String(password) })
     if (error) return sendJson(res, 200, { success: false, error: error.message })
