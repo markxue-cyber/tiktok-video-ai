@@ -5,6 +5,8 @@ import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProduct
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
+import { apiLogin, apiMe, apiRegister } from './api/auth'
+import { createOrder } from './api/payments'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -108,18 +110,46 @@ const PACKAGES = [{ id: 'trial', name: '试用版', price: '¥0', features: ['�
 function App() {
   const [page, setPage] = useState<'landing' | 'auth' | 'home'>('landing')
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
-  const [user, setUser] = useState<{ name: string; credits: number; package: string; packageExpiresAt: string } | null>(null)
+  const [user, setUser] = useState<{ id?: string; name: string; email?: string; credits: number; package: string; packageExpiresAt: string } | null>(null)
+  const [accessToken, setAccessToken] = useState<string>(() => localStorage.getItem('tikgen.accessToken') || '')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authPassword2, setAuthPassword2] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
+  const [authError, setAuthError] = useState('')
   const [mainNav, setMainNav] = useState<'create' | 'tools' | 'assets' | 'benefits'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
 
-  const handleLogin = () =>
-    setUser({
-      name: 'haoxue',
-      credits: 800,
-      package: 'trial',
-      packageExpiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().slice(0, 10),
-    })
+  useEffect(() => {
+    ;(async () => {
+      if (!accessToken) return
+      try {
+        const me = await apiMe(accessToken)
+        const plan = me?.subscription?.planId || 'trial'
+        const end = me?.subscription?.currentPeriodEnd ? String(me.subscription.currentPeriodEnd).slice(0, 10) : ''
+        setUser({
+          id: me?.user?.id,
+          name: me?.user?.name || me?.user?.email || '用户',
+          email: me?.user?.email,
+          credits: 0,
+          package: plan,
+          packageExpiresAt: end,
+        })
+        setPage('home')
+      } catch {
+        localStorage.removeItem('tikgen.accessToken')
+        setAccessToken('')
+      }
+    })()
+  }, [accessToken])
+
+  const handleLogout = () => {
+    localStorage.removeItem('tikgen.accessToken')
+    setAccessToken('')
+    setUser(null)
+    setPage('landing')
+  }
 
   const currentPackage = useMemo(() => PACKAGES.find((p) => p.id === user?.package), [user?.package])
 
@@ -217,20 +247,37 @@ function App() {
         <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20">
           <h2 className="text-3xl font-bold text-white text-center mb-8">{authMode === 'login' ? '登录账号' : '注册账号'}</h2>
           <div className="space-y-4">
-            <input type="email" placeholder="邮箱地址" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
-            <input type="password" placeholder="密码" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
+            <input value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} type="email" placeholder="邮箱地址" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
+            <input value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} type="password" placeholder="密码" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
             {authMode === 'register' && (
-              <input type="password" placeholder="确认密码" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
+              <input value={authPassword2} onChange={(e)=>setAuthPassword2(e.target.value)} type="password" placeholder="确认密码" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
             )}
             <button
-              onClick={() => {
-                handleLogin()
-                setPage('home')
+              disabled={authBusy}
+              onClick={async () => {
+                setAuthError('')
+                if (!authEmail || !authPassword) return setAuthError('请输入邮箱与密码')
+                if (authMode === 'register' && authPassword !== authPassword2) return setAuthError('两次密码不一致')
+                setAuthBusy(true)
+                try {
+                  const data = authMode === 'register'
+                    ? await apiRegister({ email: authEmail, password: authPassword })
+                    : await apiLogin({ email: authEmail, password: authPassword })
+                  const token = data?.session?.access_token
+                  if (!token) throw new Error('登录成功但未返回 token')
+                  localStorage.setItem('tikgen.accessToken', token)
+                  setAccessToken(token)
+                } catch (e:any) {
+                  setAuthError(e?.message || '登录失败')
+                } finally {
+                  setAuthBusy(false)
+                }
               }}
               className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl"
             >
-              {authMode === 'login' ? '登录' : '注册并登录'}
+              {authBusy ? '处理中...' : authMode === 'login' ? '登录' : '注册并登录'}
             </button>
+            {!!authError && <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-xl p-3">{authError}</div>}
             <div className="text-center text-white/60 text-sm">
               {authMode === 'login' ? (
                 <button
@@ -302,10 +349,7 @@ function App() {
               </div>
               <div className="flex items-center space-x-2"><div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-white" /></div><span className="text-sm font-medium">{user?.name}</span></div>
               <button
-                onClick={() => {
-                  setUser(null)
-                  setPage('landing')
-                }}
+                onClick={handleLogout}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
                 <LogOut className="w-5 h-5" />
@@ -1863,9 +1907,52 @@ function Assets() {
 }
 
 function Packages() {
+  const [busyPlan, setBusyPlan] = useState('')
+  const [payError, setPayError] = useState('')
+  const [payInfo, setPayInfo] = useState<{ orderId: string; qrcode?: string; payUrl?: string } | null>(null)
+  const accessToken = localStorage.getItem('tikgen.accessToken') || ''
+
   return (
     <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-8 text-center">选择您的套餐</h2>
+      {payInfo && (
+        <div className="mb-8 bg-white rounded-2xl p-6 shadow-lg border">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-bold text-lg">请扫码支付</div>
+              <div className="text-sm text-gray-500 mt-1">订单号：{payInfo.orderId}</div>
+            </div>
+            <button onClick={() => setPayInfo(null)} className="px-3 py-1.5 rounded-lg border text-sm">关闭</button>
+          </div>
+          <div className="mt-5 grid md:grid-cols-2 gap-6 items-center">
+            <div className="flex items-center justify-center">
+              {payInfo.qrcode ? (
+                <img src={payInfo.qrcode} alt="支付二维码" className="w-56 h-56 rounded-xl border bg-white" />
+              ) : (
+                <div className="w-56 h-56 rounded-xl border bg-gray-50 flex items-center justify-center text-gray-400">二维码生成中...</div>
+              )}
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">
+                - 支持微信/支付宝（由 XorPay 收单）<br />
+                - 支付完成后，返回页面刷新权益<br />
+                - 若二维码不可扫，可点击下方链接跳转支付
+              </div>
+              {payInfo.payUrl && (
+                <a href={payInfo.payUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold">
+                  打开支付页面
+                </a>
+              )}
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-3 ml-0 md:ml-3 px-4 py-2 rounded-xl border font-medium"
+              >
+                我已支付，刷新权益
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {PACKAGES.map((pkg) => (
           <div
@@ -1891,13 +1978,28 @@ function Packages() {
               className={`mt-6 w-full py-3 rounded-xl font-bold ${
                 pkg.id === 'trial' ? 'bg-gray-100 text-gray-700' : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
               }`}
-              onClick={() => alert('支付/订阅流程未接入')}
+              disabled={busyPlan === pkg.id}
+              onClick={async () => {
+                setPayError('')
+                if (pkg.id === 'trial') return
+                if (!accessToken) return alert('请先登录')
+                setBusyPlan(pkg.id)
+                try {
+                  const r = await createOrder({ planId: pkg.id, payType: 'native' }, accessToken)
+                  setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl })
+                } catch (e: any) {
+                  setPayError(e?.message || '下单失败')
+                } finally {
+                  setBusyPlan('')
+                }
+              }}
             >
-              {pkg.id === 'trial' ? '当前试用' : '立即开通'}
+              {pkg.id === 'trial' ? '当前试用' : busyPlan === pkg.id ? '下单中...' : '立即开通'}
             </button>
           </div>
         ))}
       </div>
+      {!!payError && <div className="mt-6 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{payError}</div>}
     </div>
   )
 }

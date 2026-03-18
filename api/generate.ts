@@ -1,4 +1,5 @@
 // Vercel Serverless Function - 视频生成API
+import { checkAndConsume, finalizeConsumption } from './_billing'
 export default async function handler(req, res) {
   // 打印请求信息
   console.log('Request method:', req.method)
@@ -18,6 +19,8 @@ export default async function handler(req, res) {
       if (!billableConfirmed) {
         return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
       }
+      const consumed = await checkAndConsume(req, { type: 'video' })
+      if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
       const { prompt, model, duration, aspect_ratio, resolution, refImage } = req.body || {}
 
       const pickFirstString = (v: any): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
@@ -105,11 +108,13 @@ export default async function handler(req, res) {
       }
 
       // 任务提交成功
-      return res.status(200).json({ 
+      const result = { 
         success: true, 
         taskId: taskId,
         message: '视频生成中，预计需要3-5分钟'
-      })
+      }
+      await finalizeConsumption(req, { taskId: taskId, message: result.message }, taskId)
+      return res.status(200).json(result)
     }
 
     // 查询任务状态 (GET)

@@ -32,6 +32,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {
+    // LLM 成本控制：需要登录 + 额度（AI精修属于计费动作）
+    const { checkAndConsume, finalizeConsumption } = await import('./_billing')
+    const consumed = await checkAndConsume(req, { type: 'llm' })
+    if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
@@ -104,12 +108,14 @@ export default async function handler(req, res) {
       },
     })
 
-    return res.status(200).json({
+    const result = {
       success: true,
       prompt: (data as any)?.prompt || String(prompt || ''),
       negativePrompt: (data as any)?.negativePrompt || String(negativePrompt || ''),
       parts: (data as any)?.parts || parts || {},
-    })
+    }
+    await finalizeConsumption(req, { prompt: result.prompt, negativePrompt: result.negativePrompt, parts: result.parts })
+    return res.status(200).json(result)
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }

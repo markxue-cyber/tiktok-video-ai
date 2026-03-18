@@ -1,5 +1,10 @@
 {
   "rewrites": [
+    { "source": "/api/auth/register", "destination": "/api/auth-register" },
+    { "source": "/api/auth/login", "destination": "/api/auth-login" },
+    { "source": "/api/me", "destination": "/api/me" },
+    { "source": "/api/payments/create-order", "destination": "/api/payments-create-order" },
+    { "source": "/api/payments/webhook", "destination": "/api/payments-webhook" },
     { "source": "/api/ai/parse-product", "destination": "/api/ai-parse-product" },
     { "source": "/api/ai/video-scripts", "destination": "/api/ai-video-scripts" },
     { "source": "/api/ai/beautify-script", "destination": "/api/ai-beautify-script" },

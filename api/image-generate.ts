@@ -1,4 +1,5 @@
 // Vercel Serverless Function - 图片生成API（聚合API / OpenAI兼容）
+import { checkAndConsume, finalizeConsumption } from './_billing'
 export default async function handler(req, res) {
   try {
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
@@ -11,6 +12,10 @@ export default async function handler(req, res) {
     if (!billableConfirmed) {
       return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
     }
+
+    // Auth + subscription + idempotency + daily quota
+    const consumed = await checkAndConsume(req, { type: 'image' })
+    if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
 
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const { prompt, model, size, resolution, aspect_ratio, refImage, negativePrompt, negative_prompt } = req.body || {}
@@ -142,10 +147,14 @@ export default async function handler(req, res) {
     const b64 = pick(first?.b64_json) || pick(data?.b64_json) || pick(data?.image_base64)
 
     if (b64) {
-      return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, size: reqSize })
+      const result = { imageUrl: `data:image/png;base64,${b64}`, size: reqSize }
+      await finalizeConsumption(req, result)
+      return res.status(200).json({ success: true, ...result })
     }
     if (url) {
-      return res.status(200).json({ success: true, imageUrl: url, size: reqSize })
+      const result = { imageUrl: url, size: reqSize }
+      await finalizeConsumption(req, result)
+      return res.status(200).json({ success: true, ...result })
     }
 
     return res.status(200).json({

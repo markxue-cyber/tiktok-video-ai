@@ -32,11 +32,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {
-    // 保险栓：仅在用户确认的前端动作触发（避免后台/爬虫触发计费）
+    // 保险栓 + 鉴权/额度：仅在用户确认的前端动作触发（避免后台/爬虫触发计费）
     const billableConfirmed = String(req.headers?.['x-confirm-billable'] || '').toLowerCase() === 'true'
-    if (!billableConfirmed) {
-      return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
-    }
+    if (!billableConfirmed) return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
+    // LLM 成本控制：需要登录 + 额度
+    const { checkAndConsume } = await import('./_billing')
+    const consumed = await checkAndConsume(req, { type: 'llm' })
+    if (consumed.already) return res.status(200).json({ success: true, qc: (consumed.result || {}).qc })
 
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
@@ -117,6 +119,8 @@ export default async function handler(req, res) {
       },
     })
 
+    const { finalizeConsumption } = await import('./_billing')
+    await finalizeConsumption(req, { qc })
     return res.status(200).json({ success: true, qc })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
