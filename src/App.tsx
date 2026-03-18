@@ -576,14 +576,41 @@ function VideoGenerator() {
 
   const finalVideoPrompt = useMemo(() => {
     const base = optimizedPrompt || selectedScript || prompt
-    const info = `产品名称：${productInfo.name}\n产品类目：${productInfo.category}\n核心卖点：${productInfo.sellingPoints}\n目标人群：${productInfo.targetAudience}\n语言：${productInfo.language}`
+    const info = [
+      `[视频参数]`,
+      `- 总时长：约 ${durationSec}s`,
+      `- 画幅：${size}`,
+      `- 分辨率：${resolution}`,
+      ``,
+      `[商品信息]`,
+      `- 名称：${productInfo.name}`,
+      `- 类目：${productInfo.category}`,
+      `- 核心卖点：${productInfo.sellingPoints}`,
+      `- 目标人群：${productInfo.targetAudience}`,
+      `- 输出语言：${productInfo.language}`,
+    ].join('\n')
+
+    const storyboardScript = String(base || '').trim()
+
     return [
-      '你是电商短视频导演，请生成一条适合TikTok竖屏的写实商品视频。',
-      '要求：10-15秒、镜头节奏快、画面干净高级、突出商品细节与使用场景、避免夸大功效与违规表述。',
-      `参考商品信息：\n${info}`,
-      `脚本/提示词：\n${base}`,
-      `参数：画幅${size}，分辨率${resolution}，时长${durationSec}s。`,
-    ].join('\n\n')
+      '你是电商短视频导演。请生成一条写实的商品展示视频（非动画）。',
+      '',
+      '【硬性要求】',
+      `- 总时长：约 ${durationSec}s（镜头节奏与信息密度必须匹配该时长，避免拖沓或塞不下）`,
+      `- 画幅：${size}；分辨率：${resolution}`,
+      '- 画面：干净、高级、写实，光影自然；突出商品细节与使用动作/使用场景',
+      '- 合规：避免医疗/绝对化/夸大承诺；不出现“保证/治愈/永久/100%”等表述',
+      '- 文案展示：不要把整段脚本文字铺满画面；字幕仅保留关键短句即可',
+      '',
+      '【执行方式】',
+      '- 请严格按下方“镜头化脚本”执行：保持镜头顺序、镜头数量、每个镜头的核心含义不变',
+      '- 你可以在每个镜头里补充更具体的画面细节（景别/镜头运动/光影/道具/背景），但不要新增虚构参数/功效/价格优惠信息',
+      '',
+      info,
+      '',
+      '[镜头化脚本（必须执行）]',
+      storyboardScript || '(脚本为空)',
+    ].join('\n')
   }, [optimizedPrompt, selectedScript, prompt, productInfo, size, resolution, durationSec])
 
   const handleGenerate = async () => {
