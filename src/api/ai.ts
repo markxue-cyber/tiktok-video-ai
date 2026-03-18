@@ -76,6 +76,7 @@ export async function generateImagePrompt(params: {
   language: string
   aspectRatio?: string
   resolution?: string
+  sceneMode?: 'clean' | 'lite'
 }): Promise<{ prompt: string; negativePrompt?: string; parts?: any; _mock?: boolean }> {
   const resp = await fetch('/api/ai/image-prompt', {
     method: 'POST',

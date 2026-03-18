@@ -1014,6 +1014,7 @@ function ImageGenerator() {
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [optimizedNegativePrompt, setOptimizedNegativePrompt] = useState('')
   const [promptParts, setPromptParts] = useState<any>({})
+  const [sceneMode, setSceneMode] = useState<'clean' | 'lite'>('clean')
   const [qcResult, setQcResult] = useState<any>(null)
   const [isQcBusy, setIsQcBusy] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
@@ -1112,6 +1113,7 @@ function ImageGenerator() {
     setOptimizedPrompt('')
     setOptimizedNegativePrompt('')
     setPromptParts({})
+    setSceneMode('clean')
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
@@ -1129,10 +1131,12 @@ function ImageGenerator() {
       setModalStep(2)
       setIsAiBusy(true)
       try {
-        const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution })
+        const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution, sceneMode })
         setOptimizedPrompt(r.prompt)
         setOptimizedNegativePrompt(r.negativePrompt || '')
-        setPromptParts(r.parts || {})
+        const initialParts = applySceneModePreset(sceneMode, r.parts || {})
+        setPromptParts(initialParts)
+        setOptimizedPrompt(r.prompt || buildPromptFromParts(initialParts))
       } catch (e: any) {
         setAiError(e?.message || '提示词生成失败')
       } finally {
@@ -1182,6 +1186,23 @@ function ImageGenerator() {
     } finally {
       setIsAiBusy(false)
     }
+  }
+
+  const applySceneModePreset = (mode: 'clean' | 'lite', parts: any) => {
+    const next = { ...(parts || {}) }
+    // composition：强制加入电商主体占比规则（第一次生成时也会在后端 prompt 里约束）
+    const baseComp = String(next.composition || '').trim()
+    const compRule = '主体占画面60–80%（建议约70%），主体清晰锐利，留白用于贴标，背景不抢戏'
+    next.composition = baseComp ? `${baseComp}；${compRule}` : compRule
+
+    if (mode === 'clean') {
+      const scene = '电商主图棚拍，纯色或轻渐变背景，干净无杂物（极少道具可选且不抢主体）'
+      next.scene = String(next.scene || '').trim() ? `${String(next.scene).trim()}；${scene}` : scene
+    } else {
+      const scene = '电商投放轻场景：加入1–2个弱化场景元素/道具（虚化/弱化、不抢主体），背景依然干净'
+      next.scene = String(next.scene || '').trim() ? `${String(next.scene).trim()}；${scene}` : scene
+    }
+    return next
   }
 
   const handleGenerate = async () => {
@@ -1351,6 +1372,32 @@ function ImageGenerator() {
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium">图片优化提示词</label>
                   <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center bg-gray-100 rounded-full p-1 mr-1">
+                      <button
+                        onClick={() => {
+                          const m: 'clean' | 'lite' = 'clean'
+                          setSceneMode(m)
+                          const next = applySceneModePreset(m, promptParts)
+                          setPromptParts(next)
+                          setOptimizedPrompt(buildPromptFromParts(next))
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs ${sceneMode === 'clean' ? 'bg-white shadow text-gray-900' : 'text-gray-600'}`}
+                      >
+                        主图干净
+                      </button>
+                      <button
+                        onClick={() => {
+                          const m: 'clean' | 'lite' = 'lite'
+                          setSceneMode(m)
+                          const next = applySceneModePreset(m, promptParts)
+                          setPromptParts(next)
+                          setOptimizedPrompt(buildPromptFromParts(next))
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs ${sceneMode === 'lite' ? 'bg-white shadow text-gray-900' : 'text-gray-600'}`}
+                      >
+                        轻场景
+                      </button>
+                    </div>
                     {IMAGE_STYLE_TAGS.map((t) => (
                       <button
                         key={t.id}

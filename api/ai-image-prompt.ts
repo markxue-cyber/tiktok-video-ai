@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
 
-    const { product, language, aspectRatio, resolution } = req.body || {}
+    const { product, language, aspectRatio, resolution, sceneMode } = req.body || {}
     if (!product) return res.status(400).json({ success: false, error: '缺少product' })
 
     if (!apiKey) {
@@ -83,6 +83,7 @@ export default async function handler(req, res) {
               '2) 避免医疗/绝对化/夸大承诺，不写“治愈/100%有效/永久/最强”等。',
               '3) 画面要“电商可用”：主体清晰、构图干净、光影合理、背景不抢戏。',
               '4) 禁止在画面中生成任何新增文字/水印/Logo（除非商品信息里明确包含且“参考图”本身可见，仍需尽量保守）。',
+              '5) 电商默认标准（必须纳入第一次生成，避免质检后重来）：主体占画面 60–80%，对焦锐利，背景干净；如需要场景感，也必须是“轻场景元素”，且虚化/弱化不抢主体。',
               '',
               'prompt 写作模板（请用 parts 分段写清楚，再在 prompt 中合并为一段）：',
               '- 主体：商品名称 + 关键外观特征（颜色/形态/材质质感，仅限已知）',
@@ -99,9 +100,16 @@ export default async function handler(req, res) {
             role: 'user',
             content: [
               `输出语言：${language || product.language || '简体中文'}`,
+              `模式：${String(sceneMode || 'clean')}（clean=主图干净；lite=轻场景）`,
               aspectRatio || resolution ? `画幅约束：比例=${aspectRatio || '未指定'}，目标分辨率档位=${resolution || '未指定'}` : '',
               `商品信息：${JSON.stringify(product)}`,
-              '请生成适用于“电商主图/投放素材”的图片生成提示词。构图必须适配画幅约束：主体清晰占比高、留白合理（便于后期贴标/标题）、背景干净不抢戏。',
+              [
+                '请生成适用于“电商主图/投放素材”的图片生成提示词。构图必须适配画幅约束：主体清晰占比高、留白合理（便于后期贴标/标题）、背景干净不抢戏。',
+                '',
+                '模式细则（必须执行）：',
+                '- clean（主图干净）：scene 选择棚拍/纯色或轻渐变背景；允许极少道具但不可出现杂乱；composition 强调主体占比 70% 左右、居中或三分法。',
+                '- lite（轻场景）：scene 加 1–2 个“弱化场景元素/道具”（需虚化/弱化，不抢主体）；composition 仍需主体占比 60–80%，背景干净。',
+              ].join('\n'),
             ].join('\n'),
           },
         ],
