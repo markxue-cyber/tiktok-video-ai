@@ -50,7 +50,8 @@ export default async function handler(req, res) {
 
     if (!signupResp.ok) {
       const msg = signupJson?.error_description || signupJson?.msg || signupJson?.message || signupText || `signup failed(${signupResp.status})`
-      return sendJson(res, 200, { success: false, error: msg })
+      const isRateLimit = /rate limit/i.test(msg)
+      return sendJson(res, isRateLimit ? 429 : 200, { success: false, error: msg })
     }
 
     const user = signupJson?.user || signupJson?.data?.user || signupJson?.user

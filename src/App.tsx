@@ -256,6 +256,13 @@ function App() {
               disabled={authBusy}
               onClick={async () => {
                 setAuthError('')
+                if (authMode === 'register') {
+                  const cooldownUntil = Number(localStorage.getItem('tikgen.authCooldownUntil') || 0)
+                  if (Date.now() < cooldownUntil) {
+                    const minutes = Math.ceil((cooldownUntil - Date.now()) / 60000)
+                    return setAuthError(`触发注册限流，请等待 ${minutes} 分钟后再试`)
+                  }
+                }
                 if (!authEmail || !authPassword) return setAuthError('请输入邮箱与密码')
                 if (authMode === 'register' && authPassword !== authPassword2) return setAuthError('两次密码不一致')
                 setAuthBusy(true)
@@ -272,7 +279,15 @@ function App() {
                   localStorage.setItem('tikgen.accessToken', token)
                   setAccessToken(token)
                 } catch (e:any) {
-                  setAuthError(e?.message || '登录失败')
+                  const msg = String(e?.message || '登录失败')
+                  if (authMode === 'register' && msg.toLowerCase().includes('rate limit')) {
+                    // Supabase auth has strict anti-abuse limits. We keep a short local cooldown
+                    // to prevent repeated requests from the same browser/IP.
+                    const cooldownMs = 15 * 60 * 1000
+                    localStorage.setItem('tikgen.authCooldownUntil', String(Date.now() + cooldownMs))
+                    return setAuthError('触发注册限流，请稍后 15 分钟再试')
+                  }
+                  setAuthError(msg)
                 } finally {
                   setAuthBusy(false)
                 }
