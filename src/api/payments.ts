@@ -4,7 +4,13 @@ export async function createOrder(params: { planId: string; payType?: string }, 
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(params),
   })
-  const data = await resp.json()
+  const text = await resp.text()
+  let data: any = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = { success: false, error: text }
+  }
   if (!resp.ok || !data?.success) throw new Error(data?.error || '下单失败')
   return data as { orderId: string; payUrl?: string; qrcode?: string; raw?: any }
 }

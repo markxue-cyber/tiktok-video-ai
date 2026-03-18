@@ -20,7 +20,14 @@ export async function generateImageAPI(params: {
     }),
   })
 
-  const data = await resp.json()
+  const text = await resp.text()
+  let data: any = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = { success: false, error: text }
+  }
+
   if (!resp.ok || !data?.success) {
     const raw = data?.raw ? `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}` : ''
     throw new Error((data?.error || `生成失败(${resp.status})`) + raw)
