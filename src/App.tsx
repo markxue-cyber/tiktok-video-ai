@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
+import { generateImageAPI } from './api/image'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -1138,9 +1139,20 @@ function ImageGenerator() {
     }
     setIsGenerating(true)
     setGeneratedImage('')
-    await new Promise((r) => setTimeout(r, 2500))
-    setGeneratedImage('https://via.placeholder.com/1024x1024/9b59b6/ffffff?text=AI+Generated')
-    setIsGenerating(false)
+    try {
+      const r = await generateImageAPI({
+        prompt,
+        model,
+        aspectRatio: size,
+        resolution,
+        refImage: refImageDataUrl || undefined,
+      })
+      setGeneratedImage(r.imageUrl)
+    } catch (e: any) {
+      alert(e?.message || '生成失败')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   if (showModal) {
@@ -1274,7 +1286,9 @@ function ImageGenerator() {
           <div>
             <img src={generatedImage} alt="生成图片" className="w-full rounded-xl" />
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <button className="py-3 bg-gray-100 rounded-xl flex items-center justify-center"><Play className="w-5 h-5 mr-2" />预览</button>
+              <a href={generatedImage} target="_blank" rel="noreferrer" className="py-3 bg-gray-100 rounded-xl flex items-center justify-center">
+                <Play className="w-5 h-5 mr-2" />预览
+              </a>
               <a href={generatedImage} download className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center">
                 <Download className="w-5 h-5 mr-2" />下载
               </a>
