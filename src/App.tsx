@@ -1193,6 +1193,50 @@ function ImageGenerator() {
     }
   }
 
+  const applyInfographicTemplate = (tpl: 'feature' | 'scene') => {
+    const baseNeg =
+      'blurry, lowres, watermark, logo, unreadable text, garbled text, misspelled words, duplicate product, extra tools, extra handles, extra nozzles, deformed, broken proportions, messy background, harsh shadows, overexposed, underexposed, noise'
+    const neg = baseNeg
+
+    if (tpl === 'feature') {
+      const m: 'clean' | 'lite' = 'clean'
+      setSceneMode(m)
+      const parts = applySceneModePreset(m, {
+        subject: '参考图同款产品一致（外形/配色/结构/角度保持一致），商业级质感，边缘清晰',
+        scene: '浅色干净渐变背景（可带轻微浅绿/浅灰），信息图海报风格',
+        composition: '主体占画面60–80%，左上角留出标题区，右上角留出参数标注区，中下方留出局部放大圈区域',
+        lighting: '柔光箱棚拍光，细节清晰，高级质感，不过曝不过暗',
+        camera: '50mm，近景产品主视角，轻微透视，画面干净',
+        style: '电商功能示意信息图（Amazon卖点图风格），图标/箭头/标注清晰',
+        quality: '高清，锐利，文字清晰可读，无乱码，无水印',
+        extra:
+          '版式要求：包含“180° ROTARY ADJUSTMENT / Switching Between Two Modes / 0°-180° Rotation Range”等标题与标注；加入弧形箭头、旋转范围示意、圆形局部放大圈展示旋转关节；整体排版规整，留白用于贴标',
+      })
+      setPromptParts(parts)
+      setOptimizedNegativePrompt((prev) => mergeNegative(prev, neg))
+      setOptimizedPrompt(buildPromptFromParts(parts))
+      return
+    }
+
+    const m: 'clean' | 'lite' = 'lite'
+    setSceneMode(m)
+    const parts = applySceneModePreset(m, {
+      subject: '参考图同款产品一致（外形/配色/结构保持一致），商业摄影质感，主体清晰',
+      scene: '电商投放海报：左侧生活场景使用照（户外/庭院吹落叶等），右侧信息面板对比卖点列表',
+      composition:
+        '1:1海报版式：左侧大图人物使用场景（不需要人脸特写），右侧浅色信息面板；主体占比60–80%，信息面板内容清晰可读，层级分明',
+      lighting: '自然柔光 + 轻轮廓光，真实场景但不杂乱，主体清晰',
+      camera: '35–50mm，中景到近景，人物+产品同框，背景轻虚化',
+      style: '电商场景对比海报（投放素材风格），勾选/叉号列表+小窗格对比',
+      quality: '高清，锐利，文字清晰可读，无乱码，无水印',
+      extra:
+        '版式要求：顶部大标题“GOOD SUBSTITUTE FOR TRADITIONAL BLOWERS”；右侧包含绿色勾选卖点列表与红色叉号对比列表；右侧可有2–3个小场景窗格做对比示意；整体背景干净不抢主体',
+    })
+    setPromptParts(parts)
+    setOptimizedNegativePrompt((prev) => mergeNegative(prev, neg))
+    setOptimizedPrompt(buildPromptFromParts(parts))
+  }
+
   const applySceneModePreset = (mode: 'clean' | 'lite', parts: any) => {
     const next = { ...(parts || {}) }
     // composition：强制加入电商主体占比规则（第一次生成时也会在后端 prompt 里约束）
@@ -1426,6 +1470,22 @@ function ImageGenerator() {
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium">图片优化提示词</label>
                   <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center bg-gray-100 rounded-full p-1 mr-1">
+                      <button
+                        disabled={isAiBusy}
+                        onClick={() => applyInfographicTemplate('feature')}
+                        className="px-3 py-1 rounded-full text-xs bg-white shadow text-gray-900 disabled:opacity-50"
+                      >
+                        功能示意图
+                      </button>
+                      <button
+                        disabled={isAiBusy}
+                        onClick={() => applyInfographicTemplate('scene')}
+                        className="px-3 py-1 rounded-full text-xs bg-white shadow text-gray-900 disabled:opacity-50"
+                      >
+                        场景对比海报
+                      </button>
+                    </div>
                     <div className="flex items-center bg-gray-100 rounded-full p-1 mr-1">
                       <button
                         onClick={() => {
