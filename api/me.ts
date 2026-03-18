@@ -1,20 +1,47 @@
-import { getSupabaseAdmin, requireUser } from './_supabase.js'
+import { createClient } from '@supabase/supabase-js'
 
 const nowIso = () => new Date().toISOString()
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' })
+function sendJson(res: any, status: number, payload: any) {
   try {
+    if (typeof res?.status === 'function' && typeof res?.json === 'function') return res.status(status).json(payload)
+    if (typeof res?.send === 'function') return res.send(typeof payload === 'string' ? payload : JSON.stringify(payload))
+  } catch {
+    // ignore
+  }
+}
+
+async function requireUser(req: any) {
+  const auth = String(req.headers?.authorization || '')
+  const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : ''
+  if (!token) throw new Error('未登录（缺少 Authorization Bearer token）')
+
+  const url = process.env.SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) throw new Error('Supabase 未配置（缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY）')
+
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
+  const { data, error } = await admin.auth.getUser(token)
+  if (error || !data?.user) throw new Error('登录已失效，请重新登录')
+  return { user: data.user }
+}
+
+export default async function handler(req, res) {
+  try {
+    if (req.method !== 'GET') return sendJson(res, 405, { success: false, error: 'Method not allowed' })
+
     const { user } = await requireUser(req)
-    const admin = getSupabaseAdmin()
+
+    const url = process.env.SUPABASE_URL
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!url || !serviceKey) throw new Error('Supabase 未配置（缺少 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY）')
+
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
     const { data: profile } = await admin.from('users').select('*').eq('id', user.id).maybeSingle()
     const { data: sub } = await admin.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle()
 
     const active =
-      !!sub &&
-      sub.status === 'active' &&
-      typeof sub.current_period_end === 'string' &&
-      new Date(sub.current_period_end).getTime() > Date.now()
+      !!sub && sub.status === 'active' && typeof sub.current_period_end === 'string' && new Date(sub.current_period_end).getTime() > Date.now()
 
     const safeSub = sub
       ? {
@@ -27,7 +54,7 @@ export default async function handler(req, res) {
         }
       : null
 
-    return res.status(200).json({
+    return sendJson(res, 200, {
       success: true,
       user: {
         id: user.id,
@@ -39,7 +66,7 @@ export default async function handler(req, res) {
       subscription: safeSub,
     })
   } catch (e: any) {
-    return res.status(200).json({ success: false, error: e?.message || '未登录' })
+    return sendJson(res, 200, { success: false, error: e?.message || '未登录' })
   }
 }
 
