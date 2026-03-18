@@ -6,9 +6,18 @@ export async function generateImageAPI(params: {
   resolution: string
   refImage?: string
 }): Promise<{ imageUrl: string; size?: string }> {
+  const token = localStorage.getItem('tikgen.accessToken') || ''
+  if (!token) throw new Error('请先登录再生成图片')
+  const idem = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`) as string
+
   const resp = await fetch('/api/image-generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Confirm-Billable': 'true' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'Idempotency-Key': idem,
+      'X-Confirm-Billable': 'true',
+    },
     body: JSON.stringify({
       prompt: params.prompt,
       negativePrompt: params.negativePrompt,
