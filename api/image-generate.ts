@@ -1,5 +1,5 @@
 // Vercel Serverless Function - 图片生成API（聚合API / OpenAI兼容）
-import { checkAndConsume, finalizeConsumption } from './_billing'
+import { checkAndConsume, finalizeConsumption } from './_billing.js'
 export default async function handler(req, res) {
   try {
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY

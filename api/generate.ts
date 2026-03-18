@@ -1,5 +1,5 @@
 // Vercel Serverless Function - 视频生成API
-import { checkAndConsume, finalizeConsumption } from './_billing'
+import { checkAndConsume, finalizeConsumption } from './_billing.js'
 export default async function handler(req, res) {
   // 打印请求信息
   console.log('Request method:', req.method)
