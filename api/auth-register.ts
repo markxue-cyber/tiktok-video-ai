@@ -6,7 +6,12 @@ export default async function handler(req, res) {
     const { email, password, displayName } = req.body || {}
     if (!email || !password) return res.status(400).json({ success: false, error: '缺少 email/password' })
     const supa = getSupabaseAnon()
-    const { data, error } = await supa.auth.signUp({ email: String(email), password: String(password) })
+    const siteUrl = process.env.SITE_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ''
+    const { data, error } = await supa.auth.signUp({
+      email: String(email),
+      password: String(password),
+      options: siteUrl ? { emailRedirectTo: `${siteUrl}/` } : undefined,
+    })
     if (error) return res.status(200).json({ success: false, error: error.message })
 
     const user = data?.user
@@ -35,6 +40,7 @@ export default async function handler(req, res) {
       success: true,
       session: data?.session || null,
       user: data?.user || null,
+      needsEmailConfirm: !data?.session,
     })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })

@@ -263,6 +263,10 @@ function App() {
                   const data = authMode === 'register'
                     ? await apiRegister({ email: authEmail, password: authPassword })
                     : await apiLogin({ email: authEmail, password: authPassword })
+                  if (authMode === 'register' && data?.needsEmailConfirm) {
+                    setAuthMode('login')
+                    throw new Error('注册成功：请先去邮箱点击验证链接，然后再回来登录')
+                  }
                   const token = data?.session?.access_token
                   if (!token) throw new Error('登录成功但未返回 token')
                   localStorage.setItem('tikgen.accessToken', token)
