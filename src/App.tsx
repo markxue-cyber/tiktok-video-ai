@@ -1028,8 +1028,30 @@ function ImageGenerator() {
         if (!resp.ok || !data?.success) return
         const list = data?.data?.data
         if (!Array.isArray(list)) return
+        const looksLikeImageModel = (id: string) => {
+          const s = String(id || '').toLowerCase()
+          return (
+            s.includes('nano-banana') ||
+            s.includes('flux') ||
+            s.includes('seedream') ||
+            s.includes('dall-e') ||
+            s.includes('gpt-image') ||
+            s.includes('midjourney') ||
+            s.includes('ideogram') ||
+            s.includes('recraft') ||
+            s.includes('qwen-image') ||
+            s.includes('kolors') ||
+            s.includes('stable-diffusion')
+          )
+        }
+
         const imgs = list
-          .filter((m: any) => Array.isArray(m?.supported_endpoint_types) && m.supported_endpoint_types.includes('image-generation'))
+          .filter((m: any) => {
+            const id = String(m?.id || '')
+            const types: string[] = Array.isArray(m?.supported_endpoint_types) ? m.supported_endpoint_types.map(String) : []
+            // 部分模型（如 nano-banana 系列）可能未标注 image-generation，但仍可用于图片生成
+            return types.includes('image-generation') || looksLikeImageModel(id)
+          })
           .map((m: any) => ({ id: String(m.id), name: String(m.id) }))
         if (imgs.length) {
           // merge with friendly names
