@@ -68,6 +68,8 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          // 聚合API/上游可能使用 content 字段而非 prompt
+          content: prompt || '生成一个视频',
           prompt: prompt || '生成一个视频',
           model: apiModel,
           duration: Number(duration) || 10,
