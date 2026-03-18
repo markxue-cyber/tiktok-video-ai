@@ -283,9 +283,9 @@ function App() {
                   if (authMode === 'register' && msg.toLowerCase().includes('rate limit')) {
                     // Supabase auth has strict anti-abuse limits. We keep a short local cooldown
                     // to prevent repeated requests from the same browser/IP.
-                    const cooldownMs = 15 * 60 * 1000
+                    const cooldownMs = 60 * 60 * 1000
                     localStorage.setItem('tikgen.authCooldownUntil', String(Date.now() + cooldownMs))
-                    return setAuthError('触发注册限流，请稍后 15 分钟再试')
+                    return setAuthError('触发注册限流，请稍后约 60 分钟再试')
                   }
                   setAuthError(msg)
                 } finally {
