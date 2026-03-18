@@ -47,7 +47,20 @@ export default async function handler(req, res) {
       })
     }
 
-    const data = await callOpenAICompatJSON<{ prompt: string }>({
+    const data = await callOpenAICompatJSON<{
+      prompt: string
+      negativePrompt?: string
+      parts?: {
+        subject?: string
+        scene?: string
+        composition?: string
+        lighting?: string
+        camera?: string
+        style?: string
+        quality?: string
+        extra?: string
+      }
+    }>({
       apiKey,
       baseUrl,
       request: {
@@ -61,15 +74,17 @@ export default async function handler(req, res) {
               '你是电商“图片投放素材/主图”提示词专家。你的目标是产出可直接用于图片生成模型的提示词，要求真实可控、清晰可执行、适合商业图片。',
               '',
               '输出要求（必须严格）：',
-              '- 只输出 JSON：{"prompt": string, "negativePrompt": string}',
+              '- 只输出 JSON，字段如下：',
+              '  {"prompt": string, "negativePrompt": string, "parts": {"subject": string, "scene": string, "composition": string, "lighting": string, "camera": string, "style": string, "quality": string, "extra": string}}',
               '- 不要输出任何解释、Markdown、前后缀',
               '',
               '硬约束：',
               '1) 禁止编造商品参数/材质/成分/功效/认证/价格优惠/对比指标（除非商品信息明确给出）。不确定就不要写。',
               '2) 避免医疗/绝对化/夸大承诺，不写“治愈/100%有效/永久/最强”等。',
               '3) 画面要“电商可用”：主体清晰、构图干净、光影合理、背景不抢戏。',
+              '4) 禁止在画面中生成任何新增文字/水印/Logo（除非商品信息里明确包含且“参考图”本身可见，仍需尽量保守）。',
               '',
-              'prompt 写作模板（请在一段话内组织，但内容要覆盖这些点）：',
+              'prompt 写作模板（请用 parts 分段写清楚，再在 prompt 中合并为一段）：',
               '- 主体：商品名称 + 关键外观特征（颜色/形态/材质质感，仅限已知）',
               '- 场景：主图（纯背景/棚拍）或生活场景（二选一，优先主图更通用）',
               '- 构图：居中/三分法、留白、前景/背景层次',
@@ -96,7 +111,12 @@ export default async function handler(req, res) {
     const prompt = (data as any)?.prompt
     if (!prompt) throw new Error('图片提示词为空')
     // 保持向后兼容：前端当前只读取 prompt
-    return res.status(200).json({ success: true, prompt, negativePrompt: (data as any)?.negativePrompt || '' })
+    return res.status(200).json({
+      success: true,
+      prompt,
+      negativePrompt: (data as any)?.negativePrompt || '',
+      parts: (data as any)?.parts || {},
+    })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }

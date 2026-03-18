@@ -3,6 +3,8 @@ import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, M
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
+import { applyImageStyleTag } from './api/imageStyle'
+import { qcEcommerceImage } from './api/imageQc'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -1011,6 +1013,9 @@ function ImageGenerator() {
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [optimizedNegativePrompt, setOptimizedNegativePrompt] = useState('')
+  const [promptParts, setPromptParts] = useState<any>({})
+  const [qcResult, setQcResult] = useState<any>(null)
+  const [isQcBusy, setIsQcBusy] = useState(false)
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
@@ -1105,6 +1110,7 @@ function ImageGenerator() {
     setAiError('')
     setOptimizedPrompt('')
     setOptimizedNegativePrompt('')
+    setPromptParts({})
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
@@ -1125,6 +1131,7 @@ function ImageGenerator() {
         const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution })
         setOptimizedPrompt(r.prompt)
         setOptimizedNegativePrompt(r.negativePrompt || '')
+        setPromptParts(r.parts || {})
       } catch (e: any) {
         setAiError(e?.message || '提示词生成失败')
       } finally {
@@ -1136,6 +1143,46 @@ function ImageGenerator() {
     setPrompt(optimizedPrompt)
   }
 
+  const buildPromptFromParts = (parts: any) => {
+    const pick = (k: string) => String(parts?.[k] || '').trim()
+    const segs = [pick('subject'), pick('scene'), pick('composition'), pick('lighting'), pick('camera'), pick('style'), pick('quality'), pick('extra')].filter(Boolean)
+    return segs.join('，')
+  }
+
+  const IMAGE_STYLE_TAGS = [
+    { id: 'clean', label: '主图干净' },
+    { id: 'premium', label: '高端棚拍' },
+    { id: 'lifestyle', label: '生活场景' },
+    { id: 'macro', label: '细节特写' },
+    { id: 'clarity', label: '信息清晰' },
+    { id: 'texture', label: '质感提升' },
+  ] as const
+
+  const handleApplyStyle = async (tagLabel: string) => {
+    setAiError('')
+    setIsAiBusy(true)
+    try {
+      const currentParts = Object.keys(promptParts || {}).length ? promptParts : {}
+      const result = await applyImageStyleTag({
+        tag: tagLabel,
+        language: productInfo.language || '简体中文',
+        parts: currentParts,
+        prompt: optimizedPrompt || '',
+        negativePrompt: optimizedNegativePrompt || '',
+        aspectRatio: size,
+        resolution,
+      })
+      setPromptParts(result.parts || currentParts)
+      const nextPrompt = result.prompt || buildPromptFromParts(result.parts || currentParts)
+      setOptimizedPrompt(nextPrompt)
+      setOptimizedNegativePrompt(result.negativePrompt || '')
+    } catch (e: any) {
+      setAiError(e?.message || '风格优化失败')
+    } finally {
+      setIsAiBusy(false)
+    }
+  }
+
   const handleGenerate = async () => {
     if (!prompt) {
       alert('请输入图片描述')
@@ -1143,6 +1190,7 @@ function ImageGenerator() {
     }
     setIsGenerating(true)
     setGeneratedImage('')
+    setQcResult(null)
     try {
       const r = await generateImageAPI({
         prompt,
@@ -1153,8 +1201,89 @@ function ImageGenerator() {
         refImage: refImageDataUrl || undefined,
       })
       setGeneratedImage(r.imageUrl)
+      // 仅在生成成功后做一次电商质检（仍需用户点击生成触发，且有计费保险栓）
+      setIsQcBusy(true)
+      try {
+        const qc = await qcEcommerceImage({
+          imageUrl: r.imageUrl,
+          refImage: refImageDataUrl || undefined,
+          product: productInfo,
+          aspectRatio: size,
+          resolution,
+          language: productInfo.language || '简体中文',
+        })
+        setQcResult(qc.qc)
+      } catch {
+        // ignore QC failures
+      } finally {
+        setIsQcBusy(false)
+      }
     } catch (e: any) {
       alert(e?.message || '生成失败')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const mergeNegative = (base: string, add: string) => {
+    const a = String(base || '')
+    const b = String(add || '')
+    const norm = (s: string) =>
+      s
+        .split(/[,，\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+    const set = new Set([...norm(a), ...norm(b)])
+    return Array.from(set).join(', ')
+  }
+
+  const handleQcFixAndRetry = async () => {
+    if (!qcResult) return
+    const addNeg = String(qcResult?.fix?.addToNegative || '').trim()
+    const tweaks = qcResult?.fix?.promptTweaks || {}
+
+    const nextParts = { ...(promptParts || {}) }
+    ;['subject', 'scene', 'composition', 'lighting', 'camera', 'style', 'quality', 'extra'].forEach((k) => {
+      const v = String(tweaks?.[k] || '').trim()
+      if (v) nextParts[k] = v
+    })
+    setPromptParts(nextParts)
+    setOptimizedPrompt(buildPromptFromParts(nextParts))
+    setOptimizedNegativePrompt((prev) => mergeNegative(prev, addNeg))
+
+    // 直接用修复后的 prompt 重试生成
+    setPrompt(buildPromptFromParts(nextParts))
+    setIsGenerating(true)
+    setGeneratedImage('')
+    setQcResult(null)
+    try {
+      const r = await generateImageAPI({
+        prompt: buildPromptFromParts(nextParts),
+        negativePrompt: mergeNegative(optimizedNegativePrompt, addNeg) || undefined,
+        model,
+        aspectRatio: size,
+        resolution,
+        refImage: refImageDataUrl || undefined,
+      })
+      setGeneratedImage(r.imageUrl)
+      setIsQcBusy(true)
+      try {
+        const qc = await qcEcommerceImage({
+          imageUrl: r.imageUrl,
+          refImage: refImageDataUrl || undefined,
+          product: productInfo,
+          aspectRatio: size,
+          resolution,
+          language: productInfo.language || '简体中文',
+        })
+        setQcResult(qc.qc)
+      } catch {
+        // ignore
+      } finally {
+        setIsQcBusy(false)
+      }
+    } catch (e: any) {
+      alert(e?.message || '修复重试失败')
     } finally {
       setIsGenerating(false)
     }
@@ -1178,7 +1307,68 @@ function ImageGenerator() {
           </div>
           <div className="p-6">
             {modalStep === 1 && (<div className="space-y-4">{refImagePreviewUrl && <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">图片语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option></select></div></div>)}
-            {modalStep === 2 && (<div className="space-y-4"><label className="block text-sm font-medium mb-1">图片优化提示词</label><textarea value={optimizedPrompt} onChange={e => setOptimizedPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[150px]" /></div>)}
+            {modalStep === 2 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium">图片优化提示词</label>
+                  <div className="flex flex-wrap gap-2">
+                    {IMAGE_STYLE_TAGS.map((t) => (
+                      <button
+                        key={t.id}
+                        disabled={isAiBusy}
+                        onClick={() => handleApplyStyle(t.label)}
+                        className="px-2.5 py-1 rounded-full text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { k: 'subject', label: '主体' },
+                    { k: 'scene', label: '场景' },
+                    { k: 'composition', label: '构图' },
+                    { k: 'lighting', label: '光影' },
+                    { k: 'camera', label: '镜头' },
+                    { k: 'style', label: '风格' },
+                    { k: 'quality', label: '质量' },
+                    { k: 'extra', label: '补充' },
+                  ].map((x) => (
+                    <div key={x.k} className="md:col-span-1">
+                      <label className="block text-xs text-gray-600 mb-1">{x.label}</label>
+                      <input
+                        value={String(promptParts?.[x.k] || '')}
+                        onChange={(e) => {
+                          const next = { ...(promptParts || {}), [x.k]: e.target.value }
+                          setPromptParts(next)
+                          // 同步更新最终 prompt，保证生成用的是最新结构化内容
+                          setOptimizedPrompt(buildPromptFromParts(next))
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder={`填写${x.label}（可留空）`}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">负面词（避免项）</label>
+                  <textarea
+                    value={optimizedNegativePrompt}
+                    onChange={(e) => setOptimizedNegativePrompt(e.target.value)}
+                    className="w-full px-4 py-3 border rounded-xl min-h-[90px]"
+                    placeholder="例如：模糊，低清，畸形，多余物体，文字水印，过曝，噪点，杂乱背景…"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">最终 prompt（可直接编辑）</label>
+                  <textarea value={optimizedPrompt} onChange={e => setOptimizedPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[120px]" />
+                </div>
+              </div>
+            )}
             {!!aiError && <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{aiError}</div>}
           </div>
           {isAiBusy && (
@@ -1290,6 +1480,54 @@ function ImageGenerator() {
         ) : generatedImage ? (
           <div>
             <img src={generatedImage} alt="生成图片" className="w-full rounded-xl" />
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <div className="font-medium">电商主图质检</div>
+                {isQcBusy && <div className="text-sm text-gray-500 flex items-center"><RefreshCw className="w-4 h-4 mr-2 animate-spin" />质检中...</div>}
+              </div>
+              {qcResult ? (
+                <div className="mt-2 p-4 rounded-xl border bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm">
+                      <span className="font-medium">评分：</span>{Number(qcResult.score || 0)}
+                      <span className="mx-2 text-gray-300">|</span>
+                      <span className="font-medium">结论：</span>
+                      <span className={qcResult.verdict === 'pass' ? 'text-green-600' : qcResult.verdict === 'warn' ? 'text-amber-600' : 'text-red-600'}>
+                        {qcResult.verdict === 'pass' ? '可投放' : qcResult.verdict === 'warn' ? '可优化' : '不建议投放'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleQcFixAndRetry}
+                      className="px-3 py-2 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-700"
+                    >
+                      一键修复并重试
+                    </button>
+                  </div>
+                  {Array.isArray(qcResult.issues) && qcResult.issues.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-xs text-gray-600 mb-1">问题</div>
+                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                        {qcResult.issues.slice(0, 6).map((x: string, i: number) => (
+                          <li key={i}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {Array.isArray(qcResult.suggestions) && qcResult.suggestions.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-xs text-gray-600 mb-1">建议</div>
+                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                        {qcResult.suggestions.slice(0, 6).map((x: string, i: number) => (
+                          <li key={i}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-gray-500">生成完成后将自动进行一次主图质检。</div>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <a href={generatedImage} target="_blank" rel="noreferrer" className="py-3 bg-gray-100 rounded-xl flex items-center justify-center">
                 <Play className="w-5 h-5 mr-2" />预览

@@ -76,7 +76,7 @@ export async function generateImagePrompt(params: {
   language: string
   aspectRatio?: string
   resolution?: string
-}): Promise<{ prompt: string; negativePrompt?: string; _mock?: boolean }> {
+}): Promise<{ prompt: string; negativePrompt?: string; parts?: any; _mock?: boolean }> {
   const resp = await fetch('/api/ai/image-prompt', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -91,6 +91,6 @@ export async function generateImagePrompt(params: {
     }
   })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `提示词生成失败(${resp.status})`)
-  return { prompt: data.prompt, negativePrompt: data.negativePrompt, _mock: data._mock }
+  return { prompt: data.prompt, negativePrompt: data.negativePrompt, parts: data.parts, _mock: data._mock }
 }
 

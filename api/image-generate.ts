@@ -16,6 +16,22 @@ export default async function handler(req, res) {
     const { prompt, model, size, resolution, aspect_ratio, refImage, negativePrompt, negative_prompt } = req.body || {}
     const neg = String(negativePrompt || negative_prompt || '').trim()
 
+    const modelId = String(model || '').toLowerCase()
+    const modelFamily = (() => {
+      if (!modelId) return 'unknown'
+      if (modelId.includes('seedream')) return 'seedream'
+      if (modelId.includes('flux')) return 'flux'
+      if (modelId.includes('nano-banana')) return 'nano-banana'
+      if (modelId.includes('gpt-image') || modelId.includes('dall-e')) return 'openai-images'
+      if (modelId.includes('ideogram')) return 'ideogram'
+      if (modelId.includes('recraft')) return 'recraft'
+      if (modelId.includes('midjourney') || modelId.includes('mj_')) return 'midjourney'
+      if (modelId.includes('qwen-image')) return 'qwen-image'
+      if (modelId.includes('kolors')) return 'kolors'
+      if (modelId.includes('stable-diffusion') || modelId.includes('sd')) return 'stable-diffusion'
+      return 'other'
+    })()
+
     const aspect = String(aspect_ratio || '1:1')
     const resStr = String(resolution || '1024')
     const base = Number.parseInt(resStr, 10)
@@ -48,6 +64,43 @@ export default async function handler(req, res) {
     }
 
     const reqSize = computeSize()
+    const [reqW, reqH] = reqSize.split('x').map((x) => Number.parseInt(x, 10))
+
+    // 参考图字段：尽量覆盖常见聚合适配；按家族做一丢丢偏好，提升命中率
+    const refFields = (() => {
+      if (!refImage) return {}
+      // 一些模型/适配更偏好数组或 image_url；这里先保守同时透传
+      const base = {
+        image: refImage,
+        input_image: refImage,
+        reference_image: refImage,
+        image_url: refImage,
+        input_image_url: refImage,
+        reference_image_url: refImage,
+        images: [refImage],
+        input_images: [refImage],
+      }
+      if (modelFamily === 'flux') {
+        return { ...base, image: refImage, input_image: refImage }
+      }
+      if (modelFamily === 'seedream') {
+        return { ...base, reference_image: refImage }
+      }
+      return base
+    })()
+
+    const negativeFields = {
+      // 各家聚合/适配字段命名可能不同，尽量多字段透传
+      negative_prompt: neg || undefined,
+      negativePrompt: neg || undefined,
+      negative: neg || undefined,
+    }
+
+    const sizeFields = {
+      size: reqSize,
+      width: Number.isFinite(reqW) ? reqW : undefined,
+      height: Number.isFinite(reqH) ? reqH : undefined,
+    }
 
     const upstreamResp = await fetch(`${baseUrl.replace(/\/+$/, '')}/images/generations`, {
       method: 'POST',
@@ -57,16 +110,11 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         prompt: prompt || '生成一张商品展示图',
-        // 各家聚合/适配字段命名可能不同，尽量多字段透传
-        negative_prompt: neg || undefined,
-        negativePrompt: neg || undefined,
-        negative: neg || undefined,
+        ...negativeFields,
         model: model || undefined,
-        size: reqSize,
+        ...sizeFields,
         // 尝试以常见字段名透传参考图（不同聚合/模型可能字段不同）
-        image: refImage,
-        input_image: refImage,
-        reference_image: refImage,
+        ...refFields,
       }),
     })
 
