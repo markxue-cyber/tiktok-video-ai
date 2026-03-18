@@ -1146,7 +1146,7 @@ function ImageGenerator() {
   if (showModal) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl w-full max-w-2xl">
+        <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
           <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">一键生成提示词</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
           <div className="px-6 py-4 border-b bg-gray-50 flex items-center">
             {['商品信息解析', '图片优化提示词'].map((s, i) => (
@@ -1164,6 +1164,17 @@ function ImageGenerator() {
             {modalStep === 2 && (<div className="space-y-4"><label className="block text-sm font-medium mb-1">图片优化提示词</label><textarea value={optimizedPrompt} onChange={e => setOptimizedPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[150px]" /></div>)}
             {!!aiError && <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{aiError}</div>}
           </div>
+          {isAiBusy && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+              <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center">
+                <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
+                <div>
+                  <div className="font-medium">{modalStep === 2 ? '图片优化提示词AI生成中' : '商品信息解析中'}</div>
+                  <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="p-6 border-t flex justify-end space-x-3">
             <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg">取消</button>
             <button disabled={isAiBusy} onClick={handleNext} className="px-4 py-2 bg-purple-500 text-white rounded-lg disabled:opacity-50">
@@ -1206,6 +1217,28 @@ function ImageGenerator() {
             )}
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium mb-1">尺寸</label>
+            <select value={size} onChange={e => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+              {imageCaps.aspectRatios.map((ar) => (
+                <option key={ar} value={ar}>
+                  {ar}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">分辨率</label>
+            <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+              {imageCaps.resolutions.map((r) => (
+                <option key={r} value={r}>
+                  {r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : r}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">图片文案描述</label>
@@ -1219,34 +1252,14 @@ function ImageGenerator() {
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入画面描述/风格，或使用一键生成提示词..." />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium mb-1">AI模型</label>
             <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
               {imageModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">尺寸</label>
-            <select value={size} onChange={e => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {imageCaps.aspectRatios.map((ar) => (
-                <option key={ar} value={ar}>
-                  {ar}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-1">分辨率</label>
-          <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-            {imageCaps.resolutions.map((r) => (
-              <option key={r} value={r}>
-                {r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : r}
-              </option>
-            ))}
-          </select>
+          <div />
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成图片'}</button>
       </div>
