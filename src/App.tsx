@@ -3,7 +3,7 @@ import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, M
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
-import { applyImageStyleTag } from './api/imageStyle'
+import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -1016,6 +1016,7 @@ function ImageGenerator() {
   const [promptParts, setPromptParts] = useState<any>({})
   const [sceneMode, setSceneMode] = useState<'clean' | 'lite'>('clean')
   const [categoryHint, setCategoryHint] = useState('other')
+  const [selectedStyleTags, setSelectedStyleTags] = useState<string[]>([])
   const [qcResult, setQcResult] = useState<any>(null)
   const [isQcBusy, setIsQcBusy] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
@@ -1116,6 +1117,7 @@ function ImageGenerator() {
     setPromptParts({})
     setSceneMode('clean')
     setCategoryHint('other')
+    setSelectedStyleTags([])
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
@@ -1168,26 +1170,94 @@ function ImageGenerator() {
     { id: 'texture', label: '质感提升' },
   ] as const
 
-  const handleApplyStyle = async (tagLabel: string) => {
+  const applyLocalStyleRule = (tagLabel: string, parts: any) => {
+    const next = { ...(parts || {}) }
+    const append = (k: string, v: string) => {
+      const base = String(next?.[k] || '').trim()
+      next[k] = base ? `${base}；${v}` : v
+    }
+    switch (tagLabel) {
+      case '生活场景':
+        append('scene', '生活场景但背景弱化：与商品相关的环境，背景轻虚化，不抢主体，画面干净')
+        append('composition', '主体占画面60–80%，场景元素1–2个做陪衬，不遮挡主体')
+        append('lighting', '自然柔光，真实但不杂乱，避免强阴影')
+        setOptimizedNegativePrompt((prev) => mergeNegative(prev, 'clutter, messy background, distracting objects'))
+        break
+      case '细节特写':
+        append('camera', '微距/近景特写，50–90mm，浅景深，对焦在关键结构细节')
+        append('composition', '突出关键卖点细节（材质纹理/接口/按键/结构），主体占比更高')
+        append('quality', '细节锐利，纹理真实，边缘干净')
+        setOptimizedNegativePrompt((prev) => mergeNegative(prev, 'soft focus, motion blur, low detail'))
+        break
+      case '信息清晰':
+        append('composition', '构图规整，主体居中或三分法，背景纯净，留白用于贴标，信息层级清晰')
+        append('lighting', '均匀柔光，减少戏剧化光影')
+        append('style', '电商主图风格，清晰直观，少艺术化')
+        setOptimizedNegativePrompt((prev) => mergeNegative(prev, 'dramatic lighting, heavy vignette, artsy, clutter'))
+        break
+      case '质感提升':
+        append('lighting', '高级柔光箱+轮廓光，控制高光不过曝，材质高光自然')
+        append('style', '真实商业摄影，材质更真实（避免塑料感/油腻感）')
+        append('quality', '高动态范围，干净锐利，细节丰富')
+        setOptimizedNegativePrompt((prev) => mergeNegative(prev, 'plastic, oily, waxy, over-sharpen, oversaturated'))
+        break
+      case '高端棚拍':
+        append('lighting', '三点布光/柔光箱，精致高光与边缘轮廓光，干净反射')
+        append('scene', '高级摄影棚背景（纯色/高级渐变/微纹理），干净无噪点')
+        append('style', 'premium commercial product photography')
+        setOptimizedNegativePrompt((prev) => mergeNegative(prev, 'cheap look, harsh shadow, noisy background'))
+        break
+      case '主图干净':
+        append('scene', '棚拍纯色/轻渐变背景，无杂物，道具极少')
+        append('composition', '主体约70–80%，边缘干净，四周留白用于贴标')
+        setOptimizedNegativePrompt((prev) => mergeNegative(prev, 'props, clutter, busy background'))
+        break
+      default:
+        break
+    }
+    return next
+  }
+
+  const toggleStyleTag = (tagLabel: string) => {
+    setSelectedStyleTags((prev) => {
+      const has = prev.includes(tagLabel)
+      const nextSel = has ? prev.filter((x) => x !== tagLabel) : [...prev, tagLabel]
+      return nextSel
+    })
+    // 本地规则即时生效（只做追加；取消选择不做回滚，避免惊跳）
+    const nextParts = applyLocalStyleRule(tagLabel, promptParts)
+    setPromptParts(nextParts)
+    setOptimizedPrompt(buildPromptFromParts(nextParts))
+  }
+
+  const handleAiPolish = async () => {
+    const tags = selectedStyleTags
+    if (!tags.length) return
     setAiError('')
     setIsAiBusy(true)
     try {
       const currentParts = Object.keys(promptParts || {}).length ? promptParts : {}
-      const result = await applyImageStyleTag({
-        tag: tagLabel,
+      const learned = loadCategoryTweaks(String(categoryHint || 'other'))
+      const result = await applyImageStyleTags({
+        tags,
         language: productInfo.language || '简体中文',
         parts: currentParts,
         prompt: optimizedPrompt || '',
         negativePrompt: optimizedNegativePrompt || '',
         aspectRatio: size,
         resolution,
+        product: productInfo,
+        categoryHint,
+        sceneMode,
+        learnedTweaks: learned,
       })
       setPromptParts(result.parts || currentParts)
       const nextPrompt = result.prompt || buildPromptFromParts(result.parts || currentParts)
       setOptimizedPrompt(nextPrompt)
       setOptimizedNegativePrompt(result.negativePrompt || '')
+      setSelectedStyleTags([])
     } catch (e: any) {
-      setAiError(e?.message || '风格优化失败')
+      setAiError(e?.message || 'AI精修失败')
     } finally {
       setIsAiBusy(false)
     }
@@ -1516,12 +1586,23 @@ function ImageGenerator() {
                       <button
                         key={t.id}
                         disabled={isAiBusy}
-                        onClick={() => handleApplyStyle(t.label)}
-                        className="px-2.5 py-1 rounded-full text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                        onClick={() => toggleStyleTag(t.label)}
+                        className={`px-2.5 py-1 rounded-full text-xs border disabled:opacity-50 ${
+                          selectedStyleTags.includes(t.label)
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50'
+                        }`}
                       >
                         {t.label}
                       </button>
                     ))}
+                    <button
+                      disabled={isAiBusy || selectedStyleTags.length === 0}
+                      onClick={handleAiPolish}
+                      className="px-3 py-1 rounded-full text-xs bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-50"
+                    >
+                      AI精修{selectedStyleTags.length ? `（${selectedStyleTags.length}）` : ''}
+                    </button>
                   </div>
                 </div>
 

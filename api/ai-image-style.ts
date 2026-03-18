@@ -36,9 +36,11 @@ export default async function handler(req, res) {
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
 
-    const { tag, language, parts, prompt, negativePrompt, aspectRatio, resolution } = req.body || {}
-    const styleTag = String(tag || '').trim()
-    if (!styleTag) return res.status(400).json({ success: false, error: '缺少tag' })
+    const { tag, tags, language, parts, prompt, negativePrompt, aspectRatio, resolution, product, categoryHint, sceneMode, learnedTweaks } = req.body || {}
+    const normalizedTags: string[] = Array.isArray(tags) ? tags.map(String).map((s) => s.trim()).filter(Boolean) : []
+    const legacy = String(tag || '').trim()
+    if (!normalizedTags.length && legacy) normalizedTags.push(legacy)
+    if (!normalizedTags.length) return res.status(400).json({ success: false, error: '缺少tags' })
 
     const data = await callOpenAICompatJSON<{
       prompt: string
@@ -55,23 +57,27 @@ export default async function handler(req, res) {
           {
             role: 'system',
             content: [
-              '你是电商图片提示词“可控优化器”。输入是一份可编辑的提示词结构(parts)与可选的负面词，目标是根据风格标签做“最小改动”增强，同时保持商品真实、画面干净、可投放。',
+              '你是电商图片提示词“可控精修器”。输入是一份可编辑的提示词结构(parts)、可选负面词，以及商品信息与已选风格标签。你的目标是：在不改变商品主体的前提下，让画面更符合电商投放/主图标准。',
               '',
               '输出必须是 JSON：',
               '{"prompt": string, "negativePrompt": string, "parts": {"subject": string, "scene": string, "composition": string, "lighting": string, "camera": string, "style": string, "quality": string, "extra": string}}',
               '',
               '硬约束：',
-              '- 禁止新增任何文字/水印/Logo（除非输入明确要求且参考图可见，仍需保守）。',
-              '- 禁止编造商品参数/功效/认证/价格等。',
-              '- 改动要小：优先只改 style/lighting/composition/quality/extra，除非标签明确要求。',
+              '- 主体一致性（必须遵守）：不得改变商品的品类/形态/结构/颜色方案，不得新增第二个主体或重复主体，不得把商品替换成其他产品。',
+              '- 禁止编造：不得新增未给出的参数/功效/认证/品牌背书/价格优惠等。',
+              '- 文字规则：默认不在画面里生成新增文字/水印/Logo（除非 parts.extra 明确要求生成“可读文字海报”，且仍需尽量减少乱码）。',
+              '- 最小改动：优先只改 scene/composition/lighting/camera/style/quality/extra；尽量不动 subject，除非为了“主体一致性/更清晰”而微调。',
+              '- 电商合格线：主体占画面 60–80%（建议约70%），对焦锐利，背景干净；如需要场景感，只能加 1–2 个弱化场景元素并虚化，不抢主体。',
               '',
-              '风格标签说明（仅从中选择匹配的规则执行）：',
+              '风格标签说明（可多选，需综合执行，冲突时优先级：信息清晰 > 主图干净 > 高端棚拍 > 质感提升 > 细节特写 > 生活场景）：',
               '- 主图干净：纯色/渐变背景、无杂物、主体占比更高、留白用于贴标、减少道具。',
               '- 高端棚拍：柔光箱、精致高光、干净反射、质感细节、商业摄影。',
               '- 生活场景：加入弱化的场景语义，但背景不抢戏，保持主体清晰。',
               '- 细节特写：更近景/微距、强调材质纹理与结构细节，背景更虚化。',
               '- 信息清晰：构图更规整、对焦更锐利、减少艺术化效果，提升可读性。',
               '- 质感提升：更自然的光影与材质表现，避免塑料感/油腻感/过度磨皮。',
+              '',
+              '品类提示（可选）：如果提供了 categoryHint，请让 scene/composition 更贴合该品类常见电商拍法，但不得编造具体参数。',
               '',
               '画幅约束：如果提供了 aspectRatio/resolution，构图要适配它（如 9:16 竖版上方留白）。',
             ].join('\n'),
@@ -80,12 +86,16 @@ export default async function handler(req, res) {
             role: 'user',
             content: [
               `输出语言：${language || '简体中文'}`,
-              `风格标签：${styleTag}`,
+              `风格标签（多选）：${normalizedTags.join('、')}`,
+              sceneMode ? `模式：${String(sceneMode)}（clean=主图干净；lite=轻场景）` : '',
+              categoryHint ? `categoryHint：${String(categoryHint)}` : '',
               aspectRatio || resolution ? `画幅约束：比例=${aspectRatio || '未指定'}，目标分辨率档位=${resolution || '未指定'}` : '',
+              product ? `商品信息：${JSON.stringify(product)}` : '',
+              learnedTweaks ? `同品类历史微调(learnedTweaks)：${JSON.stringify(learnedTweaks)}` : '',
               `parts(JSON)：${JSON.stringify(parts || {})}`,
               `prompt(可选)：${String(prompt || '')}`,
               `negativePrompt(可选)：${String(negativePrompt || '')}`,
-              '请按风格标签对 parts 做最小改动增强，并生成最终 prompt/negativePrompt。',
+              '请综合所选风格标签对 parts 做最小改动精修，并生成最终 prompt/negativePrompt。优先保证电商可用与主体一致性。',
             ]
               .filter(Boolean)
               .join('\n'),

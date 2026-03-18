@@ -1,11 +1,15 @@
-export async function applyImageStyleTag(params: {
-  tag: string
+export async function applyImageStyleTags(params: {
+  tags: string[]
   language: string
   parts: any
   prompt?: string
   negativePrompt?: string
   aspectRatio?: string
   resolution?: string
+  product?: any
+  categoryHint?: string
+  sceneMode?: string
+  learnedTweaks?: any
 }): Promise<{ prompt: string; negativePrompt: string; parts: any }> {
   const resp = await fetch('/api/ai/image-style', {
     method: 'POST',
