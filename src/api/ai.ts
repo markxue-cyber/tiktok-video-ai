@@ -71,7 +71,12 @@ export async function beautifyScript(params: { script: string; tags: string[]; l
   return { optimized: data.optimized, _mock: data._mock }
 }
 
-export async function generateImagePrompt(params: { product: ProductInfo; language: string }): Promise<{ prompt: string; _mock?: boolean }> {
+export async function generateImagePrompt(params: {
+  product: ProductInfo
+  language: string
+  aspectRatio?: string
+  resolution?: string
+}): Promise<{ prompt: string; negativePrompt?: string; _mock?: boolean }> {
   const resp = await fetch('/api/ai/image-prompt', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -86,6 +91,6 @@ export async function generateImagePrompt(params: { product: ProductInfo; langua
     }
   })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `提示词生成失败(${resp.status})`)
-  return { prompt: data.prompt, _mock: data._mock }
+  return { prompt: data.prompt, negativePrompt: data.negativePrompt, _mock: data._mock }
 }
 

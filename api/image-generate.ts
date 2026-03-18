@@ -13,7 +13,8 @@ export default async function handler(req, res) {
     }
 
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
-    const { prompt, model, size, resolution, aspect_ratio, refImage } = req.body || {}
+    const { prompt, model, size, resolution, aspect_ratio, refImage, negativePrompt, negative_prompt } = req.body || {}
+    const neg = String(negativePrompt || negative_prompt || '').trim()
 
     const aspect = String(aspect_ratio || '1:1')
     const resStr = String(resolution || '1024')
@@ -56,6 +57,10 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         prompt: prompt || '生成一张商品展示图',
+        // 各家聚合/适配字段命名可能不同，尽量多字段透传
+        negative_prompt: neg || undefined,
+        negativePrompt: neg || undefined,
+        negative: neg || undefined,
         model: model || undefined,
         size: reqSize,
         // 尝试以常见字段名透传参考图（不同聚合/模型可能字段不同）

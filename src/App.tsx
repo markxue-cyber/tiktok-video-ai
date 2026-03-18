@@ -1010,6 +1010,7 @@ function ImageGenerator() {
   const [modalStep, setModalStep] = useState(1)
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
+  const [optimizedNegativePrompt, setOptimizedNegativePrompt] = useState('')
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
@@ -1102,6 +1103,8 @@ function ImageGenerator() {
     setShowModal(true)
     setModalStep(1)
     setAiError('')
+    setOptimizedPrompt('')
+    setOptimizedNegativePrompt('')
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
@@ -1119,8 +1122,9 @@ function ImageGenerator() {
       setModalStep(2)
       setIsAiBusy(true)
       try {
-        const r = await generateImagePrompt({ product: productInfo, language: productInfo.language })
+        const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution })
         setOptimizedPrompt(r.prompt)
+        setOptimizedNegativePrompt(r.negativePrompt || '')
       } catch (e: any) {
         setAiError(e?.message || '提示词生成失败')
       } finally {
@@ -1142,6 +1146,7 @@ function ImageGenerator() {
     try {
       const r = await generateImageAPI({
         prompt,
+        negativePrompt: optimizedNegativePrompt || undefined,
         model,
         aspectRatio: size,
         resolution,

@@ -1,5 +1,6 @@
 export async function generateImageAPI(params: {
   prompt: string
+  negativePrompt?: string
   model: string
   aspectRatio: string
   resolution: string
@@ -10,6 +11,8 @@ export async function generateImageAPI(params: {
     headers: { 'Content-Type': 'application/json', 'X-Confirm-Billable': 'true' },
     body: JSON.stringify({
       prompt: params.prompt,
+      negativePrompt: params.negativePrompt,
+      negative_prompt: params.negativePrompt,
       model: params.model,
       aspect_ratio: params.aspectRatio,
       resolution: params.resolution,

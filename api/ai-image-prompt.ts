@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
 
-    const { product, language } = req.body || {}
+    const { product, language, aspectRatio, resolution } = req.body || {}
     if (!product) return res.status(400).json({ success: false, error: '缺少product' })
 
     if (!apiKey) {
@@ -84,8 +84,9 @@ export default async function handler(req, res) {
             role: 'user',
             content: [
               `输出语言：${language || product.language || '简体中文'}`,
+              aspectRatio || resolution ? `画幅约束：比例=${aspectRatio || '未指定'}，目标分辨率档位=${resolution || '未指定'}` : '',
               `商品信息：${JSON.stringify(product)}`,
-              '请生成适用于“电商主图/投放素材”的图片生成提示词。',
+              '请生成适用于“电商主图/投放素材”的图片生成提示词。构图必须适配画幅约束：主体清晰占比高、留白合理（便于后期贴标/标题）、背景干净不抢戏。',
             ].join('\n'),
           },
         ],
