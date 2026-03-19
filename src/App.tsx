@@ -132,6 +132,17 @@ async function safeArchiveAsset(params: { source: 'user_upload' | 'ai_generated'
   }
 }
 
+const ASSETS_CACHE_KEY = 'tikgen.assets.cache.v1'
+let assetsMemoryCache: {
+  userUploads: AssetItem[]
+  aiOutputs: AssetItem[]
+  userOffset: number
+  aiOffset: number
+  userHasMore: boolean
+  aiHasMore: boolean
+  ts: number
+} | null = null
+
 function App() {
   const [page, setPage] = useState<'landing' | 'auth' | 'home'>('landing')
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
@@ -2000,7 +2011,7 @@ function ImageGenerator() {
 }
 
 function Assets() {
-  const PAGE_SIZE = 24
+  const PAGE_SIZE = 12
   const [userUploads, setUserUploads] = useState<AssetItem[]>([])
   const [aiOutputs, setAiOutputs] = useState<AssetItem[]>([])
   const [userOffset, setUserOffset] = useState(0)
@@ -2018,6 +2029,33 @@ function Assets() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [searchKeyword, setSearchKeyword] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
+  const initializedRef = useRef(false)
+
+  const saveCache = (next: {
+    userUploads: AssetItem[]
+    aiOutputs: AssetItem[]
+    userOffset: number
+    aiOffset: number
+    userHasMore: boolean
+    aiHasMore: boolean
+  }) => {
+    const payload = { ...next, ts: Date.now() }
+    assetsMemoryCache = payload
+    try {
+      localStorage.setItem(ASSETS_CACHE_KEY, JSON.stringify(payload))
+    } catch {
+      // ignore cache write errors
+    }
+  }
+
+  const applyCache = (cached: any) => {
+    setUserUploads(Array.isArray(cached?.userUploads) ? cached.userUploads : [])
+    setAiOutputs(Array.isArray(cached?.aiOutputs) ? cached.aiOutputs : [])
+    setUserOffset(Number(cached?.userOffset || 0))
+    setAiOffset(Number(cached?.aiOffset || 0))
+    setUserHasMore(Boolean(cached?.userHasMore))
+    setAiHasMore(Boolean(cached?.aiHasMore))
+  }
 
   const loadSource = async (source: 'user_upload' | 'ai_generated', reset: boolean) => {
     const isUser = source === 'user_upload'
@@ -2033,13 +2071,31 @@ function Assets() {
     if (isUser) {
       if (reset) setUserUploads(list)
       else setUserUploads((prev) => [...prev, ...list])
-      setUserOffset((r.nextOffset ?? (currentOffset + list.length)))
+      const nextOffset = r.nextOffset ?? currentOffset + list.length
+      setUserOffset(nextOffset)
       setUserHasMore(Boolean(r.hasMore))
+      saveCache({
+        userUploads: reset ? list : [...userUploads, ...list],
+        aiOutputs,
+        userOffset: nextOffset,
+        aiOffset,
+        userHasMore: Boolean(r.hasMore),
+        aiHasMore,
+      })
     } else {
       if (reset) setAiOutputs(list)
       else setAiOutputs((prev) => [...prev, ...list])
-      setAiOffset((r.nextOffset ?? (currentOffset + list.length)))
+      const nextOffset = r.nextOffset ?? currentOffset + list.length
+      setAiOffset(nextOffset)
       setAiHasMore(Boolean(r.hasMore))
+      saveCache({
+        userUploads,
+        aiOutputs: reset ? list : [...aiOutputs, ...list],
+        userOffset,
+        aiOffset: nextOffset,
+        userHasMore,
+        aiHasMore: Boolean(r.hasMore),
+      })
     }
   }
 
@@ -2047,8 +2103,7 @@ function Assets() {
     setLoading(true)
     setError('')
     try {
-      await loadSource('user_upload', true)
-      await loadSource('ai_generated', true)
+      await Promise.all([loadSource('user_upload', true), loadSource('ai_generated', true)])
     } catch (e: any) {
       setError(e?.message || '获取资产失败')
     } finally {
@@ -2057,11 +2112,28 @@ function Assets() {
   }
 
   useEffect(() => {
+    // 先用缓存秒开，再静默刷新，避免每次进资产库都白屏等待
+    const fromMem = assetsMemoryCache
+    if (fromMem) applyCache(fromMem)
+    if (!fromMem) {
+      try {
+        const raw = localStorage.getItem(ASSETS_CACHE_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          applyCache(parsed)
+          assetsMemoryCache = parsed
+        }
+      } catch {
+        // ignore cache parse errors
+      }
+    }
     refreshAll()
+    initializedRef.current = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
+    if (!initializedRef.current) return
     // filter changed -> reset this section pagination
     ;(async () => {
       try {
@@ -2074,6 +2146,7 @@ function Assets() {
   }, [userFilter])
 
   useEffect(() => {
+    if (!initializedRef.current) return
     ;(async () => {
       try {
         await loadSource('ai_generated', true)
@@ -2200,9 +2273,9 @@ function Assets() {
         </div>
         <div className="h-28 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden">
           {isImage ? (
-            <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-cover" />
+            <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : (
-            <video src={a.url} className="w-full h-full object-cover" />
+            <video src={a.url} className="w-full h-full object-cover" preload="metadata" />
           )}
         </div>
         <div className="mt-2 text-xs text-gray-600 truncate">{a.name || `${a.type} 资产`}</div>
