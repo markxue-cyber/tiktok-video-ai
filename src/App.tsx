@@ -144,6 +144,7 @@ let assetsMemoryCache: {
 } | null = null
 let assetsPrefetching = false
 let assetsPrefetchAt = 0
+let assetsWarmupDoneForToken = ''
 
 async function prefetchAssetsCacheIfNeeded() {
   if (assetsPrefetching) return
@@ -229,6 +230,31 @@ function App() {
   }
 
   const currentPackage = useMemo(() => PACKAGES.find((p) => p.id === user?.package), [user?.package])
+
+  useEffect(() => {
+    if (!accessToken || page !== 'home') return
+    if (assetsWarmupDoneForToken === accessToken) return
+    assetsWarmupDoneForToken = accessToken
+
+    let cancelled = false
+    const run = () => {
+      if (cancelled) return
+      void prefetchAssetsCacheIfNeeded()
+    }
+
+    const ric = (window as any).requestIdleCallback
+    const cic = (window as any).cancelIdleCallback
+    let idleId: any = null
+    let timerId: any = null
+    if (typeof ric === 'function') idleId = ric(run, { timeout: 1200 })
+    else timerId = setTimeout(run, 300)
+
+    return () => {
+      cancelled = true
+      if (idleId != null && typeof cic === 'function') cic(idleId)
+      if (timerId != null) clearTimeout(timerId)
+    }
+  }, [accessToken, page])
 
   if (page === 'landing')
     return (
