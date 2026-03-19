@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       })
     }
 
-    const resp = await fetch(`${baseUrl()}/rest/v1/model_controls`, {
+    const resp = await fetch(`${baseUrl()}/rest/v1/model_controls?on_conflict=model_id`, {
       method: 'POST',
       headers: {
         ...serviceHeaders(),

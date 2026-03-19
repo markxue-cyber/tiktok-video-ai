@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       updated_by: admin.userId,
       updated_at: nowIso,
     }
-    const resp = await fetch(`${baseUrl()}/rest/v1/package_configs`, {
+    const resp = await fetch(`${baseUrl()}/rest/v1/package_configs?on_conflict=plan_id`, {
       method: 'POST',
       headers: {
         ...serviceHeaders(),
