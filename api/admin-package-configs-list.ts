@@ -1,4 +1,4 @@
-import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin'
+import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin.js'
 
 const FALLBACK = [
   { plan_id: 'trial', name: '试用版', price_cents: 0, currency: 'CNY', daily_quota: 3, features: ['每天3次', '基础功能'], model_whitelist: [], enabled: true },

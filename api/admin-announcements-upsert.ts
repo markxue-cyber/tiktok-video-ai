@@ -1,4 +1,4 @@
-import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin'
+import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin.js'
 
 const VALID_TYPE = new Set(['system', 'activity', 'release'])
 const VALID_TARGET = new Set(['all', 'trial', 'basic', 'pro', 'enterprise'])

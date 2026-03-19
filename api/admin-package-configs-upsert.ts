@@ -1,4 +1,4 @@
-import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin'
+import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin.js'
 
 const VALID = new Set(['trial', 'basic', 'pro', 'enterprise'])
 
