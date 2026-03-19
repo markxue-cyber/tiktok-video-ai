@@ -13,6 +13,66 @@ function baseUrl() {
   return String(url).replace(/\/$/, '')
 }
 
+function extFromMime(mime: string, fallback: string) {
+  const m = String(mime || '').toLowerCase()
+  if (m.includes('png')) return 'png'
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg'
+  if (m.includes('webp')) return 'webp'
+  if (m.includes('gif')) return 'gif'
+  if (m.includes('mp4')) return 'mp4'
+  if (m.includes('webm')) return 'webm'
+  return fallback
+}
+
+async function ensureAssetsBucket(serviceKey: string) {
+  // Best-effort: if bucket already exists, ignore
+  await fetch(`${baseUrl()}/storage/v1/bucket`, {
+    method: 'POST',
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      id: 'assets',
+      name: 'assets',
+      public: true,
+      file_size_limit: null,
+    }),
+  })
+}
+
+async function uploadDataUrlToStorage(params: { userId: string; kind: 'image' | 'video'; dataUrl: string; name?: string; serviceKey: string }) {
+  const m = String(params.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/)
+  if (!m) throw new Error('非法 data URL')
+  const mime = m[1]
+  const b64 = m[2]
+  const bytes = Buffer.from(b64, 'base64')
+  const fallbackExt = params.kind === 'video' ? 'mp4' : 'png'
+  const ext = extFromMime(mime, fallbackExt)
+  const safeName = String(params.name || `${params.kind}.${ext}`).replace(/[^\w.\-]/g, '_')
+  const objectPath = `${params.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
+
+  await ensureAssetsBucket(params.serviceKey)
+
+  const upResp = await fetch(`${baseUrl()}/storage/v1/object/assets/${objectPath}`, {
+    method: 'POST',
+    headers: {
+      apikey: params.serviceKey,
+      Authorization: `Bearer ${params.serviceKey}`,
+      'Content-Type': mime || 'application/octet-stream',
+      'x-upsert': 'true',
+    },
+    body: bytes as any,
+  })
+  if (!upResp.ok) {
+    const upData = await parseJson(upResp)
+    throw new Error(upData?.message || '上传到Storage失败')
+  }
+
+  return `${baseUrl()}/storage/v1/object/public/assets/${objectPath}`
+}
+
 async function parseJson(resp: Response) {
   const text = await resp.text()
   try {
@@ -59,6 +119,17 @@ export default async function handler(req, res) {
     if (!assetUrl) return sendJson(res, 400, { success: false, error: '缺少 url' })
 
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
+    const finalUrl =
+      assetUrl.startsWith('data:')
+        ? await uploadDataUrlToStorage({
+            userId,
+            kind: kind as 'image' | 'video',
+            dataUrl: assetUrl,
+            name: name ? String(name) : undefined,
+            serviceKey,
+          })
+        : assetUrl
+
     const resp = await fetch(`${baseUrl()}/rest/v1/assets`, {
       method: 'POST',
       headers: {
@@ -72,7 +143,7 @@ export default async function handler(req, res) {
           user_id: userId,
           source: src,
           type: kind,
-          url: assetUrl,
+          url: finalUrl,
           name: name ? String(name) : null,
           metadata: metadata || null,
         },

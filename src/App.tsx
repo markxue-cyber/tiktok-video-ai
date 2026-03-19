@@ -125,8 +125,10 @@ async function safeArchiveAsset(params: { source: 'user_upload' | 'ai_generated'
   try {
     if (!params.url) return
     await createAssetAPI(params)
-  } catch {
+  } catch (e) {
     // Never block core generation/upload UX due to archive write failure.
+    // Keep a trace for debugging when user reports missing assets.
+    console.error('[assets] archive failed:', e)
   }
 }
 
