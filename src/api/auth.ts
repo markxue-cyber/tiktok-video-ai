@@ -58,3 +58,25 @@ export async function apiMe(accessToken: string) {
   return data
 }
 
+export async function apiResendSignup(params: { email: string; type?: 'signup' | string }) {
+  const resp = await fetch('/api/auth/resend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: params.email, type: params.type || 'signup' }),
+  })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `重发失败(${resp.status})`)
+  return data
+}
+
+export async function apiRecoverPassword(params: { email: string }) {
+  const resp = await fetch('/api/auth/recover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: params.email }),
+  })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `发送重置邮件失败(${resp.status})`)
+  return data
+}
+

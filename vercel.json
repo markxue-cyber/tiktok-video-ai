@@ -9,6 +9,8 @@
     { "source": "/api/model-availability", "destination": "/api/model-availability" },
     { "source": "/api/auth/register", "destination": "/api/auth-register" },
     { "source": "/api/auth/login", "destination": "/api/auth-login" },
+    { "source": "/api/auth/recover", "destination": "/api/auth-recover" },
+    { "source": "/api/auth/resend", "destination": "/api/auth-resend" },
     { "source": "/api/auth/refresh", "destination": "/api/auth-refresh" },
     { "source": "/api/me", "destination": "/api/me" },
     { "source": "/api/payments/create-order", "destination": "/api/payments-create-order" },

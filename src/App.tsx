@@ -5,7 +5,7 @@ import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProduct
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
-import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
+import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
@@ -161,6 +161,30 @@ let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
 const SESSION_KEY = 'tikgen.session'
 
+function parseSessionFromLocationHash(): null | {
+  access_token: string
+  refresh_token: string
+  expires_at?: number
+  token_type?: string
+} {
+  try {
+    if (typeof window === 'undefined') return null
+    const hash = String(window.location.hash || '')
+    if (!hash) return null
+    const raw = hash.startsWith('#') ? hash.slice(1) : hash
+    if (!raw.includes('access_token=')) return null
+    const sp = new URLSearchParams(raw)
+    const access_token = String(sp.get('access_token') || '')
+    const refresh_token = String(sp.get('refresh_token') || '')
+    if (!access_token || !refresh_token) return null
+    const expires_at = sp.get('expires_at') ? Number(sp.get('expires_at')) : undefined
+    const token_type = String(sp.get('token_type') || '')
+    return { access_token, refresh_token, expires_at: Number.isFinite(expires_at as any) ? expires_at : undefined, token_type: token_type || undefined }
+  } catch {
+    return null
+  }
+}
+
 async function prefetchAssetsCacheIfNeeded() {
   if (assetsPrefetching) return
   const now = Date.now()
@@ -199,10 +223,19 @@ async function prefetchAssetsCacheIfNeeded() {
 }
 
 function App() {
-  const [page, setPage] = useState<'landing' | 'auth' | 'home'>(() => (localStorage.getItem('tikgen.accessToken') ? 'home' : 'landing'))
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const hashSession = parseSessionFromLocationHash()
+  const [page, setPage] = useState<'landing' | 'auth' | 'home'>(() => {
+    if (localStorage.getItem('tikgen.accessToken')) return 'home'
+    if (hashSession?.access_token) return 'home'
+    return 'landing'
+  })
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'recover'>('login')
   const [user, setUser] = useState<{ id?: string; name: string; email?: string; credits: number; package: string; packageExpiresAt: string } | null>(null)
-  const [accessToken, setAccessToken] = useState<string>(() => localStorage.getItem('tikgen.accessToken') || '')
+  const [accessToken, setAccessToken] = useState<string>(() => {
+    const stored = localStorage.getItem('tikgen.accessToken')
+    if (stored) return stored
+    return hashSession?.access_token || ''
+  })
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authPassword2, setAuthPassword2] = useState('')
@@ -210,6 +243,8 @@ function App() {
   const [authShowPassword2, setAuthShowPassword2] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [authNotice, setAuthNotice] = useState('')
+  const [authResendBusy, setAuthResendBusy] = useState(false)
   const [mainNav, setMainNav] = useState<'create' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
@@ -289,6 +324,22 @@ function App() {
       }
     })()
   }, [accessToken])
+
+  // If user lands on a Supabase recovery link, access/refresh tokens are stored in URL hash.
+  // We need to persist them into localStorage so the rest of the app can treat the user as logged in.
+  useEffect(() => {
+    if (localStorage.getItem('tikgen.accessToken')) return
+    const hs = parseSessionFromLocationHash()
+    if (!hs?.access_token || !hs?.refresh_token) return
+    try {
+      saveSession(hs)
+      setAccessToken(hs.access_token)
+      setPage('home')
+    } catch {
+      // ignore and let apiMe handle it
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLogout = () => {
     clearSession()
@@ -420,26 +471,30 @@ function App() {
           <ChevronRight className="w-5 h-5 rotate-180 mr-1" /> 返回
         </button>
         <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20">
-          <h2 className="text-3xl font-bold text-white text-center mb-8">{authMode === 'login' ? '登录账号' : '注册账号'}</h2>
+          <h2 className="text-3xl font-bold text-white text-center mb-8">
+            {authMode === 'login' ? '登录账号' : authMode === 'register' ? '注册账号' : '重置密码'}
+          </h2>
           <div className="space-y-4">
             <input value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} type="email" placeholder="邮箱地址" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
-            <div className="relative">
-              <input
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                type={authShowPassword ? 'text' : 'password'}
-                placeholder="密码"
-                className="w-full px-5 py-4 pr-14 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40"
-              />
-              <button
-                type="button"
-                aria-label={authShowPassword ? '隐藏密码' : '显示密码'}
-                onClick={() => setAuthShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10"
-              >
-                {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
+            {authMode !== 'recover' && (
+              <div className="relative">
+                <input
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  type={authShowPassword ? 'text' : 'password'}
+                  placeholder="密码"
+                  className="w-full px-5 py-4 pr-14 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40"
+                />
+                <button
+                  type="button"
+                  aria-label={authShowPassword ? '隐藏密码' : '显示密码'}
+                  onClick={() => setAuthShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10"
+                >
+                  {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            )}
             {authMode === 'register' && (
               <div className="relative">
                 <input
@@ -459,6 +514,19 @@ function App() {
                 </button>
               </div>
             )}
+            {authMode === 'login' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthError('')
+                  setAuthNotice('')
+                  setAuthMode('recover')
+                }}
+                className="w-full text-center text-white/60 hover:text-white text-sm"
+              >
+                忘记密码？
+              </button>
+            )}
             <button
               disabled={authBusy}
               onClick={async () => {
@@ -470,16 +538,25 @@ function App() {
                     return setAuthError(`触发注册限流，请等待 ${minutes} 分钟后再试`)
                   }
                 }
-                if (!authEmail || !authPassword) return setAuthError('请输入邮箱与密码')
+                if (!authEmail) return setAuthError('请输入邮箱地址')
+                if (authMode !== 'recover' && !authPassword) return setAuthError('请输入密码')
                 if (authMode === 'register' && authPassword !== authPassword2) return setAuthError('两次密码不一致')
                 setAuthBusy(true)
                 try {
-                  const data = authMode === 'register'
-                    ? await apiRegister({ email: authEmail, password: authPassword })
-                    : await apiLogin({ email: authEmail, password: authPassword })
+                  const data =
+                    authMode === 'recover'
+                      ? await apiRecoverPassword({ email: authEmail })
+                      : authMode === 'register'
+                        ? await apiRegister({ email: authEmail, password: authPassword })
+                        : await apiLogin({ email: authEmail, password: authPassword })
                   if (authMode === 'register' && data?.needsEmailConfirm) {
                     setAuthMode('login')
                     throw new Error('注册成功：请先去邮箱点击验证链接，然后再回来登录')
+                  }
+                  if (authMode === 'recover' && data?.success) {
+                    setAuthMode('login')
+                    setAuthNotice('已发送重置密码邮件，请在 5-10 分钟内检查收件箱/垃圾箱。')
+                    return
                   }
                   const session = data?.session || null
                   const token = session?.access_token
@@ -504,23 +581,68 @@ function App() {
               }}
               className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl"
             >
-              {authBusy ? '处理中...' : authMode === 'login' ? '登录' : '注册并登录'}
+              {authBusy
+                ? '处理中...'
+                : authMode === 'login'
+                  ? '登录'
+                  : authMode === 'register'
+                    ? '注册并登录'
+                    : '发送重置邮件'}
             </button>
-            {!!authError && <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-xl p-3">{authError}</div>}
+            {!!authNotice && <div className="text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">{authNotice}</div>}
+            {!!authError && (
+              <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
+                {authError}
+                {(() => {
+                  const msg = String(authError || '')
+                  // 兜底：不同 Supabase/不同步骤可能返回略有差异的提示文案
+                  const indicatesEmailConfirm =
+                    (/邮箱/.test(msg) && /验证/.test(msg)) ||
+                    /验证链接/.test(msg) ||
+                    /email.*confirm/i.test(msg) ||
+                    /not confirmed/i.test(msg) ||
+                    /confirmed/i.test(msg)
+
+                  if (!indicatesEmailConfirm) return null
+                  return (
+                  <div className="mt-3 flex">
+                    <button
+                      disabled={authResendBusy}
+                      onClick={async () => {
+                        if (!authEmail) return setAuthError('请输入邮箱地址后再重发')
+                        setAuthError('')
+                        setAuthNotice('')
+                        setAuthResendBusy(true)
+                        try {
+                          await apiResendSignup({ email: authEmail })
+                          setAuthNotice('已重新发送邮箱验证，请稍后查收（可能在垃圾箱/Promotion）')
+                        } catch (e: any) {
+                          setAuthError(e?.message || '重发失败')
+                        } finally {
+                          setAuthResendBusy(false)
+                        }
+                      }}
+                      className="w-full py-2 rounded-lg text-sm bg-red-500/20 border border-red-500/30 text-red-100 hover:bg-red-500/30 disabled:opacity-50"
+                    >
+                      {authResendBusy ? '重发中...' : '重新发送验证邮件'}
+                    </button>
+                  </div>
+                  )
+                })()}
+              </div>
+            )}
             <div className="text-center text-white/60 text-sm">
               {authMode === 'login' ? (
-                <button
-                  className="hover:text-white"
-                  onClick={() => setAuthMode('register')}
-                >
+                <button className="hover:text-white" onClick={() => setAuthMode('register')}>
                   没有账号？去注册
                 </button>
-              ) : (
-                <button
-                  className="hover:text-white"
-                  onClick={() => setAuthMode('login')}
-                >
+              ) : authMode === 'register' ? (
+                <button className="hover:text-white" onClick={() => setAuthMode('login')}>
                   已有账号？去登录
+                </button>
+              ) : (
+                <button className="hover:text-white" onClick={() => setAuthMode('login')}>
+                  返回登录
                 </button>
               )}
             </div>
@@ -679,6 +801,7 @@ function VideoGenerator() {
   const [progress, setProgress] = useState('0%')
   const [statusText, setStatusText] = useState('')
   const [errorText, setErrorText] = useState('')
+  const [errorCode, setErrorCode] = useState('UNKNOWN')
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
@@ -980,6 +1103,7 @@ function VideoGenerator() {
     setIsGenerating(true)
     setGeneratedVideo('')
     setErrorText('')
+    setErrorCode('UNKNOWN')
     setProgress('0%')
     setStatusText('任务提交中...')
     setTaskId('')
@@ -1015,16 +1139,21 @@ function VideoGenerator() {
         }
 
         if (status === 'failed' || status === 'error') {
-          throw new Error(s.failReason || '生成失败')
+          const err: any = new Error(s.failReason || '生成失败')
+          err.code = s.failCode || 'UNKNOWN'
+          throw err
         }
 
         setStatusText(`生成中... ${s.progress || ''}`.trim())
       }
 
-      throw new Error('生成超时，请稍后在任务列表中查看')
+      const err: any = new Error('生成超时，请稍后在任务列表中查看')
+      err.code = 'UPSTREAM_TIMEOUT'
+      throw err
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
       setErrorText(e?.message || '生成失败')
+      setErrorCode(e?.code || 'UNKNOWN')
       setIsGenerating(false)
       setStatusText('')
     }
@@ -1324,6 +1453,16 @@ function VideoGenerator() {
           <div className="h-96 flex flex-col items-center justify-center text-center bg-red-50 rounded-xl px-6">
             <p className="text-red-600 font-medium">生成失败</p>
             <p className="text-sm text-red-500 mt-2 break-words">{errorText}</p>
+            <p className="text-xs text-red-400 mt-2">错误码：{errorCode}</p>
+            {errorCode !== 'QUOTA_EXHAUSTED' && (
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="mt-5 px-4 py-2 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                重试（保留参数）
+              </button>
+            )}
             {taskId && <p className="text-xs text-red-400 mt-3 break-all">任务ID：{taskId}</p>}
           </div>
         ) : generatedVideo ? (
@@ -1365,6 +1504,8 @@ function ImageGenerator() {
   const [qcResult, setQcResult] = useState<any>(null)
   const [isQcBusy, setIsQcBusy] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
+  const [genErrorText, setGenErrorText] = useState('')
+  const [genErrorCode, setGenErrorCode] = useState('UNKNOWN')
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
@@ -1740,6 +1881,8 @@ function ImageGenerator() {
     setIsGenerating(true)
     setGeneratedImage('')
     setQcResult(null)
+    setGenErrorText('')
+    setGenErrorCode('UNKNOWN')
     setGenProgress(1)
     const startedAt = Date.now()
     const timer = setInterval(() => {
@@ -1795,7 +1938,8 @@ function ImageGenerator() {
       }
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution } })
-      alert(e?.message || '生成失败')
+      setGenErrorText(e?.message || '生成失败')
+      setGenErrorCode(e?.code || 'UNKNOWN')
       clearInterval(timer)
       setGenProgress(0)
     } finally {
@@ -2236,6 +2380,21 @@ function ImageGenerator() {
                 <Download className="w-5 h-5 mr-2" />下载
               </a>
             </div>
+          </div>
+        ) : genErrorText ? (
+          <div className="h-96 flex flex-col items-center justify-center text-center bg-red-50 rounded-xl px-6">
+            <p className="text-red-600 font-medium">生成失败</p>
+            <p className="text-sm text-red-600 mt-2 break-words">{genErrorText}</p>
+            <p className="text-xs text-red-400 mt-2">错误码：{genErrorCode}</p>
+            {genErrorCode !== 'QUOTA_EXHAUSTED' && (
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="mt-5 px-4 py-2 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                重试（保留参数）
+              </button>
+            )}
           </div>
         ) : (
           <div className="h-96 flex items-center justify-center text-gray-400 border-2 border-dashed rounded-xl"><Image className="w-16 h-16 opacity-50" /></div>
