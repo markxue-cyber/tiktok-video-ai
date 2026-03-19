@@ -1,5 +1,5 @@
 export type VideoSubmitResult = { taskId: string; message: string }
-export type VideoStatusResult = { status: string; videoUrl: string; progress: string; failReason?: string }
+export type VideoStatusResult = { status: string; videoUrl: string; progress: string; failReason?: string; failCode?: string }
 
 // 视频生成API调用
 export const generateVideoAPI = async (
@@ -35,7 +35,10 @@ export const generateVideoAPI = async (
 
   if (!response.ok || !data?.success) {
     const raw = data?.raw ? `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}` : ''
-    throw new Error((data?.error || `提交失败(${response.status})`) + raw)
+    const message = (data?.error || `提交失败(${response.status})`) + raw
+    const err: any = new Error(message)
+    err.code = data?.code || 'UNKNOWN'
+    throw err
   }
 
   if (!data.taskId) {
@@ -53,6 +56,7 @@ export const checkVideoStatus = async (taskId: string): Promise<VideoStatusResul
     status: data.status || 'unknown',
     videoUrl: data.videoUrl || '',
     progress: data.progress || '0%',
-    failReason: data.failReason || data.fail_reason
+    failReason: data.failReason || data.fail_reason,
+    failCode: data.failCode || data.fail_code || data.failCode,
   }
 }
