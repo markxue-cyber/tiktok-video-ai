@@ -80,3 +80,14 @@ export async function apiRecoverPassword(params: { email: string }) {
   return data
 }
 
+export async function apiUpdatePassword(params: { accessToken: string; password: string }) {
+  const resp = await fetch('/api/auth/update-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accessToken: params.accessToken, password: params.password }),
+  })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `设置新密码失败(${resp.status})`)
+  return data
+}
+

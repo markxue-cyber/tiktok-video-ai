@@ -5,7 +5,7 @@ import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProduct
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
-import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword } from './api/auth'
+import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
@@ -166,6 +166,7 @@ function parseSessionFromLocationHash(): null | {
   refresh_token: string
   expires_at?: number
   token_type?: string
+  type?: string
 } {
   try {
     if (typeof window === 'undefined') return null
@@ -179,7 +180,14 @@ function parseSessionFromLocationHash(): null | {
     if (!access_token || !refresh_token) return null
     const expires_at = sp.get('expires_at') ? Number(sp.get('expires_at')) : undefined
     const token_type = String(sp.get('token_type') || '')
-    return { access_token, refresh_token, expires_at: Number.isFinite(expires_at as any) ? expires_at : undefined, token_type: token_type || undefined }
+    const type = String(sp.get('type') || '')
+    return {
+      access_token,
+      refresh_token,
+      expires_at: Number.isFinite(expires_at as any) ? expires_at : undefined,
+      token_type: token_type || undefined,
+      type: type || undefined,
+    }
   } catch {
     return null
   }
@@ -224,17 +232,26 @@ async function prefetchAssetsCacheIfNeeded() {
 
 function App() {
   const hashSession = parseSessionFromLocationHash()
+  const hashType = hashSession?.type || ''
   const [page, setPage] = useState<'landing' | 'auth' | 'home'>(() => {
     if (localStorage.getItem('tikgen.accessToken')) return 'home'
+    if (hashType === 'recovery') return 'auth'
     if (hashSession?.access_token) return 'home'
     return 'landing'
   })
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'recover'>('login')
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'recover' | 'recoverReset'>(() => {
+    return hashType === 'recovery' ? 'recoverReset' : 'login'
+  })
   const [user, setUser] = useState<{ id?: string; name: string; email?: string; credits: number; package: string; packageExpiresAt: string } | null>(null)
   const [accessToken, setAccessToken] = useState<string>(() => {
     const stored = localStorage.getItem('tikgen.accessToken')
     if (stored) return stored
+    if (hashType === 'recovery') return ''
     return hashSession?.access_token || ''
+  })
+  const [recoveryAccessToken, setRecoveryAccessToken] = useState<string>(() => {
+    if (hashType === 'recovery') return hashSession?.access_token || ''
+    return ''
   })
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -327,11 +344,18 @@ function App() {
 
   // If user lands on a Supabase recovery link, access/refresh tokens are stored in URL hash.
   // We need to persist them into localStorage so the rest of the app can treat the user as logged in.
+  // If it's a password recovery reset link, we should NOT auto-login; instead show a "set new password" UI.
   useEffect(() => {
     if (localStorage.getItem('tikgen.accessToken')) return
     const hs = parseSessionFromLocationHash()
     if (!hs?.access_token || !hs?.refresh_token) return
     try {
+      if (hs.type === 'recovery') {
+        setRecoveryAccessToken(hs.access_token)
+        setAuthMode('recoverReset')
+        setPage('auth')
+        return
+      }
       saveSession(hs)
       setAccessToken(hs.access_token)
       setPage('home')
@@ -476,7 +500,7 @@ function App() {
           </h2>
           <div className="space-y-4">
             <input value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} type="email" placeholder="邮箱地址" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
-            {authMode !== 'recover' && (
+            {authMode !== 'recover' && authMode !== 'recoverReset' ? (
               <div className="relative">
                 <input
                   value={authPassword}
@@ -494,14 +518,33 @@ function App() {
                   {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            ) : (
+              // recoverReset 模式：也要展示新密码输入框
+              <div className="relative">
+                <input
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  type={authShowPassword ? 'text' : 'password'}
+                  placeholder="新密码"
+                  className="w-full px-5 py-4 pr-14 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40"
+                />
+                <button
+                  type="button"
+                  aria-label={authShowPassword ? '隐藏密码' : '显示密码'}
+                  onClick={() => setAuthShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10"
+                >
+                  {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             )}
-            {authMode === 'register' && (
+            {(authMode === 'register' || authMode === 'recoverReset') && (
               <div className="relative">
                 <input
                   value={authPassword2}
                   onChange={(e) => setAuthPassword2(e.target.value)}
                   type={authShowPassword2 ? 'text' : 'password'}
-                  placeholder="确认密码"
+                  placeholder={authMode === 'recoverReset' ? '确认新密码' : '确认密码'}
                   className="w-full px-5 py-4 pr-14 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40"
                 />
                 <button
@@ -539,16 +582,19 @@ function App() {
                   }
                 }
                 if (!authEmail) return setAuthError('请输入邮箱地址')
-                if (authMode !== 'recover' && !authPassword) return setAuthError('请输入密码')
-                if (authMode === 'register' && authPassword !== authPassword2) return setAuthError('两次密码不一致')
+                if ((authMode === 'login' || authMode === 'register' || authMode === 'recoverReset') && !authPassword)
+                  return setAuthError(authMode === 'recoverReset' ? '请输入新密码' : '请输入密码')
+                if ((authMode === 'register' || authMode === 'recoverReset') && authPassword !== authPassword2) return setAuthError('两次密码不一致')
                 setAuthBusy(true)
                 try {
                   const data =
                     authMode === 'recover'
                       ? await apiRecoverPassword({ email: authEmail })
-                      : authMode === 'register'
-                        ? await apiRegister({ email: authEmail, password: authPassword })
-                        : await apiLogin({ email: authEmail, password: authPassword })
+                      : authMode === 'recoverReset'
+                        ? await apiUpdatePassword({ accessToken: recoveryAccessToken, password: authPassword })
+                        : authMode === 'register'
+                          ? await apiRegister({ email: authEmail, password: authPassword })
+                          : await apiLogin({ email: authEmail, password: authPassword })
                   if (authMode === 'register' && data?.needsEmailConfirm) {
                     setAuthMode('login')
                     throw new Error('注册成功：请先去邮箱点击验证链接，然后再回来登录')
@@ -556,6 +602,19 @@ function App() {
                   if (authMode === 'recover' && data?.success) {
                     setAuthMode('login')
                     setAuthNotice('已发送重置密码邮件，请在 5-10 分钟内检查收件箱/垃圾箱。')
+                    return
+                  }
+                  if (authMode === 'recoverReset' && data?.success) {
+                    try {
+                      window.location.hash = ''
+                    } catch {
+                      // ignore
+                    }
+                    setRecoveryAccessToken('')
+                    setAuthPassword('')
+                    setAuthPassword2('')
+                    setAuthMode('login')
+                    setAuthNotice('密码已更新，请使用新密码登录')
                     return
                   }
                   const session = data?.session || null
@@ -587,7 +646,9 @@ function App() {
                   ? '登录'
                   : authMode === 'register'
                     ? '注册并登录'
-                    : '发送重置邮件'}
+                    : authMode === 'recover'
+                      ? '发送重置邮件'
+                      : '保存新密码'}
             </button>
             {!!authNotice && <div className="text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">{authNotice}</div>}
             {!!authError && (
