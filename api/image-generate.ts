@@ -95,7 +95,13 @@ export default async function handler(req, res) {
       return `${ww}x${hh}`
     }
 
-    const reqSize = computeSize()
+    let reqSize = computeSize()
+    // DALL·E 3 only accepts fixed sizes: 1024x1024 / 1024x1792 / 1792x1024
+    if (modelId.includes('dall-e-3') || modelId.includes('dalle-3')) {
+      if (aspect === '9:16' || aspect === '3:4' || aspect === '2:3') reqSize = '1024x1792'
+      else if (aspect === '16:9' || aspect === '4:3' || aspect === '3:2' || aspect === '21:9') reqSize = '1792x1024'
+      else reqSize = '1024x1024'
+    }
     const [reqW, reqH] = reqSize.split('x').map((x) => Number.parseInt(x, 10))
 
     // 参考图字段：尽量覆盖常见聚合适配；按家族做一丢丢偏好，提升命中率
@@ -163,6 +169,7 @@ export default async function handler(req, res) {
     let usedModel = String(model || '').trim()
     let { resp: upstreamResp, raw: rawText, parsed: data } = await callUpstream(usedModel || undefined)
 
+    let errorCode = 'UPSTREAM_ERROR'
     if (!upstreamResp.ok) {
       let msg =
         data?.error?.message ||
@@ -194,14 +201,22 @@ export default async function handler(req, res) {
           }
         }
       }
+      if (modelInvalid) {
+        // 当选择模型导致“模型不存在/不支持”且最终仍失败，归因为模型不可用。
+        errorCode = 'MODEL_UNAVAILABLE'
+      }
     }
 
     if (!upstreamResp.ok) {
-      const msg =
+      const msgFinal =
         data?.error?.message ||
         data?.message ||
         (typeof rawText === 'string' && rawText.slice(0, 1000)) ||
         `上游错误(${upstreamResp.status})`
+      const text = String(msgFinal || '').toLowerCase()
+      if (text.includes('今日额度已用尽') || text.includes('upgrade') || text.includes('quota')) errorCode = 'QUOTA_EXHAUSTED'
+      if (text.includes('timeout') || text.includes('超时')) errorCode = 'UPSTREAM_TIMEOUT'
+      if (!errorCode) errorCode = 'UPSTREAM_ERROR'
       await writeTaskRow({
         user_id: consumed?.user?.id || null,
         type: 'image',
@@ -211,7 +226,7 @@ export default async function handler(req, res) {
         output_url: null,
         raw: { upstream_status: upstreamResp.status, upstream: data || rawText },
       })
-      return res.status(200).json({ success: false, error: msg, raw: data || rawText })
+      return res.status(200).json({ success: false, error: msgFinal, code: errorCode, raw: data || rawText })
     }
 
     // OpenAI images API shape: { data: [{ url }] } or { data: [{ b64_json }] }
@@ -261,10 +276,17 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: false,
       error: '上游未返回可识别的图片地址（url/b64_json）',
+      code: 'NO_OUTPUT',
       raw: data || rawText,
     })
   } catch (e) {
-    return res.status(500).json({ success: false, error: e?.message || 'Unknown error' })
+    const msg = String(e?.message || 'Unknown error')
+    let code = 'UNKNOWN'
+    const t = msg.toLowerCase()
+    if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
+    else if (t.includes('timeout') || t.includes('超时')) code = 'UPSTREAM_TIMEOUT'
+    else if (t.includes('model') && (t.includes('does not exist') || t.includes('invalid') || t.includes('not in'))) code = 'MODEL_UNAVAILABLE'
+    return res.status(200).json({ success: false, error: msg, code })
   }
 }
 
