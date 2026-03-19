@@ -185,7 +185,7 @@ async function prefetchAssetsCacheIfNeeded() {
 }
 
 function App() {
-  const [page, setPage] = useState<'landing' | 'auth' | 'home'>('landing')
+  const [page, setPage] = useState<'landing' | 'auth' | 'home'>(() => (localStorage.getItem('tikgen.accessToken') ? 'home' : 'landing'))
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [user, setUser] = useState<{ id?: string; name: string; email?: string; credits: number; package: string; packageExpiresAt: string } | null>(null)
   const [accessToken, setAccessToken] = useState<string>(() => localStorage.getItem('tikgen.accessToken') || '')
@@ -199,7 +199,6 @@ function App() {
   const [mainNav, setMainNav] = useState<'create' | 'tools' | 'assets' | 'benefits'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
-  const [authHydrating, setAuthHydrating] = useState<boolean>(() => !!localStorage.getItem('tikgen.accessToken'))
 
   const readSession = () => {
     try {
@@ -227,10 +226,7 @@ function App() {
 
   useEffect(() => {
     ;(async () => {
-      if (!accessToken) {
-        setAuthHydrating(false)
-        return
-      }
+      if (!accessToken) return
       try {
         const me = await apiMe(accessToken)
         const plan = me?.subscription?.planId || 'trial'
@@ -275,7 +271,7 @@ function App() {
           setPage('landing')
         }
       } finally {
-        setAuthHydrating(false)
+        // no-op
       }
     })()
   }, [accessToken])
@@ -313,20 +309,6 @@ function App() {
       if (timerId != null) clearTimeout(timerId)
     }
   }, [accessToken, page])
-
-  if (authHydrating) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white border rounded-2xl px-6 py-5 shadow-sm flex items-center">
-          <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
-          <div>
-            <div className="font-medium text-gray-900">正在恢复登录状态</div>
-            <div className="text-sm text-gray-500">请稍等...</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   if (page === 'landing')
     return (
