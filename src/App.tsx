@@ -10,6 +10,7 @@ import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
+import { getModelAvailabilityAPI } from './api/modelAvailability'
 import { Sentry } from './sentry'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -87,9 +88,7 @@ const IMAGE_MODELS = [
   { id: 'midjourney', name: 'Midjourney' },
 ]
 
-const TEMP_UNAVAILABLE_IMAGE_MODEL_RULES: Array<{ test: RegExp; reason: string }> = [
-  { test: /midjourney|^mj_/i, reason: '当前通道暂不可用' },
-]
+const TEMP_UNAVAILABLE_IMAGE_MODEL_RULES: Array<{ test: RegExp; reason: string }> = [{ test: /midjourney|^mj_/i, reason: '当前通道暂不可用' }]
 
 function getImageModelUnavailableReason(id: string): string {
   const s = String(id || '')
@@ -693,7 +692,23 @@ function VideoGenerator() {
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [unavailableVideoMap, setUnavailableVideoMap] = useState<Record<string, string>>({})
   const stopPollingRef = useRef(false)
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const token = localStorage.getItem('tikgen.accessToken') || ''
+        if (!token) return
+        const r = await getModelAvailabilityAPI(token)
+        const map: Record<string, string> = {}
+        for (const x of r.video || []) map[String(x.id)] = String(x.reason || '暂不可用')
+        setUnavailableVideoMap(map)
+      } catch {
+        // ignore
+      }
+    })()
+  }, [])
 
   // NOTE: 能力探测会触发聚合API计费请求，已在后端默认禁用。
 
@@ -1237,11 +1252,13 @@ function VideoGenerator() {
             <label className="block text-sm font-medium mb-1">AI模型</label>
             <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
               {VIDEO_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
+                <option key={m.id} value={m.id} disabled={!!unavailableVideoMap[m.id]}>
                   {m.name}
+                  {unavailableVideoMap[m.id] ? '（暂不可用）' : ''}
                 </option>
               ))}
             </select>
+            {unavailableVideoMap[model] ? <div className="mt-1 text-xs text-amber-600">当前模型暂不可用，请切换其他模型。</div> : null}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">分辨率</label>
@@ -1351,14 +1368,30 @@ function ImageGenerator() {
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
+  const [unavailableImageMap, setUnavailableImageMap] = useState<Record<string, string>>({})
   const imageModelOptions = useMemo(
     () =>
       imageModels.map((m) => ({
         ...m,
-        unavailableReason: getImageModelUnavailableReason(m.id),
+        unavailableReason: unavailableImageMap[m.id] || getImageModelUnavailableReason(m.id),
       })),
-    [imageModels],
+    [imageModels, unavailableImageMap],
   )
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const token = localStorage.getItem('tikgen.accessToken') || ''
+        if (!token) return
+        const r = await getModelAvailabilityAPI(token)
+        const map: Record<string, string> = {}
+        for (const x of r.image || []) map[String(x.id)] = String(x.reason || '暂不可用')
+        setUnavailableImageMap(map)
+      } catch {
+        // ignore
+      }
+    })()
+  }, [])
 
   useEffect(() => {
     ;(async () => {
