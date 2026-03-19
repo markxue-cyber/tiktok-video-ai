@@ -1,5 +1,32 @@
 // Vercel Serverless Function - 图片生成API（聚合API / OpenAI兼容）
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
+
+function mustEnv(name: string) {
+  const v = process.env[name]
+  if (!v) throw new Error(`缺少环境变量 ${name}`)
+  return v
+}
+
+function supabaseBaseUrl() {
+  return String(mustEnv('SUPABASE_URL')).replace(/\/$/, '')
+}
+
+async function writeTaskRow(payload: any) {
+  try {
+    const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
+    await fetch(`${supabaseBaseUrl()}/rest/v1/generation_tasks`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([payload]),
+    })
+  } catch {
+    // never block generation if task logging fails
+  }
+}
 export default async function handler(req, res) {
   try {
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
@@ -137,6 +164,15 @@ export default async function handler(req, res) {
         data?.message ||
         (typeof rawText === 'string' && rawText.slice(0, 1000)) ||
         `上游错误(${upstreamResp.status})`
+      await writeTaskRow({
+        user_id: consumed?.user?.id || null,
+        type: 'image',
+        model: model || null,
+        status: 'failed',
+        provider_task_id: null,
+        output_url: null,
+        raw: { upstream_status: upstreamResp.status, upstream: data || rawText },
+      })
       return res.status(200).json({ success: false, error: msg, raw: data || rawText })
     }
 
@@ -148,15 +184,42 @@ export default async function handler(req, res) {
 
     if (b64) {
       const result = { imageUrl: `data:image/png;base64,${b64}`, size: reqSize }
+      await writeTaskRow({
+        user_id: consumed?.user?.id || null,
+        type: 'image',
+        model: model || null,
+        status: 'succeeded',
+        provider_task_id: null,
+        output_url: result.imageUrl,
+        raw: data,
+      })
       await finalizeConsumption(req, result)
       return res.status(200).json({ success: true, ...result })
     }
     if (url) {
       const result = { imageUrl: url, size: reqSize }
+      await writeTaskRow({
+        user_id: consumed?.user?.id || null,
+        type: 'image',
+        model: model || null,
+        status: 'succeeded',
+        provider_task_id: null,
+        output_url: result.imageUrl,
+        raw: data,
+      })
       await finalizeConsumption(req, result)
       return res.status(200).json({ success: true, ...result })
     }
 
+    await writeTaskRow({
+      user_id: consumed?.user?.id || null,
+      type: 'image',
+      model: model || null,
+      status: 'failed',
+      provider_task_id: null,
+      output_url: null,
+      raw: data || rawText,
+    })
     return res.status(200).json({
       success: false,
       error: '上游未返回可识别的图片地址（url/b64_json）',

@@ -6,8 +6,9 @@ import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
 import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
-import { createOrder } from './api/payments'
+import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
+import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -196,7 +197,7 @@ function App() {
   const [authShowPassword2, setAuthShowPassword2] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [mainNav, setMainNav] = useState<'create' | 'tools' | 'assets' | 'benefits'>('create')
+  const [mainNav, setMainNav] = useState<'create' | 'tasks' | 'tools' | 'assets' | 'benefits'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
 
@@ -510,6 +511,25 @@ function App() {
     </div>
   )
 
+  const refreshCurrentUser = async () => {
+    if (!accessToken) return
+    try {
+      const me = await apiMe(accessToken)
+      const plan = me?.subscription?.planId || 'trial'
+      const end = me?.subscription?.currentPeriodEnd ? String(me.subscription.currentPeriodEnd).slice(0, 10) : ''
+      setUser({
+        id: me?.user?.id,
+        name: me?.user?.name || me?.user?.email || '用户',
+        email: me?.user?.email,
+        credits: 0,
+        package: plan,
+        packageExpiresAt: end,
+      })
+    } catch {
+      // ignore refresh failures in manual action
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <aside className="w-64 bg-white shadow-xl fixed h-full z-30">
@@ -523,6 +543,7 @@ function App() {
             </div>
           )}
 
+          <NavPrimary icon={<Library className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
           <NavPrimary icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} onClick={() => setMainNav('tools')} />
           {mainNav === 'tools' && (
             <div className="pl-3 space-y-1">
@@ -552,6 +573,7 @@ function App() {
               <h1 className="text-xl font-bold">
                 {mainNav === 'create' && createNav === 'video' && '视频生成'}
                 {mainNav === 'create' && createNav === 'image' && '图片生成'}
+                {mainNav === 'tasks' && '任务中心'}
                 {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
@@ -583,7 +605,8 @@ function App() {
             <ImageGenerator />
           </div>
           {mainNav === 'assets' && <Assets />}
-          {mainNav === 'benefits' && <Packages />}
+          {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} />}
+          {mainNav === 'tasks' && <TaskCenter />}
           {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
         </div>
       </main>
@@ -2553,21 +2576,244 @@ function Assets() {
   )
 }
 
-function Packages() {
+function TaskCenter() {
+  const PAGE_SIZE = 20
+  const [tasks, setTasks] = useState<GenerationTaskItem[]>([])
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'image'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'processing' | 'succeeded' | 'failed'>('all')
+
+  const load = async (reset: boolean) => {
+    const current = reset ? 0 : offset
+    const r = await listTasksAPI({
+      type: typeFilter === 'all' ? undefined : typeFilter,
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      limit: PAGE_SIZE,
+      offset: current,
+    })
+    const rows = r.tasks || []
+    if (reset) setTasks(rows)
+    else setTasks((prev) => [...prev, ...rows])
+    setOffset(r.nextOffset ?? current + rows.length)
+    setHasMore(Boolean(r.hasMore))
+  }
+
+  useEffect(() => {
+    ;(async () => {
+      setLoading(true)
+      setError('')
+      try {
+        await load(true)
+      } catch (e: any) {
+        setError(e?.message || '获取任务失败')
+      } finally {
+        setLoading(false)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeFilter, statusFilter])
+
+  const statusLabel = (s: string) => {
+    const v = String(s || '').toLowerCase()
+    if (v === 'submitted') return '已提交'
+    if (v === 'processing' || v === 'running' || v === 'in_progress') return '生成中'
+    if (v === 'succeeded' || v === 'success' || v === 'completed') return '成功'
+    if (v === 'failed' || v === 'error') return '失败'
+    return v || '未知'
+  }
+
+  const statusClass = (s: string) => {
+    const v = String(s || '').toLowerCase()
+    if (v === 'succeeded' || v === 'success' || v === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    if (v === 'failed' || v === 'error') return 'bg-red-50 text-red-700 border-red-200'
+    if (v === 'processing' || v === 'running' || v === 'in_progress' || v === 'submitted') return 'bg-amber-50 text-amber-700 border-amber-200'
+    return 'bg-gray-50 text-gray-700 border-gray-200'
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      <div className="bg-white rounded-2xl p-6 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">任务中心</h2>
+          <div className="flex items-center gap-2">
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm">
+              <option value="all">全部类型</option>
+              <option value="video">视频</option>
+              <option value="image">图片</option>
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm">
+              <option value="all">全部状态</option>
+              <option value="submitted">已提交</option>
+              <option value="processing">生成中</option>
+              <option value="succeeded">成功</option>
+              <option value="failed">失败</option>
+            </select>
+            <button
+              onClick={async () => {
+                setLoading(true)
+                setError('')
+                try {
+                  await load(true)
+                } catch (e: any) {
+                  setError(e?.message || '刷新失败')
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              className="px-3 py-2 border rounded-lg text-sm"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+
+        {!!error && <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{error}</div>}
+
+        {loading ? (
+          <div className="h-44 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">任务加载中...</div>
+        ) : tasks.length ? (
+          <div className="space-y-3">
+            {tasks.map((t) => (
+              <div key={t.id} className="rounded-xl border p-4 bg-white">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm px-2 py-0.5 rounded bg-gray-100 text-gray-700">{t.type === 'video' ? '视频' : '图片'}</span>
+                      <span className={`text-sm px-2 py-0.5 rounded border ${statusClass(t.status)}`}>{statusLabel(t.status)}</span>
+                    </div>
+                    <div className="mt-2 text-sm text-gray-700 truncate">模型：{t.model || '-'}</div>
+                    <div className="mt-1 text-xs text-gray-400">创建时间：{new Date(t.created_at).toLocaleString()}</div>
+                    {t.provider_task_id ? <div className="mt-1 text-xs text-gray-400 break-all">任务ID：{t.provider_task_id}</div> : null}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {t.output_url ? (
+                      <>
+                        <a href={t.output_url} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-sm">预览</a>
+                        <a href={t.output_url} download className="px-3 py-2 rounded-lg border text-sm">下载</a>
+                      </>
+                    ) : (
+                      <span className="text-xs text-gray-400">暂无结果</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {hasMore && (
+              <button
+                disabled={loadingMore}
+                onClick={async () => {
+                  setLoadingMore(true)
+                  try {
+                    await load(false)
+                  } catch (e: any) {
+                    setError(e?.message || '加载更多失败')
+                  } finally {
+                    setLoadingMore(false)
+                  }
+                }}
+                className="w-full py-2 rounded-lg border text-sm disabled:opacity-50"
+              >
+                {loadingMore ? '加载中...' : '加载更多'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="h-44 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无任务记录</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Packages({ user, onRefreshUser }: { user: any; onRefreshUser: () => Promise<void> }) {
   const [busyPlan, setBusyPlan] = useState('')
   const [payError, setPayError] = useState('')
-  const [payInfo, setPayInfo] = useState<{ orderId: string; qrcode?: string; payUrl?: string } | null>(null)
+  const [payType, setPayType] = useState<'native' | 'alipay'>('native')
+  const [checkingPaid, setCheckingPaid] = useState(false)
+  const [payInfo, setPayInfo] = useState<{ orderId: string; qrcode?: string; payUrl?: string; status?: string; planId?: string } | null>(null)
   const accessToken = localStorage.getItem('tikgen.accessToken') || ''
+
+  useEffect(() => {
+    if (!payInfo?.orderId || payInfo.status === 'paid') return
+    let timer: any = null
+    let stopped = false
+    let tries = 0
+    const run = async () => {
+      if (stopped || !accessToken || !payInfo?.orderId) return
+      tries += 1
+      try {
+        const r = await getOrderStatus(payInfo.orderId, accessToken)
+        const st = String(r.order?.status || '').toLowerCase()
+        if (st === 'paid') {
+          setPayInfo((prev) => (prev ? { ...prev, status: 'paid' } : prev))
+          await onRefreshUser()
+          return
+        }
+      } catch {
+        // ignore transient polling failures
+      }
+      if (tries < 60) timer = setTimeout(run, 3000)
+    }
+    timer = setTimeout(run, 2500)
+    return () => {
+      stopped = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [payInfo?.orderId, payInfo?.status, accessToken, onRefreshUser])
+
+  const checkPaidNow = async () => {
+    if (!payInfo?.orderId || !accessToken) return
+    setCheckingPaid(true)
+    setPayError('')
+    try {
+      const r = await getOrderStatus(payInfo.orderId, accessToken)
+      const st = String(r.order?.status || '').toLowerCase()
+      if (st === 'paid') {
+        setPayInfo((prev) => (prev ? { ...prev, status: 'paid' } : prev))
+        await onRefreshUser()
+      } else {
+        setPayError('订单尚未支付完成，请完成付款后再检查。')
+      }
+    } catch (e: any) {
+      setPayError(e?.message || '检查支付状态失败')
+    } finally {
+      setCheckingPaid(false)
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-8 text-center">选择您的套餐</h2>
+      <div className="mb-6 bg-white rounded-2xl p-4 shadow border flex items-center justify-between">
+        <div className="text-sm text-gray-600">
+          当前套餐：
+          <span className="font-semibold text-gray-900 ml-1">{user?.package || 'trial'}</span>
+          {user?.packageExpiresAt ? <span className="ml-3">到期：{user.packageExpiresAt}</span> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">支付方式</span>
+          <select value={payType} onChange={(e) => setPayType(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="native">微信扫码</option>
+            <option value="alipay">支付宝</option>
+          </select>
+        </div>
+      </div>
       {payInfo && (
         <div className="mb-8 bg-white rounded-2xl p-6 shadow-lg border">
           <div className="flex items-center justify-between">
             <div>
               <div className="font-bold text-lg">请扫码支付</div>
               <div className="text-sm text-gray-500 mt-1">订单号：{payInfo.orderId}</div>
+              <div className="text-sm mt-1">
+                状态：
+                <span className={`ml-1 font-medium ${payInfo.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {payInfo.status === 'paid' ? '已支付，权益已更新' : '待支付'}
+                </span>
+              </div>
             </div>
             <button onClick={() => setPayInfo(null)} className="px-3 py-1.5 rounded-lg border text-sm">关闭</button>
           </div>
@@ -2591,10 +2837,11 @@ function Packages() {
                 </a>
               )}
               <button
-                onClick={() => window.location.reload()}
-                className="mt-3 ml-0 md:ml-3 px-4 py-2 rounded-xl border font-medium"
+                onClick={checkPaidNow}
+                disabled={checkingPaid}
+                className="mt-3 ml-0 md:ml-3 px-4 py-2 rounded-xl border font-medium disabled:opacity-50"
               >
-                我已支付，刷新权益
+                {checkingPaid ? '检查中...' : '我已支付，检查到账'}
               </button>
             </div>
           </div>
@@ -2632,8 +2879,8 @@ function Packages() {
                 if (!accessToken) return alert('请先登录')
                 setBusyPlan(pkg.id)
                 try {
-                  const r = await createOrder({ planId: pkg.id, payType: 'native' }, accessToken)
-                  setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl })
+                  const r = await createOrder({ planId: pkg.id, payType }, accessToken)
+                  setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl, status: 'created', planId: pkg.id })
                 } catch (e: any) {
                   setPayError(e?.message || '下单失败')
                 } finally {

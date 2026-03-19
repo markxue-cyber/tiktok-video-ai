@@ -1,5 +1,50 @@
 // Vercel Serverless Function - 视频生成API
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
+
+function mustEnv(name: string) {
+  const v = process.env[name]
+  if (!v) throw new Error(`缺少环境变量 ${name}`)
+  return v
+}
+
+function supabaseBaseUrl() {
+  return String(mustEnv('SUPABASE_URL')).replace(/\/$/, '')
+}
+
+async function writeTaskRow(payload: any) {
+  try {
+    const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
+    await fetch(`${supabaseBaseUrl()}/rest/v1/generation_tasks`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([payload]),
+    })
+  } catch {
+    // never block generation if task logging fails
+  }
+}
+
+async function updateTaskByProviderId(providerTaskId: string, patch: any) {
+  if (!providerTaskId) return
+  try {
+    const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
+    await fetch(`${supabaseBaseUrl()}/rest/v1/generation_tasks?provider_task_id=eq.${encodeURIComponent(providerTaskId)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+    })
+  } catch {
+    // never block generation if task logging fails
+  }
+}
 export default async function handler(req, res) {
   // 打印请求信息
   console.log('Request method:', req.method)
@@ -113,6 +158,15 @@ export default async function handler(req, res) {
         taskId: taskId,
         message: '视频生成中，预计需要3-5分钟'
       }
+      await writeTaskRow({
+        user_id: consumed?.user?.id || null,
+        type: 'video',
+        model: apiModel,
+        status: 'submitted',
+        provider_task_id: taskId,
+        output_url: null,
+        raw: { submit: submitData },
+      })
       await finalizeConsumption(req, { taskId: taskId, message: result.message }, taskId)
       return res.status(200).json(result)
     }
@@ -133,6 +187,16 @@ export default async function handler(req, res) {
 
       const statusData = await statusResponse.json()
       console.log('Status Response:', JSON.stringify(statusData))
+
+      const status = String(statusData.status || '').toLowerCase()
+      const outputUrl = statusData.data?.output || statusData.data?.outputs?.[0] || null
+      if (status === 'succeeded' || status === 'success' || status === 'completed') {
+        await updateTaskByProviderId(taskId, { status: 'succeeded', output_url: outputUrl, raw: statusData })
+      } else if (status === 'failed' || status === 'error') {
+        await updateTaskByProviderId(taskId, { status: 'failed', raw: statusData })
+      } else {
+        await updateTaskByProviderId(taskId, { status: 'processing' })
+      }
 
       return res.status(200).json({
         success: true,
