@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2 } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -115,6 +115,8 @@ function App() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authPassword2, setAuthPassword2] = useState('')
+  const [authShowPassword, setAuthShowPassword] = useState(false)
+  const [authShowPassword2, setAuthShowPassword2] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState('')
   const [mainNav, setMainNav] = useState<'create' | 'tools' | 'assets' | 'benefits'>('create')
@@ -248,9 +250,41 @@ function App() {
           <h2 className="text-3xl font-bold text-white text-center mb-8">{authMode === 'login' ? '登录账号' : '注册账号'}</h2>
           <div className="space-y-4">
             <input value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} type="email" placeholder="邮箱地址" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
-            <input value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} type="password" placeholder="密码" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
+            <div className="relative">
+              <input
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                type={authShowPassword ? 'text' : 'password'}
+                placeholder="密码"
+                className="w-full px-5 py-4 pr-14 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40"
+              />
+              <button
+                type="button"
+                aria-label={authShowPassword ? '隐藏密码' : '显示密码'}
+                onClick={() => setAuthShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10"
+              >
+                {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
             {authMode === 'register' && (
-              <input value={authPassword2} onChange={(e)=>setAuthPassword2(e.target.value)} type="password" placeholder="确认密码" className="w-full px-5 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40" />
+              <div className="relative">
+                <input
+                  value={authPassword2}
+                  onChange={(e) => setAuthPassword2(e.target.value)}
+                  type={authShowPassword2 ? 'text' : 'password'}
+                  placeholder="确认密码"
+                  className="w-full px-5 py-4 pr-14 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 outline-none focus:border-white/40"
+                />
+                <button
+                  type="button"
+                  aria-label={authShowPassword2 ? '隐藏确认密码' : '显示确认密码'}
+                  onClick={() => setAuthShowPassword2((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10"
+                >
+                  {authShowPassword2 ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             )}
             <button
               disabled={authBusy}
