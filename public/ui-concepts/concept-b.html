@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concept B - Creator Workspace</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+      .layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+      .side {
+        background: linear-gradient(180deg, #111827, #1f2937);
+        color: #e5e7eb;
+        padding: 20px 14px;
+      }
+      .logo { font-weight: 800; margin-bottom: 22px; font-size: 20px; }
+      .menu a {
+        display: block; color: #e5e7eb; text-decoration: none;
+        padding: 11px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 14px;
+      }
+      .menu a.active { background: linear-gradient(90deg, #ec4899, #8b5cf6); }
+      .main { padding: 18px 22px; }
+      .top {
+        display: flex; justify-content: space-between; align-items: center;
+        background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px;
+      }
+      .badge { background: #ede9fe; color: #6d28d9; border-radius: 999px; padding: 6px 10px; font-size: 12px; }
+      .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin-top: 14px; }
+      .card { background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px; }
+      .title { font-size: 15px; margin: 0 0 12px; font-weight: 700; }
+      .field { margin-bottom: 11px; }
+      .label { display:block; font-size: 12px; color: #64748b; margin-bottom: 6px; }
+      .input, .select, .textarea {
+        width: 100%; border: 1px solid #cbd5e1; border-radius: 10px;
+        padding: 10px 12px; background: #fff;
+      }
+      .textarea { min-height: 130px; resize: vertical; }
+      .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .btn {
+        border: 0; border-radius: 10px; padding: 12px 14px; cursor: pointer;
+        background: linear-gradient(90deg, #ec4899, #8b5cf6); color: white; font-weight: 700;
+      }
+      .preview {
+        height: 320px; border: 2px dashed #cbd5e1; border-radius: 12px;
+        display: grid; place-items: center; color: #94a3b8;
+      }
+      .timeline { display: grid; gap: 8px; }
+      .line { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; font-size: 13px; }
+      @media (max-width: 1080px) {
+        .layout { grid-template-columns: 1fr; }
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="side">
+        <div class="logo">TikGen AI</div>
+        <nav class="menu">
+          <a class="active" href="#">创作</a>
+          <a href="#">工具</a>
+          <a href="#">资产库</a>
+          <a href="#">个人权益</a>
+        </nav>
+      </aside>
+      <main class="main">
+        <div class="top">
+          <div>
+            <strong>创作工作台</strong>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;">以任务流为核心：解析 -> 脚本 -> 生成 -> 归档</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span class="badge">专业版 · 2026-04-19 到期</span>
+            <span style="font-size:14px;">haoxue2027@gmail.com</span>
+          </div>
+        </div>
+
+        <div class="grid">
+          <section class="card">
+            <h3 class="title">视频生成参数区（示意）</h3>
+            <div class="field"><span class="label">上传参考图</span><input class="input" value="已上传：bedside-lamp.jpg" /></div>
+            <div class="row">
+              <div class="field"><span class="label">模型</span><select class="select"><option>Sora 2.0</option></select></div>
+              <div class="field"><span class="label">分辨率</span><select class="select"><option>720p</option></select></div>
+              <div class="field"><span class="label">时长</span><select class="select"><option>10s</option></select></div>
+            </div>
+            <div class="field"><span class="label">视频文案描述</span><textarea class="textarea">强调产品卖点与真实使用场景，前3秒有钩子，结尾明确CTA。</textarea></div>
+            <button class="btn">生成视频</button>
+          </section>
+          <section class="card">
+            <h3 class="title">生成结果区（示意）</h3>
+            <div class="preview">视频生成中…（支持切页后继续）</div>
+            <div style="margin-top:12px;font-size:12px;color:#64748b;">任务ID: tk_20260319_xxx</div>
+          </section>
+        </div>
+
+        <div class="card" style="margin-top:14px;">
+          <h3 class="title">推荐交互：任务时间线</h3>
+          <div class="timeline">
+            <div class="line">1) 商品信息 AI 解析完成</div>
+            <div class="line">2) 视频脚本生成（第 1 批，共 3 条）</div>
+            <div class="line">3) 已应用风格标签：真人感 / 高端 / 口播优先</div>
+            <div class="line">4) 任务提交成功，预计 3-5 分钟出片</div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+  </html>

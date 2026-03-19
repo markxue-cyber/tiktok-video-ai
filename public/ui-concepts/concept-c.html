@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concept C - E-commerce Focus</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #0f172a;
+        background: #ffffff;
+      }
+      .top {
+        padding: 18px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+      .brand { font-size: 20px; font-weight: 800; }
+      .cta { display: flex; gap: 8px; }
+      .btn {
+        padding: 9px 14px; border-radius: 10px; text-decoration: none; font-size: 14px;
+        border: 1px solid #cbd5e1; color: #334155;
+      }
+      .btn.primary { border: none; background: #7c3aed; color: #fff; }
+      .hero {
+        max-width: 1180px; margin: 26px auto; padding: 0 20px;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+      }
+      .box {
+        border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px;
+      }
+      h1 { margin: 0; font-size: 42px; line-height: 1.2; }
+      .sub { margin: 14px 0 20px; color: #475569; line-height: 1.7; }
+      .steps { display: grid; gap: 10px; }
+      .step {
+        border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px;
+        font-size: 14px; color: #334155; background: #f8fafc;
+      }
+      .metrics {
+        margin-top: 14px;
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      }
+      .m {
+        background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 10px; padding: 10px;
+        text-align: center;
+      }
+      .m strong { display: block; font-size: 20px; color: #6d28d9; }
+      .table {
+        margin-top: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .row {
+        display: grid; grid-template-columns: 120px 1fr 120px;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .row:last-child { border-bottom: none; }
+      .cell { padding: 10px 12px; font-size: 13px; }
+      .head { background: #f8fafc; font-weight: 700; }
+      .footer {
+        max-width: 1180px; margin: 0 auto 30px; padding: 0 20px;
+      }
+      .panel {
+        border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px;
+        background: linear-gradient(180deg, #ffffff, #f8fafc);
+      }
+      @media (max-width: 980px) {
+        .hero { grid-template-columns: 1fr; }
+        h1 { font-size: 34px; }
+        .metrics { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">TikGen AI · 电商增长版</div>
+      <div class="cta">
+        <a href="#" class="btn">登录</a>
+        <a href="#" class="btn primary">立即体验</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="box">
+        <h1>不是“能生成”<br />而是“能转化”</h1>
+        <div class="sub">
+          针对电商场景优化：先识别商品，再生成脚本和提示词，最后统一归档，形成可复用的创作资产。
+        </div>
+        <div class="steps">
+          <div class="step">Step 1. 商品信息解析（名称/类目/卖点/人群）</div>
+          <div class="step">Step 2. 分镜脚本生成（多批可换，支持编辑）</div>
+          <div class="step">Step 3. 风格标签优化（真人感/高端/简洁/电影感）</div>
+          <div class="step">Step 4. 生成图视频并自动沉淀到资产库</div>
+        </div>
+      </div>
+      <div class="box">
+        <div style="font-weight:700;margin-bottom:8px;">业务看板（示意）</div>
+        <div class="metrics">
+          <div class="m"><strong>+28%</strong><span>CTR 提升</span></div>
+          <div class="m"><strong>-61%</strong><span>出图时长</span></div>
+          <div class="m"><strong>3.2x</strong><span>素材复用率</span></div>
+        </div>
+        <div class="table">
+          <div class="row head"><div class="cell">模块</div><div class="cell">能力</div><div class="cell">状态</div></div>
+          <div class="row"><div class="cell">创作</div><div class="cell">视频生成 / 图片生成 / 一键提示词</div><div class="cell">稳定</div></div>
+          <div class="row"><div class="cell">工具</div><div class="cell">去字幕 / 去水印 / 画质提升</div><div class="cell">规划中</div></div>
+          <div class="row"><div class="cell">资产库</div><div class="cell">上传与生成资产沉淀 / 搜索 / 排序 / 批量管理</div><div class="cell">可用</div></div>
+          <div class="row"><div class="cell">权益中心</div><div class="cell">套餐与支付闭环</div><div class="cell">可用</div></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <div class="panel">
+        视觉策略：减少“实验感组件”与冗余线框，统一品牌主色和卡片层级，突出“转化导向数据”和“任务流程反馈”。
+      </div>
+    </div>
+  </body>
+  </html>
