@@ -1,6 +1,5 @@
 import crypto from 'crypto'
 import { getSupabaseAdmin } from './_supabase.js'
-import { sentryCaptureException, sentryCaptureMessage } from './_sentry.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
@@ -56,7 +55,6 @@ export default async function handler(req, res) {
 
     const planId = String(order.plan_id)
     await admin.from('orders').update({ status: 'paid', paid_at: new Date().toISOString(), raw: data }).eq('id', order.id)
-    sentryCaptureMessage('payment_webhook_paid', { orderId, planId, userId: order.user_id })
 
     // Fulfill subscription: extend from max(now, current_end)
     const days = PLAN_DAYS[planId] || 30
@@ -81,8 +79,7 @@ export default async function handler(req, res) {
       )
 
     return res.status(200).send('ok')
-  } catch (e) {
-    sentryCaptureException(e, { handler: 'api/payments-webhook' })
+  } catch {
     // Always return ok to avoid repeated retries storms; errors are visible in Supabase raw fields/logs.
     return res.status(200).send('ok')
   }

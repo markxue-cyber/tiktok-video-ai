@@ -1,6 +1,5 @@
 // Vercel Serverless Function - 图片生成API（聚合API / OpenAI兼容）
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
-import { sentryCaptureException, sentryCaptureMessage } from './_sentry.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -174,7 +173,6 @@ export default async function handler(req, res) {
         output_url: null,
         raw: { upstream_status: upstreamResp.status, upstream: data || rawText },
       })
-      sentryCaptureMessage('image_generation_failed', { model: model || '', upstreamStatus: upstreamResp.status })
       return res.status(200).json({ success: false, error: msg, raw: data || rawText })
     }
 
@@ -195,7 +193,6 @@ export default async function handler(req, res) {
         output_url: result.imageUrl,
         raw: data,
       })
-      sentryCaptureMessage('image_generation_succeeded', { model: model || '', outputKind: 'b64' })
       await finalizeConsumption(req, result)
       return res.status(200).json({ success: true, ...result })
     }
@@ -210,7 +207,6 @@ export default async function handler(req, res) {
         output_url: result.imageUrl,
         raw: data,
       })
-      sentryCaptureMessage('image_generation_succeeded', { model: model || '', outputKind: 'url' })
       await finalizeConsumption(req, result)
       return res.status(200).json({ success: true, ...result })
     }
@@ -224,14 +220,12 @@ export default async function handler(req, res) {
       output_url: null,
       raw: data || rawText,
     })
-    sentryCaptureMessage('image_generation_failed', { model: model || '', reason: 'no_output_url_or_b64' })
     return res.status(200).json({
       success: false,
       error: '上游未返回可识别的图片地址（url/b64_json）',
       raw: data || rawText,
     })
   } catch (e) {
-    sentryCaptureException(e, { handler: 'api/image-generate' })
     return res.status(500).json({ success: false, error: e?.message || 'Unknown error' })
   }
 }
