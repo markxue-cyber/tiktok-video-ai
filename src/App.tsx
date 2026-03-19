@@ -2008,6 +2008,9 @@ function Assets() {
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [busyId, setBusyId] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
 
   const loadSource = async (source: 'user_upload' | 'ai_generated', reset: boolean) => {
     const isUser = source === 'user_upload'
@@ -2131,10 +2134,63 @@ function Assets() {
     }
   }
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const applyView = (items: AssetItem[]) => {
+    const kw = searchKeyword.trim().toLowerCase()
+    const filtered = kw
+      ? items.filter((a) => {
+          const name = String(a.name || '').toLowerCase()
+          const meta = JSON.stringify(a.metadata || {}).toLowerCase()
+          return name.includes(kw) || meta.includes(kw)
+        })
+      : items
+    return [...filtered].sort((a, b) => {
+      const ta = new Date(a.created_at).getTime()
+      const tb = new Date(b.created_at).getTime()
+      return sortBy === 'newest' ? tb - ta : ta - tb
+    })
+  }
+
+  const shownUserUploads = applyView(userUploads)
+  const shownAiOutputs = applyView(aiOutputs)
+
+  const handleBatchDelete = async () => {
+    if (!selectedIds.size) return
+    if (!window.confirm(`确认批量删除 ${selectedIds.size} 个资产吗？删除后不可恢复。`)) return
+    setError('')
+    const ids = Array.from(selectedIds)
+    try {
+      for (const id of ids) {
+        await deleteAssetAPI(id)
+      }
+      setSelectedIds(new Set())
+      setUserUploads((prev) => prev.filter((x) => !ids.includes(x.id)))
+      setAiOutputs((prev) => prev.filter((x) => !ids.includes(x.id)))
+    } catch (e: any) {
+      setError(e?.message || '批量删除失败')
+    }
+  }
+
   const renderAssetCard = (a: AssetItem) => {
     const isImage = a.type === 'image'
+    const checked = selectedIds.has(a.id)
     return (
       <div key={a.id} className="rounded-xl border bg-white p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <label className="inline-flex items-center gap-1 text-xs text-gray-500">
+            <input type="checkbox" checked={checked} onChange={() => toggleSelect(a.id)} />
+            选择
+          </label>
+          <span className="text-[11px] text-gray-400">{a.type === 'image' ? '图片' : '视频'}</span>
+        </div>
         <div className="h-28 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden">
           {isImage ? (
             <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-cover" />
@@ -2159,6 +2215,27 @@ function Assets() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">资产库</h2>
         <div className="flex items-center gap-2">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="px-3 py-2 border rounded-lg text-sm bg-white"
+          >
+            <option value="newest">按时间：最新</option>
+            <option value="oldest">按时间：最早</option>
+          </select>
+          <input
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            placeholder="搜索名称/备注"
+            className="px-3 py-2 border rounded-lg text-sm w-44"
+          />
+          <button
+            disabled={!selectedIds.size}
+            onClick={handleBatchDelete}
+            className="px-3 py-2 border rounded-lg text-sm text-red-600 border-red-200 disabled:opacity-50"
+          >
+            批量删除({selectedIds.size})
+          </button>
           <button onClick={refreshAll} className="px-3 py-2 border rounded-lg text-sm">刷新</button>
           <label className="px-4 py-2 bg-gray-900 text-white rounded-lg cursor-pointer">
             {uploading ? '上传中...' : '上传素材'}
@@ -2193,9 +2270,9 @@ function Assets() {
           <div className="mt-4">
             {loading ? (
               <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
-            ) : userUploads.length ? (
+            ) : shownUserUploads.length ? (
               <>
-                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{userUploads.map(renderAssetCard)}</div>
+                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{shownUserUploads.map(renderAssetCard)}</div>
                 {userHasMore && (
                   <button
                     disabled={loadingMoreUser}
@@ -2237,9 +2314,9 @@ function Assets() {
           <div className="mt-4">
             {loading ? (
               <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
-            ) : aiOutputs.length ? (
+            ) : shownAiOutputs.length ? (
               <>
-                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{aiOutputs.map(renderAssetCard)}</div>
+                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{shownAiOutputs.map(renderAssetCard)}</div>
                 {aiHasMore && (
                   <button
                     disabled={loadingMoreAi}
