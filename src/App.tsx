@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -287,7 +287,7 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [authResendBusy, setAuthResendBusy] = useState(false)
-  const [mainNav, setMainNav] = useState<'create' | 'templates' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'help' | 'developer'>('create')
+  const [mainNav, setMainNav] = useState<'create' | 'templates' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
@@ -295,6 +295,8 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingStep, setOnboardingStep] = useState(0)
   const [showFeedback, setShowFeedback] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
 
   const readSession = () => {
     try {
@@ -829,7 +831,6 @@ function App() {
             onClick={() => setMainNav('assets')}
           />
           <NavPrimary icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
-          <NavPrimary icon={<Library className="w-5 h-5" />} label="帮助中心" active={mainNav === 'help'} onClick={() => setMainNav('help')} />
           {isDevAdmin && <NavPrimary icon={<ShieldCheck className="w-5 h-5" />} label="开发者后台" active={mainNav === 'developer'} onClick={() => setMainNav('developer')} />}
         </nav>
       </aside>
@@ -855,27 +856,47 @@ function App() {
                 {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
-                {mainNav === 'help' && '帮助中心'}
                 {mainNav === 'developer' && '开发者后台'}
               </h1>
             </div>
             <div className="flex items-center space-x-4">
+              <button onClick={() => setShowFeedback(true)} className="p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="反馈问题">
+                <MessageSquare className="w-5 h-5" />
+              </button>
+              <button onClick={() => setShowHelp(true)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
+                <Library className="w-5 h-5" />
+              </button>
               <div className="flex items-center space-x-2 bg-gradient-to-r from-pink-50 to-purple-50 px-4 py-2 rounded-full"><Zap className="w-5 h-5 text-pink-500" /><span className="font-bold text-pink-600">{user?.credits}</span><span className="text-sm text-pink-500">积分</span></div>
               <div className="flex items-center space-x-2 px-3 py-1.5 bg-amber-50 rounded-full">
                 <Crown className="w-4 h-4 text-amber-500" />
                 <span className="text-sm font-medium text-amber-700">{currentPackage?.name}</span>
                 <span className="text-xs text-amber-600/80">至 {user?.packageExpiresAt}</span>
               </div>
-              <div className="flex items-center space-x-2"><div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-white" /></div><span className="text-sm font-medium">{user?.name}</span></div>
-              <button onClick={() => setShowFeedback(true)} className="px-3 py-1.5 rounded-lg text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
-                反馈问题
-              </button>
-              <button
-                onClick={handleLogout}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu((v) => !v)}
+                  className="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-100"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="text-sm font-medium">{user?.name}</span>
+                </button>
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-36 bg-white border rounded-lg shadow-lg z-30 p-1">
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false)
+                        handleLogout()
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-100 text-sm text-gray-700 flex items-center"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      退出登录
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -903,7 +924,6 @@ function App() {
           )}
           {mainNav === 'assets' && <Assets />}
           {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} />}
-          {mainNav === 'help' && <HelpCenter />}
           {mainNav === 'tasks' && <TaskCenter />}
           {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
@@ -926,6 +946,17 @@ function App() {
         />
       )}
       <FeedbackLite open={showFeedback} onClose={() => setShowFeedback(false)} currentPage={currentPageLabel} />
+      {showHelp && (
+        <div className="fixed inset-0 bg-black/45 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl border shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">帮助中心</h3>
+              <button onClick={() => setShowHelp(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
+            <HelpCenter />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
