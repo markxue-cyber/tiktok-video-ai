@@ -287,7 +287,7 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [authResendBusy, setAuthResendBusy] = useState(false)
-  const [mainNav, setMainNav] = useState<'create' | 'templates' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
+  const [mainNav, setMainNav] = useState<'create' | 'templates' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'help' | 'developer'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
@@ -829,6 +829,7 @@ function App() {
             onClick={() => setMainNav('assets')}
           />
           <NavPrimary icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
+          <NavPrimary icon={<Library className="w-5 h-5" />} label="帮助中心" active={mainNav === 'help'} onClick={() => setMainNav('help')} />
           {isDevAdmin && <NavPrimary icon={<ShieldCheck className="w-5 h-5" />} label="开发者后台" active={mainNav === 'developer'} onClick={() => setMainNav('developer')} />}
         </nav>
       </aside>
@@ -854,6 +855,7 @@ function App() {
                 {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
+                {mainNav === 'help' && '帮助中心'}
                 {mainNav === 'developer' && '开发者后台'}
               </h1>
             </div>
@@ -901,6 +903,7 @@ function App() {
           )}
           {mainNav === 'assets' && <Assets />}
           {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} />}
+          {mainNav === 'help' && <HelpCenter />}
           {mainNav === 'tasks' && <TaskCenter />}
           {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
@@ -1174,6 +1177,91 @@ function FeedbackLite({
             <button onClick={handleSubmit} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">发送反馈</button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function HelpCenter() {
+  const [keyword, setKeyword] = useState('')
+  const faqSections = [
+    {
+      title: '账号与登录',
+      items: [
+        { q: '登录提示 Invalid login credentials 怎么办？', a: '确认账号密码；若忘记密码请使用“忘记密码”；若刚注册请先完成邮箱验证。' },
+        { q: '点击重置密码邮件后没有进入设置新密码页面？', a: '建议使用无痕窗口打开链接；若仍异常，请附上截图与链接参数反馈。' },
+      ],
+    },
+    {
+      title: '图片/视频生成',
+      items: [
+        { q: '模型不可用怎么处理？', a: '切换到标记为可用的模型后重试；优先选择非“暂不可用”模型。' },
+        { q: '生成超时怎么办？', a: '先去任务中心查看状态；若失败可点击“重试（保留参数）”，必要时降低分辨率/时长。' },
+        { q: 'DALL·E 3 尺寸错误怎么办？', a: '该模型只支持固定三档尺寸。系统已自动映射，刷新后重试即可。' },
+      ],
+    },
+    {
+      title: '额度与套餐',
+      items: [
+        { q: '提示“今日额度已用尽”怎么办？', a: '说明已达到当日上限，可升级套餐或等待次日恢复。' },
+      ],
+    },
+  ]
+
+  const errorCodeGuide = [
+    { code: 'MODEL_UNAVAILABLE', action: '切换可用模型后重试。' },
+    { code: 'QUOTA_EXHAUSTED', action: '升级套餐或等待次日额度恢复。' },
+    { code: 'UPSTREAM_TIMEOUT', action: '稍后重试，必要时降低分辨率/时长。' },
+    { code: 'UPSTREAM_NO_TASKID', action: '上游返回异常，建议重试并保留 request id。' },
+    { code: 'NO_OUTPUT', action: '上游未返回结果，建议更换模型重试。' },
+    { code: 'UNKNOWN', action: '复制完整报错与任务ID，通过反馈入口提交。' },
+  ]
+
+  const kw = keyword.trim().toLowerCase()
+  const filteredSections = faqSections
+    .map((sec) => ({ ...sec, items: sec.items.filter((it) => !kw || `${it.q} ${it.a}`.toLowerCase().includes(kw)) }))
+    .filter((sec) => sec.items.length > 0)
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border p-6 shadow-sm">
+        <h2 className="text-xl font-bold">帮助中心 / FAQ</h2>
+        <p className="text-sm text-gray-500 mt-1">先搜索关键词；仍无法解决可点击右上角“反馈问题”。</p>
+        <input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="搜索关键词（登录失败、额度、模型不可用、超时）"
+          className="w-full mt-4 px-4 py-2.5 border rounded-lg"
+        />
+      </div>
+
+      <div className="bg-white rounded-2xl border p-6 shadow-sm">
+        <h3 className="font-semibold mb-3">错误码对照</h3>
+        <div className="grid md:grid-cols-2 gap-3">
+          {errorCodeGuide.map((x) => (
+            <div key={x.code} className="rounded-lg border p-3 bg-gray-50">
+              <div className="text-sm font-medium text-gray-900">{x.code}</div>
+              <div className="text-sm text-gray-600 mt-1">{x.action}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {filteredSections.map((sec) => (
+          <div key={sec.title} className="bg-white rounded-2xl border p-6 shadow-sm">
+            <h3 className="font-semibold mb-3">{sec.title}</h3>
+            <div className="space-y-3">
+              {sec.items.map((item, idx) => (
+                <details key={`${sec.title}-${idx}`} className="group border rounded-lg p-3">
+                  <summary className="cursor-pointer font-medium text-gray-900">{item.q}</summary>
+                  <p className="text-sm text-gray-600 mt-2 leading-6">{item.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        ))}
+        {filteredSections.length === 0 && <div className="bg-white rounded-2xl border p-8 text-center text-gray-500">没有匹配到结果，可换关键词试试。</div>}
       </div>
     </div>
   )
