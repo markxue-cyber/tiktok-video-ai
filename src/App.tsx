@@ -9,6 +9,7 @@ import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
+import { Sentry } from './sentry'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -468,9 +469,11 @@ function App() {
                   const token = session?.access_token
                   if (!token) throw new Error('登录成功但未返回 token')
                   saveSession(session)
+                  Sentry.captureMessage('auth_login_success', { level: 'info', extra: { mode: authMode } })
                   setAccessToken(token)
                 } catch (e:any) {
                   const msg = String(e?.message || '登录失败')
+                  Sentry.captureException(e, { extra: { scene: 'auth_submit', mode: authMode } })
                   if (authMode === 'register' && msg.toLowerCase().includes('rate limit')) {
                     // Supabase auth has strict anti-abuse limits. We keep a short local cooldown
                     // to prevent repeated requests from the same browser/IP.
@@ -963,6 +966,7 @@ function VideoGenerator() {
         if (status === 'succeeded' || status === 'success' || status === 'completed') {
           if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
           setGeneratedVideo(s.videoUrl)
+          Sentry.captureMessage('video_generation_success', { level: 'info', extra: { taskId: submit.taskId, model } })
           await safeArchiveAsset({
             source: 'ai_generated',
             type: 'video',
@@ -984,6 +988,7 @@ function VideoGenerator() {
 
       throw new Error('生成超时，请稍后在任务列表中查看')
     } catch (e: any) {
+      Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
       setErrorText(e?.message || '生成失败')
       setIsGenerating(false)
       setStatusText('')
@@ -1687,6 +1692,7 @@ function ImageGenerator() {
         refImage: refImageDataUrl || undefined,
       })
       setGeneratedImage(r.imageUrl)
+      Sentry.captureMessage('image_generation_success', { level: 'info', extra: { model, size, resolution } })
       await safeArchiveAsset({
         source: 'ai_generated',
         type: 'image',
@@ -1720,6 +1726,7 @@ function ImageGenerator() {
         setIsQcBusy(false)
       }
     } catch (e: any) {
+      Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution } })
       alert(e?.message || '生成失败')
       clearInterval(timer)
       setGenProgress(0)
@@ -2880,8 +2887,10 @@ function Packages({ user, onRefreshUser }: { user: any; onRefreshUser: () => Pro
                 setBusyPlan(pkg.id)
                 try {
                   const r = await createOrder({ planId: pkg.id, payType }, accessToken)
+                  Sentry.captureMessage('payment_order_create_success', { level: 'info', extra: { planId: pkg.id, payType } })
                   setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl, status: 'created', planId: pkg.id })
                 } catch (e: any) {
+                  Sentry.captureException(e, { extra: { scene: 'create_order', planId: pkg.id, payType } })
                   setPayError(e?.message || '下单失败')
                 } finally {
                   setBusyPlan('')

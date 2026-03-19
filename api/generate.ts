@@ -1,5 +1,6 @@
 // Vercel Serverless Function - 视频生成API
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
+import { sentryCaptureException, sentryCaptureMessage } from './_sentry.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -167,6 +168,7 @@ export default async function handler(req, res) {
         output_url: null,
         raw: { submit: submitData },
       })
+      sentryCaptureMessage('video_generation_submitted', { taskId, model: apiModel, userId: consumed?.user?.id || '' })
       await finalizeConsumption(req, { taskId: taskId, message: result.message }, taskId)
       return res.status(200).json(result)
     }
@@ -192,8 +194,10 @@ export default async function handler(req, res) {
       const outputUrl = statusData.data?.output || statusData.data?.outputs?.[0] || null
       if (status === 'succeeded' || status === 'success' || status === 'completed') {
         await updateTaskByProviderId(taskId, { status: 'succeeded', output_url: outputUrl, raw: statusData })
+        sentryCaptureMessage('video_generation_succeeded', { taskId, outputUrl })
       } else if (status === 'failed' || status === 'error') {
         await updateTaskByProviderId(taskId, { status: 'failed', raw: statusData })
+        sentryCaptureMessage('video_generation_failed', { taskId, failReason: statusData?.fail_reason || '' })
       } else {
         await updateTaskByProviderId(taskId, { status: 'processing' })
       }
@@ -211,6 +215,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error:', error)
+    sentryCaptureException(error, { handler: 'api/generate', method: req.method })
     return res.status(500).json({ success: false, error: error.message })
   }
 }

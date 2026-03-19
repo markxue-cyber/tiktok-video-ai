@@ -1,4 +1,5 @@
 import React from 'react';
+import { Sentry } from '../sentry';
 
 const searilizeError = (error: any) => {
   if (error instanceof Error) {
@@ -18,6 +19,14 @@ export class ErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, info: React.ErrorInfo) {
+    try {
+      Sentry.captureException(error, { extra: { componentStack: info?.componentStack || '' } });
+    } catch {
+      // ignore
+    }
   }
 
   render() {

@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { getSupabaseAdmin, requireUser } from './_supabase.js'
+import { sentryCaptureException, sentryCaptureMessage } from './_sentry.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
@@ -73,9 +74,11 @@ export default async function handler(req, res) {
     const qrcode = data?.qrcode || data?.data?.qrcode || ''
 
     await admin.from('orders').update({ raw: data }).eq('provider', 'xorpay').eq('provider_order_id', orderId)
+    sentryCaptureMessage('payment_order_created', { orderId, planId: String(planId), payType: type, userId: user.id })
 
     return res.status(200).json({ success: true, orderId, payUrl, qrcode, raw: data })
   } catch (e: any) {
+    sentryCaptureException(e, { handler: 'api/payments-create-order' })
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }
 }
