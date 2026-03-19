@@ -68,12 +68,12 @@ export default async function handler(req, res) {
   try {
     const { userId, email } = await requireUser(req)
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
-    const allowEmails = String(process.env.MONITOR_ADMIN_EMAILS || '')
+    const allowEmails = String(process.env.MONITOR_ADMIN_EMAILS || 'haoxue2027@gmail.com')
       .split(',')
       .map((x) => x.trim().toLowerCase())
       .filter(Boolean)
     const wantSystem = String(req.query?.scope || 'system').toLowerCase() === 'system'
-    const isAdmin = allowEmails.length ? allowEmails.includes(email) : true
+    const isAdmin = allowEmails.includes(email)
     const useSystemScope = wantSystem && isAdmin
     const now = new Date()
     const from24h = new Date(now.getTime() - 24 * 3600 * 1000).toISOString()

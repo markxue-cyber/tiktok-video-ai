@@ -9,6 +9,7 @@ import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
+import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { Sentry } from './sentry'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -210,7 +211,7 @@ function App() {
   const [authShowPassword2, setAuthShowPassword2] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [mainNav, setMainNav] = useState<'create' | 'tasks' | 'tools' | 'assets' | 'benefits'>('create')
+  const [mainNav, setMainNav] = useState<'create' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
 
@@ -298,6 +299,10 @@ function App() {
   }
 
   const currentPackage = useMemo(() => PACKAGES.find((p) => p.id === user?.package), [user?.package])
+  const isDevAdmin = useMemo(() => {
+    const email = String(user?.email || '').toLowerCase()
+    return ['haoxue2027@gmail.com'].includes(email)
+  }, [user?.email])
 
   useEffect(() => {
     if (!accessToken || page !== 'home') return
@@ -578,6 +583,7 @@ function App() {
             onClick={() => setMainNav('assets')}
           />
           <NavPrimary icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
+          {isDevAdmin && <NavPrimary icon={<ShieldCheck className="w-5 h-5" />} label="开发者后台" active={mainNav === 'developer'} onClick={() => setMainNav('developer')} />}
         </nav>
       </aside>
       <main className="flex-1 ml-64">
@@ -592,6 +598,7 @@ function App() {
                 {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
+                {mainNav === 'developer' && '开发者后台'}
               </h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -623,6 +630,7 @@ function App() {
           {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} />}
           {mainNav === 'tasks' && <TaskCenter />}
           {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
+          {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
         </div>
       </main>
     </div>
@@ -2765,6 +2773,99 @@ function TaskCenter() {
           </div>
         ) : (
           <div className="h-44 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无任务记录</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DeveloperConsole() {
+  const accessToken = localStorage.getItem('tikgen.accessToken') || ''
+  const [stats, setStats] = useState<MonitoringStats | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [scope, setScope] = useState<'system' | 'self'>('system')
+
+  const load = async () => {
+    if (!accessToken) return
+    setLoading(true)
+    setError('')
+    try {
+      const s = await getMonitoringStatsAPI(accessToken, scope)
+      setStats(s)
+    } catch (e: any) {
+      setError(e?.message || '获取监控统计失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope])
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      <div className="bg-white rounded-2xl p-6 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold">系统稳定性监控</h2>
+            <p className="text-sm text-gray-500 mt-1">近24小时任务与支付分布</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={scope} onChange={(e) => setScope(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm">
+              <option value="system">全系统</option>
+              <option value="self">仅我自己</option>
+            </select>
+            <button onClick={() => void load()} className="px-3 py-2 border rounded-lg text-sm">
+              {loading ? '刷新中...' : '刷新'}
+            </button>
+          </div>
+        </div>
+
+        {!!error && <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{error}</div>}
+
+        {stats ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div className="rounded-lg border p-3 bg-gray-50"><div className="text-xs text-gray-500">任务总数</div><div className="text-xl font-bold">{stats.total}</div></div>
+              <div className="rounded-lg border p-3 bg-red-50"><div className="text-xs text-red-500">失败率</div><div className="text-xl font-bold text-red-600">{(stats.failedRate * 100).toFixed(1)}%</div></div>
+              <div className="rounded-lg border p-3 bg-emerald-50"><div className="text-xs text-emerald-600">成功</div><div className="text-xl font-bold text-emerald-700">{stats.byStatus.succeeded}</div></div>
+              <div className="rounded-lg border p-3 bg-amber-50"><div className="text-xs text-amber-600">处理中</div><div className="text-xl font-bold text-amber-700">{stats.byStatus.processing + stats.byStatus.submitted}</div></div>
+              <div className="rounded-lg border p-3 bg-white"><div className="text-xs text-gray-500">图片任务</div><div className="text-xl font-bold">{stats.byType.image}</div></div>
+              <div className="rounded-lg border p-3 bg-white"><div className="text-xs text-gray-500">视频任务</div><div className="text-xl font-bold">{stats.byType.video}</div></div>
+            </div>
+
+            <div className="mt-4 grid md:grid-cols-2 gap-4">
+              <div className="rounded-lg border p-4">
+                <div className="font-medium mb-2">错误分布 TOP</div>
+                {stats.errorTop.length ? (
+                  <div className="space-y-2">
+                    {stats.errorTop.map((x, i) => (
+                      <div key={i} className="text-sm flex items-center justify-between gap-2">
+                        <span className="truncate text-gray-700">{x.message}</span>
+                        <span className="text-red-600 font-semibold">{x.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-400">暂无错误</div>
+                )}
+              </div>
+              <div className="rounded-lg border p-4">
+                <div className="font-medium mb-2">支付状态分布（24h）</div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded bg-gray-50 px-3 py-2">created：<span className="font-semibold">{stats.orders24h.byStatus.created}</span></div>
+                  <div className="rounded bg-emerald-50 px-3 py-2 text-emerald-700">paid：<span className="font-semibold">{stats.orders24h.byStatus.paid}</span></div>
+                  <div className="rounded bg-red-50 px-3 py-2 text-red-700">failed：<span className="font-semibold">{stats.orders24h.byStatus.failed}</span></div>
+                  <div className="rounded bg-gray-50 px-3 py-2">refunded：<span className="font-semibold">{stats.orders24h.byStatus.refunded}</span></div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="h-40 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">监控统计加载中...</div>
         )}
       </div>
     </div>
