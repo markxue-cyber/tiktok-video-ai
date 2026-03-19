@@ -436,8 +436,13 @@ function App() {
           </div>
         </header>
         <div className="p-6">
-          {mainNav === 'create' && createNav === 'video' && <VideoGenerator />}
-          {mainNav === 'create' && createNav === 'image' && <ImageGenerator />}
+          {/* Keep generators mounted so in-flight tasks survive nav switches. */}
+          <div className={mainNav === 'create' && createNav === 'video' ? '' : 'hidden'}>
+            <VideoGenerator />
+          </div>
+          <div className={mainNav === 'create' && createNav === 'image' ? '' : 'hidden'}>
+            <ImageGenerator />
+          </div>
           {mainNav === 'assets' && <Assets />}
           {mainNav === 'benefits' && <Packages />}
           {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
