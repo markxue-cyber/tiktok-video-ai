@@ -84,6 +84,17 @@ export async function adminUpsertPackageConfig(params: any) {
   return data
 }
 
+export async function adminDeletePackageConfig(planId: string) {
+  const resp = await fetch('/api/admin/package-configs/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ planId }),
+  })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `删除套餐失败(${resp.status})`)
+  return data
+}
+
 export async function adminListAnnouncements() {
   const resp = await fetch('/api/admin/announcements/list', { headers: { ...authHeader() } })
   const data = await readJsonOrText(resp)

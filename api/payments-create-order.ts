@@ -5,20 +5,28 @@ function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
 }
 
-const PLANS: Record<string, { amountCents: number; name: string; days: number }> = {
-  trial: { amountCents: 0, name: '试用版', days: 7 },
-  basic: { amountCents: 6900, name: '基础版', days: 30 },
-  pro: { amountCents: 24900, name: '专业版', days: 30 },
-  enterprise: { amountCents: 119900, name: '旗舰版', days: 30 },
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
   try {
     const { user } = await requireUser(req)
     const { planId, payType } = req.body || {}
-    const plan = PLANS[String(planId || '')]
-    if (!plan) return res.status(400).json({ success: false, error: '无效的 planId' })
+    const pid = String(planId || '').trim()
+    if (!pid) return res.status(400).json({ success: false, error: '无效的 planId' })
+
+    const admin = getSupabaseAdmin()
+    const { data: cfg, error: cfgErr } = await admin
+      .from('package_configs')
+      .select('*')
+      .eq('plan_id', pid)
+      .is('deleted_at', null)
+      .single()
+    if (cfgErr || !cfg) return res.status(400).json({ success: false, error: '套餐不存在或已下线' })
+    if (cfg.enabled === false) return res.status(400).json({ success: false, error: '套餐当前不可购买' })
+    const plan = {
+      amountCents: Number(cfg.price_cents || 0),
+      name: String(cfg.name || pid),
+      days: 30,
+    }
     if (plan.amountCents <= 0) return res.status(400).json({ success: false, error: '试用版不需要支付' })
 
     const aid = process.env.XORPAY_AID
@@ -33,7 +41,6 @@ export default async function handler(req, res) {
     const price = (plan.amountCents / 100).toFixed(2)
     const sign = md5(`${name}${type}${price}${orderId}${notifyUrl}${secret}`)
 
-    const admin = getSupabaseAdmin()
     await admin.from('orders').insert({
       user_id: user.id,
       provider: 'xorpay',
@@ -41,7 +48,7 @@ export default async function handler(req, res) {
       amount_cents: plan.amountCents,
       currency: 'CNY',
       status: 'created',
-      plan_id: String(planId),
+      plan_id: pid,
       raw: { createdFrom: 'create-order', payType: type },
     })
 

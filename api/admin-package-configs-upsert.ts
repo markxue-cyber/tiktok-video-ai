@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return sendJson(res, 405, { success: false, error: 'Method not allowed' })
   try {
     const admin = await requireAdmin(req)
-    const { planId, name, priceCents, currency, dailyQuota, features, modelWhitelist, enabled } = req.body || {}
+    const { planId, name, priceCents, currency, dailyQuota, features, modelWhitelist, enabled, displayOrder, applyMode, graceDays, effectiveFrom } = req.body || {}
     const pid = String(planId || '').trim()
     if (!VALID.has(pid)) return sendJson(res, 400, { success: false, error: 'planId 非法' })
     const nowIso = new Date().toISOString()
@@ -19,6 +19,11 @@ export default async function handler(req, res) {
       features: Array.isArray(features) ? features : [],
       model_whitelist: Array.isArray(modelWhitelist) ? modelWhitelist : [],
       enabled: enabled !== false,
+      display_order: Number.isFinite(Number(displayOrder)) ? Number(displayOrder) : 100,
+      apply_mode: String(applyMode || 'new_only') === 'all_users' ? 'all_users' : 'new_only',
+      grace_days: Math.max(0, Number(graceDays || 0)),
+      effective_from: effectiveFrom || null,
+      deleted_at: null,
       updated_by: admin.userId,
       updated_at: nowIso,
     }

@@ -112,7 +112,7 @@ create index if not exists model_controls_type_idx on public.model_controls(type
 
 create table if not exists public.package_configs (
   id uuid primary key default gen_random_uuid(),
-  plan_id text not null unique check (plan_id in ('trial','basic','pro','enterprise')),
+  plan_id text not null unique,
   name text not null,
   price_cents integer not null default 0,
   currency text not null default 'CNY',
@@ -120,10 +120,24 @@ create table if not exists public.package_configs (
   features jsonb not null default '[]'::jsonb,
   model_whitelist jsonb not null default '[]'::jsonb,
   enabled boolean not null default true,
+  display_order integer not null default 100,
+  apply_mode text not null default 'new_only' check (apply_mode in ('new_only','all_users')),
+  grace_days integer not null default 0,
+  effective_from timestamptz,
+  deleted_at timestamptz,
   updated_by uuid,
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
+
+alter table public.subscriptions drop constraint if exists subscriptions_plan_id_check;
+alter table public.orders drop constraint if exists orders_plan_id_check;
+alter table public.package_configs drop constraint if exists package_configs_plan_id_check;
+alter table public.package_configs add column if not exists display_order integer not null default 100;
+alter table public.package_configs add column if not exists apply_mode text not null default 'new_only';
+alter table public.package_configs add column if not exists grace_days integer not null default 0;
+alter table public.package_configs add column if not exists effective_from timestamptz;
+alter table public.package_configs add column if not exists deleted_at timestamptz;
 
 create table if not exists public.announcements (
   id uuid primary key default gen_random_uuid(),

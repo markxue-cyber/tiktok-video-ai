@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return sendJson(res, 405, { success: false, error: 'Method not allowed' })
   try {
     await requireAdmin(req)
-    const resp = await fetch(`${baseUrl()}/rest/v1/package_configs?select=*&order=plan_id.asc`, { headers: serviceHeaders() })
+    const resp = await fetch(`${baseUrl()}/rest/v1/package_configs?select=*&deleted_at=is.null&order=display_order.asc,created_at.asc`, { headers: serviceHeaders() })
     const data = await parseJson(resp)
     if (!resp.ok) return sendJson(res, 200, { success: false, error: data?.message || '获取套餐配置失败', raw: data })
     const rows = Array.isArray(data) ? data : []

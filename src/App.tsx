@@ -12,6 +12,7 @@ import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
 import {
+  adminDeletePackageConfig,
   adminListAnnouncements,
   adminListModelControls,
   adminListPackageConfigs,
@@ -22,6 +23,7 @@ import {
   adminUpsertPackageConfig,
   type AdminUserItem,
 } from './api/admin'
+import { listPackageConfigsPublic, type PackageConfigItem } from './api/packageConfigs'
 import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
 
@@ -132,7 +134,12 @@ const IMAGE_MODEL_CAPS: Record<string, ImageModelCaps> = {
   'dalle-3': { aspectRatios: ['1:1', '9:16', '16:9'], resolutions: ['1024', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
   midjourney: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
 }
-const PACKAGES = [{ id: 'trial', name: '试用版', price: '¥0', features: ['每天3次', '基础功能'] }, { id: 'basic', name: '基础版', price: '¥69/月', features: ['每天20次', '全部模型'] }, { id: 'pro', name: '专业版', price: '¥249/月', features: ['无限次数', '4K输出'] }, { id: 'enterprise', name: '旗舰版', price: '¥1199/月', features: ['企业级', 'API接入'] }]
+const DEFAULT_PACKAGES: PackageConfigItem[] = [
+  { plan_id: 'trial', name: '试用版', price_cents: 0, currency: 'CNY', daily_quota: 3, features: ['每天3次', '基础功能'], enabled: true, display_order: 10, apply_mode: 'new_only', grace_days: 0 },
+  { plan_id: 'basic', name: '基础版', price_cents: 6900, currency: 'CNY', daily_quota: 20, features: ['每天20次', '全部模型'], enabled: true, display_order: 20, apply_mode: 'new_only', grace_days: 0 },
+  { plan_id: 'pro', name: '专业版', price_cents: 24900, currency: 'CNY', daily_quota: 999999, features: ['高配额', '4K输出'], enabled: true, display_order: 30, apply_mode: 'new_only', grace_days: 0 },
+  { plan_id: 'enterprise', name: '旗舰版', price_cents: 119900, currency: 'CNY', daily_quota: 999999, features: ['企业级', 'API接入'], enabled: true, display_order: 40, apply_mode: 'new_only', grace_days: 0 },
+]
 
 async function fileToDataUrl(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -302,6 +309,7 @@ function App() {
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
+  const [packageCatalog, setPackageCatalog] = useState<PackageConfigItem[]>(DEFAULT_PACKAGES)
   const [showFeedback, setShowFeedback] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -413,7 +421,7 @@ function App() {
     setPage('landing')
   }
 
-  const currentPackage = useMemo(() => PACKAGES.find((p) => p.id === user?.package), [user?.package])
+  const currentPackage = useMemo(() => packageCatalog.find((p) => p.plan_id === user?.package) || DEFAULT_PACKAGES.find((p) => p.plan_id === user?.package), [packageCatalog, user?.package])
   const isDevAdmin = useMemo(() => {
     const email = String(user?.email || '').toLowerCase()
     return ['haoxue2027@gmail.com'].includes(email)
@@ -443,6 +451,19 @@ function App() {
       if (timerId != null) clearTimeout(timerId)
     }
   }, [accessToken, page])
+
+  useEffect(() => {
+    if (page !== 'home') return
+    ;(async () => {
+      try {
+        const r = await listPackageConfigsPublic()
+        const rows = (r.configs || []).filter((x) => x.enabled !== false)
+        if (rows.length) setPackageCatalog(rows)
+      } catch {
+        // ignore package catalog fetch errors
+      }
+    })()
+  }, [page])
 
   const currentPageLabel = useMemo(() => {
     if (mainNav === 'create') return createNav === 'video' ? '视频生成' : '图片生成'
@@ -900,7 +921,7 @@ function App() {
             />
           )}
           {mainNav === 'assets' && <Assets />}
-          {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} />}
+          {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} packages={packageCatalog} />}
           {mainNav === 'tasks' && <TaskCenter />}
           {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
@@ -3776,6 +3797,18 @@ function AdminPackagesPanel() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
+  const [newPlan, setNewPlan] = useState({
+    plan_id: '',
+    name: '',
+    price_cents: 0,
+    daily_quota: 0,
+    featuresText: '',
+    display_order: 100,
+    apply_mode: 'new_only',
+    grace_days: 0,
+    effective_from: '',
+    enabled: true,
+  })
 
   const load = async () => {
     setBusy(true)
@@ -3815,6 +3848,10 @@ function AdminPackagesPanel() {
         features,
         modelWhitelist: Array.isArray(row.model_whitelist) ? row.model_whitelist : [],
         enabled: row.enabled !== false,
+        displayOrder: Number(row.display_order || 100),
+        applyMode: String(row.apply_mode || 'new_only'),
+        graceDays: Number(row.grace_days || 0),
+        effectiveFrom: row.effective_from || null,
       })
       setNotice(`套餐 ${row.plan_id} 已保存`)
       await load()
@@ -3823,7 +3860,67 @@ function AdminPackagesPanel() {
     }
   }
 
-  const rows = configs.map((r) => ({ ...r, featuresText: Array.isArray(r.features) ? r.features.join('\n') : '' }))
+  const removeOne = async (planId: string) => {
+    if (!confirm(`确定删除套餐 ${planId} 吗？（有激活用户会被拒绝）`)) return
+    setNotice('')
+    try {
+      await adminDeletePackageConfig(planId)
+      setNotice(`套餐 ${planId} 已删除`)
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '删除套餐失败')
+    }
+  }
+
+  const createOne = async () => {
+    const pid = String(newPlan.plan_id || '').trim()
+    if (!pid) return setErr('新套餐需要 plan_id')
+    setNotice('')
+    try {
+      await adminUpsertPackageConfig({
+        planId: pid,
+        name: newPlan.name || pid,
+        priceCents: Number(newPlan.price_cents || 0),
+        currency: 'CNY',
+        dailyQuota: Number(newPlan.daily_quota || 0),
+        features: String(newPlan.featuresText || '')
+          .split('\n')
+          .map((x) => x.trim())
+          .filter(Boolean),
+        modelWhitelist: [],
+        enabled: newPlan.enabled,
+        displayOrder: Number(newPlan.display_order || 100),
+        applyMode: newPlan.apply_mode,
+        graceDays: Number(newPlan.grace_days || 0),
+        effectiveFrom: newPlan.effective_from || null,
+      })
+      setNotice(`套餐 ${pid} 已创建`)
+      setNewPlan({
+        plan_id: '',
+        name: '',
+        price_cents: 0,
+        daily_quota: 0,
+        featuresText: '',
+        display_order: 100,
+        apply_mode: 'new_only',
+        grace_days: 0,
+        effective_from: '',
+        enabled: true,
+      })
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '创建套餐失败')
+    }
+  }
+
+  const rows = configs.map((r) => ({
+    ...r,
+    featuresText: Array.isArray(r.features) ? r.features.join('\n') : '',
+    apply_mode: r.apply_mode || 'new_only',
+    grace_days: Number(r.grace_days || 0),
+    display_order: Number(r.display_order || 100),
+    effective_from: r.effective_from || '',
+  }))
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
@@ -3836,6 +3933,26 @@ function AdminPackagesPanel() {
       </div>
       {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
       {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
+      <div className="border rounded-xl p-4 bg-indigo-50/40 space-y-3">
+        <div className="font-semibold text-sm">新增套餐</div>
+        <div className="grid md:grid-cols-4 gap-2">
+          <input value={newPlan.plan_id} onChange={(e) => setNewPlan((x) => ({ ...x, plan_id: e.target.value.trim() }))} className="px-3 py-2 border rounded-lg" placeholder="plan_id (如 growth_plus)" />
+          <input value={newPlan.name} onChange={(e) => setNewPlan((x) => ({ ...x, name: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="套餐名称" />
+          <input value={newPlan.price_cents} onChange={(e) => setNewPlan((x) => ({ ...x, price_cents: Number(e.target.value || 0) }))} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
+          <input value={newPlan.daily_quota} onChange={(e) => setNewPlan((x) => ({ ...x, daily_quota: Number(e.target.value || 0) }))} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
+        </div>
+        <textarea value={newPlan.featuresText} onChange={(e) => setNewPlan((x) => ({ ...x, featuresText: e.target.value }))} rows={2} className="w-full px-3 py-2 border rounded-lg" placeholder="特性，每行一个" />
+        <div className="grid md:grid-cols-4 gap-2">
+          <input value={newPlan.display_order} onChange={(e) => setNewPlan((x) => ({ ...x, display_order: Number(e.target.value || 100) }))} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
+          <select value={newPlan.apply_mode} onChange={(e) => setNewPlan((x) => ({ ...x, apply_mode: e.target.value as any }))} className="px-3 py-2 border rounded-lg">
+            <option value="new_only">仅新用户生效</option>
+            <option value="all_users">新老用户都生效</option>
+          </select>
+          <input value={newPlan.grace_days} onChange={(e) => setNewPlan((x) => ({ ...x, grace_days: Number(e.target.value || 0) }))} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
+          <input value={newPlan.effective_from} onChange={(e) => setNewPlan((x) => ({ ...x, effective_from: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
+        </div>
+        <button onClick={() => void createOne()} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">新增套餐</button>
+      </div>
       <div className="grid md:grid-cols-2 gap-4">
         {rows.map((r, idx) => (
           <div key={r.plan_id} className="border rounded-xl p-4 space-y-3">
@@ -3845,12 +3962,24 @@ function AdminPackagesPanel() {
               <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(idx, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
               <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(idx, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={r.display_order ?? 100} onChange={(e) => void updateOne(idx, { display_order: Number(e.target.value || 100) })} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
+              <input value={r.grace_days ?? 0} onChange={(e) => void updateOne(idx, { grace_days: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
+            </div>
+            <select value={r.apply_mode || 'new_only'} onChange={(e) => void updateOne(idx, { apply_mode: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
+              <option value="new_only">仅新用户生效（默认）</option>
+              <option value="all_users">新老用户都生效</option>
+            </select>
+            <input value={r.effective_from || ''} onChange={(e) => void updateOne(idx, { effective_from: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
             <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(idx, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void updateOne(idx, { enabled: e.target.checked })} />
               启用
             </label>
-            <button onClick={() => void saveOne(r)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存</button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => void saveOne(r)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存</button>
+              <button onClick={() => void removeOne(r.plan_id)} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 text-sm">删除</button>
+            </div>
           </div>
         ))}
       </div>
@@ -4042,7 +4171,7 @@ function AdminMonitoringPanel() {
   )
 }
 
-function Packages({ user, onRefreshUser }: { user: any; onRefreshUser: () => Promise<void> }) {
+function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser: () => Promise<void>; packages: PackageConfigItem[] }) {
   const [busyPlan, setBusyPlan] = useState('')
   const [payError, setPayError] = useState('')
   const [payType, setPayType] = useState<'native' | 'alipay'>('native')
@@ -4161,52 +4290,65 @@ function Packages({ user, onRefreshUser }: { user: any; onRefreshUser: () => Pro
         </div>
       )}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {PACKAGES.map((pkg) => (
+        {packages
+          .filter((x) => x.enabled !== false)
+          .sort((a, b) => Number(a.display_order || 100) - Number(b.display_order || 100))
+          .map((pkg) => {
+            const isCurrent = String(user?.package || '') === String(pkg.plan_id)
+            const priceYuan = Number(pkg.price_cents || 0) / 100
+            const displayPrice = priceYuan <= 0 ? '¥0' : `¥${priceYuan}/月`
+            const features = Array.isArray(pkg.features) ? pkg.features : []
+            return (
           <div
-            key={pkg.id}
-            className={`bg-white rounded-2xl p-6 shadow-lg border-2 ${pkg.id === 'basic' ? 'border-purple-500' : 'border-transparent'}`}
+            key={pkg.plan_id}
+            className={`bg-white rounded-2xl p-6 shadow-lg border-2 ${isCurrent ? 'border-purple-500' : 'border-transparent'}`}
           >
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg">{pkg.name}</h3>
-              {pkg.id === 'basic' && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">推荐</span>}
+              {isCurrent && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">当前套餐</span>}
             </div>
             <div className="mt-4">
-              <div className="text-3xl font-extrabold">{pkg.price}</div>
+              <div className="text-3xl font-extrabold">{displayPrice}</div>
             </div>
             <ul className="mt-4 space-y-2 text-sm text-gray-600">
-              {pkg.features.map((f) => (
+              {features.map((f) => (
                 <li key={f} className="flex items-center">
                   <Check className="w-4 h-4 text-green-500 mr-2" />
                   <span>{f}</span>
                 </li>
               ))}
+              {pkg.apply_mode && (
+                <li className="text-xs text-gray-500 mt-2">
+                  生效规则：{pkg.apply_mode === 'all_users' ? `新老用户都生效${pkg.grace_days ? `（宽限${pkg.grace_days}天）` : ''}` : '仅新用户生效'}
+                </li>
+              )}
             </ul>
             <button
               className={`mt-6 w-full py-3 rounded-xl font-bold ${
-                pkg.id === 'trial' ? 'bg-gray-100 text-gray-700' : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
+                priceYuan <= 0 || isCurrent ? 'bg-gray-100 text-gray-700' : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
               }`}
-              disabled={busyPlan === pkg.id}
+              disabled={busyPlan === pkg.plan_id}
               onClick={async () => {
                 setPayError('')
-                if (pkg.id === 'trial') return
+                if (priceYuan <= 0 || isCurrent) return
                 if (!accessToken) return alert('请先登录')
-                setBusyPlan(pkg.id)
+                setBusyPlan(pkg.plan_id)
                 try {
-                  const r = await createOrder({ planId: pkg.id, payType }, accessToken)
-                  Sentry.captureMessage('payment_order_create_success', { level: 'info', extra: { planId: pkg.id, payType } })
-                  setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl, status: 'created', planId: pkg.id })
+                  const r = await createOrder({ planId: pkg.plan_id, payType }, accessToken)
+                  Sentry.captureMessage('payment_order_create_success', { level: 'info', extra: { planId: pkg.plan_id, payType } })
+                  setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl, status: 'created', planId: pkg.plan_id })
                 } catch (e: any) {
-                  Sentry.captureException(e, { extra: { scene: 'create_order', planId: pkg.id, payType } })
+                  Sentry.captureException(e, { extra: { scene: 'create_order', planId: pkg.plan_id, payType } })
                   setPayError(e?.message || '下单失败')
                 } finally {
                   setBusyPlan('')
                 }
               }}
             >
-              {pkg.id === 'trial' ? '当前试用' : busyPlan === pkg.id ? '下单中...' : '立即开通'}
+              {isCurrent ? '当前套餐' : priceYuan <= 0 ? '免费套餐' : busyPlan === pkg.plan_id ? '下单中...' : '立即开通'}
             </button>
           </div>
-        ))}
+        )})}
       </div>
       {!!payError && <div className="mt-6 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{payError}</div>}
     </div>
