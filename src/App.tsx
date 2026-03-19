@@ -142,6 +142,45 @@ let assetsMemoryCache: {
   aiHasMore: boolean
   ts: number
 } | null = null
+let assetsPrefetching = false
+let assetsPrefetchAt = 0
+
+async function prefetchAssetsCacheIfNeeded() {
+  if (assetsPrefetching) return
+  const now = Date.now()
+  // Avoid repeated prefetches when user hovers repeatedly.
+  if (now - assetsPrefetchAt < 15000) return
+  // Fresh enough cache, skip prefetch.
+  if (assetsMemoryCache && now - Number(assetsMemoryCache.ts || 0) < 30000) return
+  if (!localStorage.getItem('tikgen.accessToken')) return
+  assetsPrefetching = true
+  try {
+    const [u, a] = await Promise.all([
+      listAssetsAPI({ source: 'user_upload', limit: 12, offset: 0 }),
+      listAssetsAPI({ source: 'ai_generated', limit: 12, offset: 0 }),
+    ])
+    const payload = {
+      userUploads: Array.isArray(u.assets) ? u.assets : [],
+      aiOutputs: Array.isArray(a.assets) ? a.assets : [],
+      userOffset: Number(u.nextOffset ?? (u.assets?.length || 0)),
+      aiOffset: Number(a.nextOffset ?? (a.assets?.length || 0)),
+      userHasMore: Boolean(u.hasMore),
+      aiHasMore: Boolean(a.hasMore),
+      ts: Date.now(),
+    }
+    assetsMemoryCache = payload
+    try {
+      localStorage.setItem(ASSETS_CACHE_KEY, JSON.stringify(payload))
+    } catch {
+      // ignore cache write errors
+    }
+  } catch {
+    // ignore prefetch errors, do not block navigation
+  } finally {
+    assetsPrefetchAt = Date.now()
+    assetsPrefetching = false
+  }
+}
 
 function App() {
   const [page, setPage] = useState<'landing' | 'auth' | 'home'>('landing')
@@ -412,7 +451,15 @@ function App() {
             </div>
           )}
 
-          <NavPrimary icon={<Folder className="w-5 h-5" />} label="资产库" active={mainNav === 'assets'} onClick={() => setMainNav('assets')} />
+          <NavPrimary
+            icon={<Folder className="w-5 h-5" />}
+            label="资产库"
+            active={mainNav === 'assets'}
+            onMouseEnter={() => {
+              void prefetchAssetsCacheIfNeeded()
+            }}
+            onClick={() => setMainNav('assets')}
+          />
           <NavPrimary icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
         </nav>
       </aside>
@@ -463,9 +510,10 @@ function App() {
   )
 }
 
-function NavPrimary({ icon, label, active, onClick }: any) {
+function NavPrimary({ icon, label, active, onClick, onMouseEnter }: any) {
   return (
     <button
+      onMouseEnter={onMouseEnter}
       onClick={onClick}
       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
         active ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white' : 'text-gray-700 hover:bg-gray-100'
