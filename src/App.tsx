@@ -11,6 +11,7 @@ import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type Ass
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
+import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -160,6 +161,8 @@ let assetsPrefetching = false
 let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
 const SESSION_KEY = 'tikgen.session'
+const ONBOARDING_KEY = 'tikgen.onboarding.v1.dismissed'
+const SUPPORT_EMAIL = 'haoxue2027@gmail.com'
 
 function parseSessionFromUrl(): null | {
   access_token: string
@@ -284,9 +287,14 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [authResendBusy, setAuthResendBusy] = useState(false)
-  const [mainNav, setMainNav] = useState<'create' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
+  const [mainNav, setMainNav] = useState<'create' | 'templates' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
+  const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
+  const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [onboardingStep, setOnboardingStep] = useState(0)
+  const [showFeedback, setShowFeedback] = useState(false)
 
   const readSession = () => {
     try {
@@ -425,6 +433,38 @@ function App() {
       if (timerId != null) clearTimeout(timerId)
     }
   }, [accessToken, page])
+
+  useEffect(() => {
+    if (!accessToken || page !== 'home') return
+    try {
+      const dismissed = localStorage.getItem(ONBOARDING_KEY)
+      if (!dismissed) {
+        setOnboardingStep(0)
+        setShowOnboarding(true)
+      }
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [accessToken, page])
+
+  const closeOnboarding = () => {
+    setShowOnboarding(false)
+    try {
+      localStorage.setItem(ONBOARDING_KEY, '1')
+    } catch {
+      // ignore localStorage errors
+    }
+  }
+
+  const currentPageLabel = useMemo(() => {
+    if (mainNav === 'create') return createNav === 'video' ? '视频生成' : '图片生成'
+    if (mainNav === 'templates') return '模板与案例库'
+    if (mainNav === 'tasks') return '任务中心'
+    if (mainNav === 'tools') return toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升'
+    if (mainNav === 'assets') return '资产库'
+    if (mainNav === 'benefits') return '个人权益'
+    return '开发者后台'
+  }, [mainNav, createNav, toolNav])
 
   if (page === 'landing')
     return (
@@ -768,6 +808,7 @@ function App() {
             </div>
           )}
 
+          <NavPrimary icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
           <NavPrimary icon={<Library className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
           <NavPrimary icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} onClick={() => setMainNav('tools')} />
           {mainNav === 'tools' && (
@@ -796,9 +837,19 @@ function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button className="p-2 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5" /></button>
+              <button
+                onClick={() => {
+                  setOnboardingStep(0)
+                  setShowOnboarding(true)
+                }}
+                className="px-3 py-1.5 rounded-lg text-sm bg-purple-50 text-purple-700 hover:bg-purple-100"
+              >
+                新手引导
+              </button>
               <h1 className="text-xl font-bold">
                 {mainNav === 'create' && createNav === 'video' && '视频生成'}
                 {mainNav === 'create' && createNav === 'image' && '图片生成'}
+                {mainNav === 'templates' && '模板与案例库'}
                 {mainNav === 'tasks' && '任务中心'}
                 {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
@@ -814,6 +865,9 @@ function App() {
                 <span className="text-xs text-amber-600/80">至 {user?.packageExpiresAt}</span>
               </div>
               <div className="flex items-center space-x-2"><div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-white" /></div><span className="text-sm font-medium">{user?.name}</span></div>
+              <button onClick={() => setShowFeedback(true)} className="px-3 py-1.5 rounded-lg text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+                反馈问题
+              </button>
               <button
                 onClick={handleLogout}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -826,11 +880,25 @@ function App() {
         <div className="p-6">
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
           <div className={mainNav === 'create' && createNav === 'video' ? '' : 'hidden'}>
-            <VideoGenerator />
+            <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
           </div>
           <div className={mainNav === 'create' && createNav === 'image' ? '' : 'hidden'}>
-            <ImageGenerator />
+            <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
           </div>
+          {mainNav === 'templates' && (
+            <TemplatesLibrary
+              onApplyVideo={(preset) => {
+                setVideoTemplatePreset(preset)
+                setCreateNav('video')
+                setMainNav('create')
+              }}
+              onApplyImage={(preset) => {
+                setImageTemplatePreset(preset)
+                setCreateNav('image')
+                setMainNav('create')
+              }}
+            />
+          )}
           {mainNav === 'assets' && <Assets />}
           {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} />}
           {mainNav === 'tasks' && <TaskCenter />}
@@ -838,6 +906,23 @@ function App() {
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
         </div>
       </main>
+      {showOnboarding && (
+        <OnboardingGuide
+          step={onboardingStep}
+          onPrev={() => setOnboardingStep((s) => Math.max(0, s - 1))}
+          onNext={() => {
+            setOnboardingStep((s) => {
+              if (s >= 3) {
+                closeOnboarding()
+                return s
+              }
+              return s + 1
+            })
+          }}
+          onSkip={closeOnboarding}
+        />
+      )}
+      <FeedbackLite open={showFeedback} onClose={() => setShowFeedback(false)} currentPage={currentPageLabel} />
     </div>
   )
 }
@@ -871,7 +956,236 @@ function NavSecondary({ icon, label, active, onClick }: any) {
   )
 }
 
-function VideoGenerator() {
+function TemplatesLibrary({
+  onApplyVideo,
+  onApplyImage,
+}: {
+  onApplyVideo: (preset: VideoTemplatePreset) => void
+  onApplyImage: (preset: ImageTemplatePreset) => void
+}) {
+  const [tab, setTab] = useState<'video' | 'image'>('video')
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl p-6 shadow-sm border">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold">模板与案例库</h2>
+            <p className="text-sm text-gray-500 mt-1">选择模板后一键套用到创作页，快速开始生成。</p>
+          </div>
+          <div className="inline-flex rounded-xl border bg-gray-50 p-1">
+            <button
+              className={`px-4 py-2 rounded-lg text-sm ${tab === 'video' ? 'bg-white shadow text-purple-700' : 'text-gray-600'}`}
+              onClick={() => setTab('video')}
+            >
+              视频模板
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg text-sm ${tab === 'image' ? 'bg-white shadow text-purple-700' : 'text-gray-600'}`}
+              onClick={() => setTab('image')}
+            >
+              图片模板
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {tab === 'video' && (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {VIDEO_TEMPLATES.map((t) => (
+            <div key={t.id} className="bg-white rounded-2xl border p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">{t.title}</h3>
+                <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700">视频</span>
+              </div>
+              <p className="text-sm text-gray-600 mt-2 min-h-[40px]">{t.subtitle}</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {t.tags.map((x) => (
+                  <span key={x} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                    {x}
+                  </span>
+                ))}
+              </div>
+              <button
+                className="mt-4 w-full py-2.5 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium"
+                onClick={() => onApplyVideo(t.preset)}
+              >
+                一键套用到视频生成
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'image' && (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {IMAGE_TEMPLATES.map((t) => (
+            <div key={t.id} className="bg-white rounded-2xl border p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">{t.title}</h3>
+                <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">图片</span>
+              </div>
+              <p className="text-sm text-gray-600 mt-2 min-h-[40px]">{t.subtitle}</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {t.tags.map((x) => (
+                  <span key={x} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                    {x}
+                  </span>
+                ))}
+              </div>
+              <button
+                className="mt-4 w-full py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm font-medium"
+                onClick={() => onApplyImage(t.preset)}
+              >
+                一键套用到图片生成
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OnboardingGuide({
+  step,
+  onPrev,
+  onNext,
+  onSkip,
+}: {
+  step: number
+  onPrev: () => void
+  onNext: () => void
+  onSkip: () => void
+}) {
+  const steps = [
+    { title: '上传参考图', desc: '先上传商品图，模型会基于参考图做商品解析与风格对齐。' },
+    { title: '一键生成提示词', desc: '点击“一键生成提示词”，快速拿到结构化脚本/图片提示词。' },
+    { title: '开始生成', desc: '确认参数后点击生成，任务会异步运行，可随时切换页面。' },
+    { title: '任务中心查看进度', desc: '在任务中心查看处理状态，生成完成后可下载与沉淀到资产库。' },
+  ] as const
+  const current = steps[Math.max(0, Math.min(steps.length - 1, step))]
+  const isFirst = step <= 0
+  const isLast = step >= steps.length - 1
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border">
+        <div className="p-6 border-b flex items-center justify-between">
+          <div>
+            <div className="text-xs text-purple-600 font-medium">新手引导 {step + 1}/{steps.length}</div>
+            <h3 className="text-2xl font-bold mt-1">{current.title}</h3>
+          </div>
+          <button onClick={onSkip} className="text-gray-500 hover:text-gray-700 text-sm">跳过</button>
+        </div>
+        <div className="p-6">
+          <p className="text-gray-700 leading-7">{current.desc}</p>
+          <div className="mt-5 h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+          </div>
+        </div>
+        <div className="p-6 border-t flex items-center justify-between">
+          <button onClick={onPrev} disabled={isFirst} className="px-4 py-2 rounded-lg border disabled:opacity-50">上一步</button>
+          <button onClick={onNext} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">
+            {isLast ? '完成引导' : '下一步'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FeedbackLite({
+  open,
+  onClose,
+  currentPage,
+}: {
+  open: boolean
+  onClose: () => void
+  currentPage: string
+}) {
+  const [kind, setKind] = useState<'bug' | 'suggestion' | 'other'>('bug')
+  const [desc, setDesc] = useState('')
+  const [email, setEmail] = useState('')
+  const [notice, setNotice] = useState('')
+
+  if (!open) return null
+
+  const buildBody = () => {
+    const lines = [
+      `问题类型: ${kind}`,
+      `当前页面: ${currentPage}`,
+      `用户邮箱(可选): ${email || '(未填写)'}`,
+      `提交时间: ${new Date().toISOString()}`,
+      '',
+      '问题描述:',
+      desc || '(未填写)',
+    ]
+    return lines.join('\n')
+  }
+
+  const handleSubmit = async () => {
+    if (!desc.trim()) {
+      setNotice('请先填写问题描述')
+      return
+    }
+    const subject = encodeURIComponent(`[TikGen反馈] ${kind}`)
+    const body = encodeURIComponent(buildBody())
+    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`
+    window.location.href = mailto
+    try {
+      await navigator.clipboard.writeText(buildBody())
+      setNotice('已尝试打开邮件客户端，同时已复制反馈内容到剪贴板。')
+    } catch {
+      setNotice('已尝试打开邮件客户端。若未打开，请手动发送到支持邮箱。')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/45 z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg bg-white rounded-2xl border shadow-2xl">
+        <div className="p-5 border-b flex items-center justify-between">
+          <h3 className="text-xl font-bold">反馈问题（轻量版）</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">问题类型</label>
+            <select value={kind} onChange={(e) => setKind(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg">
+              <option value="bug">Bug/报错</option>
+              <option value="suggestion">功能建议</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">问题描述</label>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={5} className="w-full px-3 py-2 border rounded-lg" placeholder="请描述复现步骤、期望结果、实际结果..." />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">联系邮箱（可选）</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="用于客服回访" />
+          </div>
+          {!!notice && <div className="text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg p-2">{notice}</div>}
+        </div>
+        <div className="p-5 border-t flex items-center justify-between">
+          <div className="text-xs text-gray-500">支持邮箱：{SUPPORT_EMAIL}</div>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 border rounded-lg">取消</button>
+            <button onClick={handleSubmit} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">发送反馈</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function VideoGenerator({
+  templatePreset,
+  onTemplateApplied,
+}: {
+  templatePreset: VideoTemplatePreset | null
+  onTemplateApplied: () => void
+}) {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -937,6 +1251,16 @@ function VideoGenerator() {
     if (!caps.durations.includes(durationSec)) setDurationSec(caps.defaults.durationSec)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model])
+
+  useEffect(() => {
+    if (!templatePreset) return
+    if (templatePreset.model) setModel(String(templatePreset.model))
+    if (templatePreset.aspectRatio) setSize(String(templatePreset.aspectRatio) as VideoAspect)
+    if (templatePreset.resolution) setResolution(String(templatePreset.resolution) as VideoRes)
+    if (templatePreset.durationSec) setDurationSec(Number(templatePreset.durationSec) as VideoDur)
+    setPrompt(String(templatePreset.prompt || ''))
+    onTemplateApplied()
+  }, [templatePreset, onTemplateApplied])
 
   const renderScriptStructured = (raw: string) => {
     let text = String(raw || '')
@@ -1567,7 +1891,13 @@ function VideoGenerator() {
   )
 }
 
-function ImageGenerator() {
+function ImageGenerator({
+  templatePreset,
+  onTemplateApplied,
+}: {
+  templatePreset: ImageTemplatePreset | null
+  onTemplateApplied: () => void
+}) {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -1704,6 +2034,15 @@ function ImageGenerator() {
     const firstAvailable = imageModelOptions.find((x) => !x.unavailableReason)
     if (firstAvailable && firstAvailable.id !== model) setModel(firstAvailable.id)
   }, [imageModelOptions, model])
+
+  useEffect(() => {
+    if (!templatePreset) return
+    if (templatePreset.model) setModel(String(templatePreset.model))
+    if (templatePreset.aspectRatio) setSize(String(templatePreset.aspectRatio) as ImageAspect)
+    if (templatePreset.resolution) setResolution(String(templatePreset.resolution) as ImageRes)
+    setPrompt(String(templatePreset.prompt || ''))
+    onTemplateApplied()
+  }, [templatePreset, onTemplateApplied])
 
   const handlePromptGen = async () => {
     if (!refImageDataUrl) {
