@@ -133,30 +133,68 @@ export default async function handler(req, res) {
       height: Number.isFinite(reqH) ? reqH : undefined,
     }
 
-    const upstreamResp = await fetch(`${baseUrl.replace(/\/+$/, '')}/images/generations`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt: prompt || '生成一张商品展示图',
-        ...negativeFields,
-        model: model || undefined,
-        ...sizeFields,
-        // 尝试以常见字段名透传参考图（不同聚合/模型可能字段不同）
-        ...refFields,
-      }),
-    })
+    const callUpstream = async (modelToUse?: string) => {
+      const resp = await fetch(`${baseUrl.replace(/\/+$/, '')}/images/generations`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: prompt || '生成一张商品展示图',
+          ...negativeFields,
+          model: modelToUse || undefined,
+          ...sizeFields,
+          // 尝试以常见字段名透传参考图（不同聚合/模型可能字段不同）
+          ...refFields,
+        }),
+      })
+      const raw = await resp.text()
+      const parsed = (() => {
+        try {
+          return raw ? JSON.parse(raw) : null
+        } catch {
+          return null
+        }
+      })()
+      return { resp, raw, parsed }
+    }
 
-    const rawText = await upstreamResp.text()
-    const data = (() => {
-      try {
-        return JSON.parse(rawText)
-      } catch {
-        return null
+    let usedModel = String(model || '').trim()
+    let { resp: upstreamResp, raw: rawText, parsed: data } = await callUpstream(usedModel || undefined)
+
+    if (!upstreamResp.ok) {
+      let msg =
+        data?.error?.message ||
+        data?.message ||
+        (typeof rawText === 'string' && rawText.slice(0, 1000)) ||
+        `上游错误(${upstreamResp.status})`
+
+      const text = String(msg || '').toLowerCase()
+      const modelInvalid =
+        text.includes('model') &&
+        (text.includes('does not exist') || text.includes('invalid field') || text.includes('not in') || text.includes('不存在'))
+
+      // 自动兜底：当用户选择了当前通道不支持的模型（如 midjourney）时，回退到稳定可用模型再试一次。
+      if (modelInvalid) {
+        const fallbackModel = String(process.env.IMAGE_FALLBACK_MODEL || 'seedream').trim()
+        if (fallbackModel && fallbackModel !== usedModel) {
+          const retried = await callUpstream(fallbackModel)
+          if (retried.resp.ok) {
+            upstreamResp = retried.resp
+            rawText = retried.raw
+            data = retried.parsed
+            usedModel = fallbackModel
+          } else {
+            msg =
+              retried.parsed?.error?.message ||
+              retried.parsed?.message ||
+              (typeof retried.raw === 'string' && retried.raw.slice(0, 1000)) ||
+              msg
+          }
+        }
       }
-    })()
+    }
 
     if (!upstreamResp.ok) {
       const msg =
@@ -167,7 +205,7 @@ export default async function handler(req, res) {
       await writeTaskRow({
         user_id: consumed?.user?.id || null,
         type: 'image',
-        model: model || null,
+        model: usedModel || model || null,
         status: 'failed',
         provider_task_id: null,
         output_url: null,
@@ -187,7 +225,7 @@ export default async function handler(req, res) {
       await writeTaskRow({
         user_id: consumed?.user?.id || null,
         type: 'image',
-        model: model || null,
+        model: usedModel || model || null,
         status: 'succeeded',
         provider_task_id: null,
         output_url: result.imageUrl,
@@ -201,7 +239,7 @@ export default async function handler(req, res) {
       await writeTaskRow({
         user_id: consumed?.user?.id || null,
         type: 'image',
-        model: model || null,
+        model: usedModel || model || null,
         status: 'succeeded',
         provider_task_id: null,
         output_url: result.imageUrl,
