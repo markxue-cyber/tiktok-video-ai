@@ -161,7 +161,6 @@ let assetsPrefetching = false
 let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
 const SESSION_KEY = 'tikgen.session'
-const ONBOARDING_KEY = 'tikgen.onboarding.v1.dismissed'
 const SUPPORT_EMAIL = 'haoxue2027@gmail.com'
 
 function parseSessionFromUrl(): null | {
@@ -292,8 +291,6 @@ function App() {
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [onboardingStep, setOnboardingStep] = useState(0)
   const [showFeedback, setShowFeedback] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -435,28 +432,6 @@ function App() {
       if (timerId != null) clearTimeout(timerId)
     }
   }, [accessToken, page])
-
-  useEffect(() => {
-    if (!accessToken || page !== 'home') return
-    try {
-      const dismissed = localStorage.getItem(ONBOARDING_KEY)
-      if (!dismissed) {
-        setOnboardingStep(0)
-        setShowOnboarding(true)
-      }
-    } catch {
-      // ignore localStorage errors
-    }
-  }, [accessToken, page])
-
-  const closeOnboarding = () => {
-    setShowOnboarding(false)
-    try {
-      localStorage.setItem(ONBOARDING_KEY, '1')
-    } catch {
-      // ignore localStorage errors
-    }
-  }
 
   const currentPageLabel = useMemo(() => {
     if (mainNav === 'create') return createNav === 'video' ? '视频生成' : '图片生成'
@@ -839,15 +814,6 @@ function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button className="p-2 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5" /></button>
-              <button
-                onClick={() => {
-                  setOnboardingStep(0)
-                  setShowOnboarding(true)
-                }}
-                className="px-3 py-1.5 rounded-lg text-sm bg-purple-50 text-purple-700 hover:bg-purple-100"
-              >
-                新手引导
-              </button>
               <h1 className="text-xl font-bold">
                 {mainNav === 'create' && createNav === 'video' && '视频生成'}
                 {mainNav === 'create' && createNav === 'image' && '图片生成'}
@@ -929,22 +895,6 @@ function App() {
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
         </div>
       </main>
-      {showOnboarding && (
-        <OnboardingGuide
-          step={onboardingStep}
-          onPrev={() => setOnboardingStep((s) => Math.max(0, s - 1))}
-          onNext={() => {
-            setOnboardingStep((s) => {
-              if (s >= 3) {
-                closeOnboarding()
-                return s
-              }
-              return s + 1
-            })
-          }}
-          onSkip={closeOnboarding}
-        />
-      )}
       <FeedbackLite open={showFeedback} onClose={() => setShowFeedback(false)} currentPage={currentPageLabel} />
       {showHelp && (
         <div className="fixed inset-0 bg-black/45 z-50 flex items-center justify-center p-4">
@@ -1077,54 +1027,6 @@ function TemplatesLibrary({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function OnboardingGuide({
-  step,
-  onPrev,
-  onNext,
-  onSkip,
-}: {
-  step: number
-  onPrev: () => void
-  onNext: () => void
-  onSkip: () => void
-}) {
-  const steps = [
-    { title: '上传参考图', desc: '先上传商品图，模型会基于参考图做商品解析与风格对齐。' },
-    { title: '一键生成提示词', desc: '点击“一键生成提示词”，快速拿到结构化脚本/图片提示词。' },
-    { title: '开始生成', desc: '确认参数后点击生成，任务会异步运行，可随时切换页面。' },
-    { title: '任务中心查看进度', desc: '在任务中心查看处理状态，生成完成后可下载与沉淀到资产库。' },
-  ] as const
-  const current = steps[Math.max(0, Math.min(steps.length - 1, step))]
-  const isFirst = step <= 0
-  const isLast = step >= steps.length - 1
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border">
-        <div className="p-6 border-b flex items-center justify-between">
-          <div>
-            <div className="text-xs text-purple-600 font-medium">新手引导 {step + 1}/{steps.length}</div>
-            <h3 className="text-2xl font-bold mt-1">{current.title}</h3>
-          </div>
-          <button onClick={onSkip} className="text-gray-500 hover:text-gray-700 text-sm">跳过</button>
-        </div>
-        <div className="p-6">
-          <p className="text-gray-700 leading-7">{current.desc}</p>
-          <div className="mt-5 h-2 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
-          </div>
-        </div>
-        <div className="p-6 border-t flex items-center justify-between">
-          <button onClick={onPrev} disabled={isFirst} className="px-4 py-2 rounded-lg border disabled:opacity-50">上一步</button>
-          <button onClick={onNext} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">
-            {isLast ? '完成引导' : '下一步'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
