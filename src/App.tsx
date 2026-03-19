@@ -163,7 +163,7 @@ const SESSION_KEY = 'tikgen.session'
 
 function parseSessionFromUrl(): null | {
   access_token: string
-  refresh_token: string
+  refresh_token?: string
   expires_at?: number
   token_type?: string
   type?: string
@@ -175,13 +175,21 @@ function parseSessionFromUrl(): null | {
       const sp = new URLSearchParams(cleaned)
       const access_token = String(sp.get('access_token') || '')
       const refresh_token = String(sp.get('refresh_token') || '')
-      if (!access_token || !refresh_token) return null
+      const type = String(sp.get('type') || '')
+      if (!access_token) return null
+      // Some password recovery reset links may omit refresh_token.
+      if (type === 'recovery') {
+        // For recovery flows we only need access_token to call our update endpoint.
+        if (!access_token) return null
+      } else {
+        // For other flows, keep the previous requirement.
+        if (!refresh_token) return null
+      }
       const expires_at = sp.get('expires_at') ? Number(sp.get('expires_at')) : undefined
       const token_type = String(sp.get('token_type') || '')
-      const type = String(sp.get('type') || '')
       return {
         access_token,
-        refresh_token,
+        refresh_token: type === 'recovery' ? refresh_token || undefined : refresh_token,
         expires_at: Number.isFinite(expires_at as any) ? expires_at : undefined,
         token_type: token_type || undefined,
         type: type || undefined,
@@ -362,7 +370,8 @@ function App() {
   useEffect(() => {
     if (localStorage.getItem('tikgen.accessToken')) return
     const hs = parseSessionFromUrl()
-    if (!hs?.access_token || !hs?.refresh_token) return
+    if (!hs?.access_token) return
+    if (hs.type !== 'recovery' && !hs?.refresh_token) return
     try {
       if (hs.type === 'recovery') {
         setRecoveryAccessToken(hs.access_token)
