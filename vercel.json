@@ -5,6 +5,7 @@
     { "source": "/api/assets/update", "destination": "/api/assets-update" },
     { "source": "/api/assets/delete", "destination": "/api/assets-delete" },
     { "source": "/api/tasks/list", "destination": "/api/tasks-list" },
+    { "source": "/api/monitoring/stats", "destination": "/api/monitoring-stats" },
     { "source": "/api/auth/register", "destination": "/api/auth-register" },
     { "source": "/api/auth/login", "destination": "/api/auth-login" },
     { "source": "/api/auth/refresh", "destination": "/api/auth-refresh" },

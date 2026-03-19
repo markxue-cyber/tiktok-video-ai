@@ -9,6 +9,7 @@ import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
+import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { Sentry } from './sentry'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -85,6 +86,18 @@ const IMAGE_MODELS = [
   { id: 'dalle-3', name: 'DALL·E 3' },
   { id: 'midjourney', name: 'Midjourney' },
 ]
+
+const TEMP_UNAVAILABLE_IMAGE_MODEL_RULES: Array<{ test: RegExp; reason: string }> = [
+  { test: /midjourney|^mj_/i, reason: '当前通道暂不可用' },
+]
+
+function getImageModelUnavailableReason(id: string): string {
+  const s = String(id || '')
+  for (const r of TEMP_UNAVAILABLE_IMAGE_MODEL_RULES) {
+    if (r.test.test(s)) return r.reason
+  }
+  return ''
+}
 
 const IMAGE_ASPECT_OPTIONS = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2'] as const
 const IMAGE_RES_OPTIONS = ['1024', '1536', '2048', '4096'] as const // 通用档位（部分模型会映射到2k/4k）
@@ -1331,6 +1344,14 @@ function ImageGenerator() {
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
+  const imageModelOptions = useMemo(
+    () =>
+      imageModels.map((m) => ({
+        ...m,
+        unavailableReason: getImageModelUnavailableReason(m.id),
+      })),
+    [imageModels],
+  )
 
   useEffect(() => {
     ;(async () => {
@@ -1411,6 +1432,13 @@ function ImageGenerator() {
     if (!imageCaps.resolutions.includes(resolution)) setResolution(imageCaps.defaults.resolution)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model])
+
+  useEffect(() => {
+    const selected = imageModelOptions.find((x) => x.id === model)
+    if (selected && !selected.unavailableReason) return
+    const firstAvailable = imageModelOptions.find((x) => !x.unavailableReason)
+    if (firstAvailable && firstAvailable.id !== model) setModel(firstAvailable.id)
+  }, [imageModelOptions, model])
 
   const handlePromptGen = async () => {
     if (!refImageDataUrl) {
@@ -2074,8 +2102,16 @@ function ImageGenerator() {
           <div>
             <label className="block text-sm font-medium mb-1">AI模型</label>
             <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {imageModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {imageModelOptions.map((m) => (
+                <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
+                  {m.name}
+                  {m.unavailableReason ? `（暂不可用）` : ''}
+                </option>
+              ))}
             </select>
+            {imageModelOptions.some((m) => m.unavailableReason) && (
+              <div className="mt-1 text-xs text-amber-600">已标记“暂不可用”的模型不可选，系统会自动使用可用模型。</div>
+            )}
           </div>
           <div />
         </div>
@@ -2585,12 +2621,15 @@ function Assets() {
 
 function TaskCenter() {
   const PAGE_SIZE = 20
+  const accessToken = localStorage.getItem('tikgen.accessToken') || ''
   const [tasks, setTasks] = useState<GenerationTaskItem[]>([])
+  const [stats, setStats] = useState<MonitoringStats | null>(null)
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
+  const [statsError, setStatsError] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'image'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'processing' | 'succeeded' | 'failed'>('all')
 
@@ -2614,7 +2653,19 @@ function TaskCenter() {
       setLoading(true)
       setError('')
       try {
-        await load(true)
+        await Promise.all([
+          load(true),
+          (async () => {
+            try {
+              if (!accessToken) return
+              const s = await getMonitoringStatsAPI(accessToken, 'system')
+              setStats(s)
+              setStatsError('')
+            } catch (e: any) {
+              setStatsError(e?.message || '统计获取失败')
+            }
+          })(),
+        ])
       } catch (e: any) {
         setError(e?.message || '获取任务失败')
       } finally {
@@ -2644,6 +2695,56 @@ function TaskCenter() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
+        <div className="mb-5 rounded-xl border bg-gray-50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold text-gray-900">系统稳定性监控（近24小时）</div>
+            {stats ? (
+              <div className="text-xs text-gray-500">{stats.scope === 'system' ? '范围：全系统' : '范围：当前账号'}</div>
+            ) : null}
+          </div>
+          {statsError ? (
+            <div className="mt-2 text-sm text-red-600">{statsError}</div>
+          ) : stats ? (
+            <>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-3">
+                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">任务总数</div><div className="text-lg font-bold">{stats.total}</div></div>
+                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">失败率</div><div className="text-lg font-bold text-red-600">{(stats.failedRate * 100).toFixed(1)}%</div></div>
+                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">成功</div><div className="text-lg font-bold text-emerald-600">{stats.byStatus.succeeded}</div></div>
+                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">失败</div><div className="text-lg font-bold text-red-600">{stats.byStatus.failed}</div></div>
+                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">图片任务</div><div className="text-lg font-bold">{stats.byType.image}</div></div>
+                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">视频任务</div><div className="text-lg font-bold">{stats.byType.video}</div></div>
+              </div>
+              <div className="mt-3 grid md:grid-cols-2 gap-3">
+                <div className="rounded-lg bg-white border p-3">
+                  <div className="text-sm font-medium mb-2">错误分布 Top</div>
+                  {stats.errorTop.length ? (
+                    <div className="space-y-1">
+                      {stats.errorTop.slice(0, 5).map((x, i) => (
+                        <div key={i} className="text-xs text-gray-700 flex items-center justify-between gap-2">
+                          <span className="truncate">{x.message}</span>
+                          <span className="text-red-600 font-semibold">{x.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400">暂无错误</div>
+                  )}
+                </div>
+                <div className="rounded-lg bg-white border p-3">
+                  <div className="text-sm font-medium mb-2">支付状态分布</div>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="rounded bg-gray-50 p-2 text-center"><div className="text-gray-500">创建</div><div className="font-semibold">{stats.orders24h.byStatus.created}</div></div>
+                    <div className="rounded bg-emerald-50 p-2 text-center"><div className="text-emerald-700">已支付</div><div className="font-semibold text-emerald-700">{stats.orders24h.byStatus.paid}</div></div>
+                    <div className="rounded bg-red-50 p-2 text-center"><div className="text-red-600">失败</div><div className="font-semibold text-red-600">{stats.orders24h.byStatus.failed}</div></div>
+                    <div className="rounded bg-gray-50 p-2 text-center"><div className="text-gray-500">退款</div><div className="font-semibold">{stats.orders24h.byStatus.refunded}</div></div>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="mt-2 text-sm text-gray-400">统计加载中...</div>
+          )}
+        </div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">任务中心</h2>
           <div className="flex items-center gap-2">
