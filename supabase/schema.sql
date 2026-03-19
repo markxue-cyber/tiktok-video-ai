@@ -91,3 +91,55 @@ create table if not exists public.assets (
 create index if not exists assets_user_created_idx on public.assets(user_id, created_at desc);
 create index if not exists assets_user_source_idx on public.assets(user_id, source, created_at desc);
 
+-- Admin operation center (P1)
+alter table public.users add column if not exists is_frozen boolean not null default false;
+alter table public.users add column if not exists freeze_reason text;
+alter table public.users add column if not exists updated_at timestamptz not null default now();
+
+create table if not exists public.model_controls (
+  id uuid primary key default gen_random_uuid(),
+  model_id text not null unique,
+  type text not null check (type in ('video', 'image', 'llm')),
+  enabled boolean not null default true,
+  recommended boolean not null default false,
+  note text,
+  updated_by uuid,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists model_controls_type_idx on public.model_controls(type, enabled, recommended);
+
+create table if not exists public.package_configs (
+  id uuid primary key default gen_random_uuid(),
+  plan_id text not null unique check (plan_id in ('trial','basic','pro','enterprise')),
+  name text not null,
+  price_cents integer not null default 0,
+  currency text not null default 'CNY',
+  daily_quota integer not null default 0,
+  features jsonb not null default '[]'::jsonb,
+  model_whitelist jsonb not null default '[]'::jsonb,
+  enabled boolean not null default true,
+  updated_by uuid,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  content text not null,
+  type text not null default 'system' check (type in ('system','activity','release')),
+  target text not null default 'all' check (target in ('all','trial','basic','pro','enterprise')),
+  status text not null default 'draft' check (status in ('draft','published','offline')),
+  starts_at timestamptz,
+  ends_at timestamptz,
+  published_at timestamptz,
+  created_by uuid,
+  updated_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists announcements_status_idx on public.announcements(status, starts_at desc, created_at desc);
+

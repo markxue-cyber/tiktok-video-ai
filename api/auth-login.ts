@@ -88,6 +88,25 @@ export default async function handler(req, res) {
       body: JSON.stringify([{ id: user.id, email: user.email || String(email), display_name: display }]),
     })
 
+    const freezeResp = await fetch(`${base}/rest/v1/users?id=eq.${user.id}&select=is_frozen,freeze_reason`, {
+      method: 'GET',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    })
+    const freezeText = await freezeResp.text()
+    let freezeJson: any = null
+    try {
+      freezeJson = freezeText ? JSON.parse(freezeText) : null
+    } catch {
+      freezeJson = null
+    }
+    const freezeRow = Array.isArray(freezeJson) ? freezeJson[0] : null
+    if (freezeRow?.is_frozen === true) {
+      return sendJson(res, 200, { success: false, error: freezeRow?.freeze_reason || '账号已被冻结，请联系管理员' })
+    }
+
     // check existing subscription
     const subResp = await fetch(`${base}/rest/v1/subscriptions?user_id=eq.${user.id}&select=*`, {
       method: 'GET',

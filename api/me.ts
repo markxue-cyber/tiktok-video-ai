@@ -79,6 +79,9 @@ export default async function handler(req, res) {
       profileJson = null
     }
     const profile = Array.isArray(profileJson) ? profileJson[0] : profileJson
+    if (profile?.is_frozen === true) {
+      return sendJson(res, 200, { success: false, error: profile?.freeze_reason || '账号已被冻结，请联系管理员' })
+    }
 
     const subResp = await fetch(`${base}/rest/v1/subscriptions?user_id=eq.${userId}&select=*`, {
       method: 'GET',

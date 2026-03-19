@@ -11,6 +11,17 @@ import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type Ass
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
+import {
+  adminListAnnouncements,
+  adminListModelControls,
+  adminListPackageConfigs,
+  adminListUsers,
+  adminUpdateModelControl,
+  adminUpdateUser,
+  adminUpsertAnnouncement,
+  adminUpsertPackageConfig,
+  type AdminUserItem,
+} from './api/admin'
 import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
 
@@ -826,7 +837,7 @@ function App() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button onClick={() => setShowFeedback(true)} className="p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="反馈问题">
+              <button onClick={() => setShowFeedback(true)} className="p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="工单/客服">
                 <MessageSquare className="w-5 h-5" />
               </button>
               <button onClick={() => setShowHelp(true)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
@@ -1044,15 +1055,43 @@ function FeedbackLite({
   const [desc, setDesc] = useState('')
   const [email, setEmail] = useState('')
   const [notice, setNotice] = useState('')
+  const [recentTickets, setRecentTickets] = useState<
+    Array<{
+      id: string
+      kind: 'bug' | 'suggestion' | 'other'
+      desc: string
+      email: string
+      page: string
+      createdAt: string
+      status: 'submitted'
+    }>
+  >([])
+
+  useEffect(() => {
+    if (!open) return
+    try {
+      const raw = localStorage.getItem('tikgen.support.tickets.v1')
+      const parsed = raw ? JSON.parse(raw) : []
+      if (Array.isArray(parsed)) {
+        setRecentTickets(parsed.slice(0, 5))
+      }
+    } catch {
+      setRecentTickets([])
+    }
+  }, [open])
 
   if (!open) return null
 
+  const ticketId = `TK${Date.now().toString().slice(-8)}`
+
   const buildBody = () => {
     const lines = [
+      `工单号: ${ticketId}`,
       `问题类型: ${kind}`,
       `当前页面: ${currentPage}`,
       `用户邮箱(可选): ${email || '(未填写)'}`,
       `提交时间: ${new Date().toISOString()}`,
+      `处理状态: submitted`,
       '',
       '问题描述:',
       desc || '(未填写)',
@@ -1065,15 +1104,35 @@ function FeedbackLite({
       setNotice('请先填写问题描述')
       return
     }
+    const ticket = {
+      id: ticketId,
+      kind,
+      desc: desc.trim(),
+      email: email.trim(),
+      page: currentPage,
+      createdAt: new Date().toISOString(),
+      status: 'submitted' as const,
+    }
+    try {
+      const raw = localStorage.getItem('tikgen.support.tickets.v1')
+      const parsed = raw ? JSON.parse(raw) : []
+      const next = Array.isArray(parsed) ? [ticket, ...parsed].slice(0, 50) : [ticket]
+      localStorage.setItem('tikgen.support.tickets.v1', JSON.stringify(next))
+      setRecentTickets(next.slice(0, 5))
+    } catch {
+      // ignore localStorage errors
+    }
+
     const subject = encodeURIComponent(`[TikGen反馈] ${kind}`)
     const body = encodeURIComponent(buildBody())
     const mailto = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`
     window.location.href = mailto
     try {
       await navigator.clipboard.writeText(buildBody())
-      setNotice('已尝试打开邮件客户端，同时已复制反馈内容到剪贴板。')
+      setNotice(`工单 ${ticketId} 已提交。已尝试打开邮件客户端，并复制工单内容到剪贴板。`)
+      setDesc('')
     } catch {
-      setNotice('已尝试打开邮件客户端。若未打开，请手动发送到支持邮箱。')
+      setNotice(`工单 ${ticketId} 已提交。已尝试打开邮件客户端。若未打开，请手动发送到支持邮箱。`)
     }
   }
 
@@ -1081,7 +1140,7 @@ function FeedbackLite({
     <div className="fixed inset-0 bg-black/45 z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-white rounded-2xl border shadow-2xl">
         <div className="p-5 border-b flex items-center justify-between">
-          <h3 className="text-xl font-bold">反馈问题（轻量版）</h3>
+          <h3 className="text-xl font-bold">工单/客服入口（轻量版）</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-5 space-y-4">
@@ -1102,12 +1161,30 @@ function FeedbackLite({
             <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="用于客服回访" />
           </div>
           {!!notice && <div className="text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg p-2">{notice}</div>}
+          <div className="rounded-xl border p-3 bg-gray-50">
+            <div className="text-sm font-semibold text-gray-800 mb-2">最近工单（仅本机记录）</div>
+            {recentTickets.length === 0 ? (
+              <div className="text-xs text-gray-500">暂无记录</div>
+            ) : (
+              <div className="space-y-2 max-h-36 overflow-y-auto">
+                {recentTickets.map((t) => (
+                  <div key={t.id} className="text-xs bg-white border rounded-lg p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-700">{t.id}</span>
+                      <span className="text-gray-500">{new Date(t.createdAt).toLocaleString()}</span>
+                    </div>
+                    <div className="text-gray-600 mt-1">{t.desc.slice(0, 40) || '(空)'}{t.desc.length > 40 ? '...' : ''}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="p-5 border-t flex items-center justify-between">
           <div className="text-xs text-gray-500">支持邮箱：{SUPPORT_EMAIL}</div>
           <div className="flex items-center gap-3">
             <button onClick={onClose} className="px-4 py-2 border rounded-lg">取消</button>
-            <button onClick={handleSubmit} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">发送反馈</button>
+            <button onClick={handleSubmit} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">提交工单</button>
           </div>
         </div>
       </div>
@@ -1159,7 +1236,7 @@ function HelpCenter() {
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border p-6 shadow-sm">
         <h2 className="text-xl font-bold">帮助中心 / FAQ</h2>
-        <p className="text-sm text-gray-500 mt-1">先搜索关键词；仍无法解决可点击右上角“反馈问题”。</p>
+        <p className="text-sm text-gray-500 mt-1">先搜索关键词；仍无法解决可点击右上角“工单/客服”。</p>
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -1245,6 +1322,22 @@ function VideoGenerator({
         const r = await getModelAvailabilityAPI(token)
         const map: Record<string, string> = {}
         for (const x of r.video || []) map[String(x.id)] = String(x.reason || '暂不可用')
+        try {
+          const resp = await fetch('/api/model-controls?type=video')
+          const data = await resp.json()
+          if (data?.success && Array.isArray(data.controls)) {
+            let recommended = ''
+            for (const c of data.controls) {
+              const id = String(c.model_id || '')
+              if (!id) continue
+              if (c.enabled === false) map[id] = String(c.note || '后台已禁用')
+              if (!recommended && c.recommended === true && c.enabled !== false) recommended = id
+            }
+            if (recommended && VIDEO_MODELS.some((m) => m.id === recommended)) setModel(recommended)
+          }
+        } catch {
+          // ignore controls loading failures
+        }
         setUnavailableVideoMap(map)
       } catch {
         // ignore
@@ -1962,6 +2055,22 @@ function ImageGenerator({
         const r = await getModelAvailabilityAPI(token)
         const map: Record<string, string> = {}
         for (const x of r.image || []) map[String(x.id)] = String(x.reason || '暂不可用')
+        try {
+          const resp = await fetch('/api/model-controls?type=image')
+          const data = await resp.json()
+          if (data?.success && Array.isArray(data.controls)) {
+            let recommended = ''
+            for (const c of data.controls) {
+              const id = String(c.model_id || '')
+              if (!id) continue
+              if (c.enabled === false) map[id] = String(c.note || '后台已禁用')
+              if (!recommended && c.recommended === true && c.enabled !== false) recommended = id
+            }
+            if (recommended) setModel(recommended)
+          }
+        } catch {
+          // ignore controls loading failures
+        }
         setUnavailableImageMap(map)
       } catch {
         // ignore
@@ -3416,6 +3525,431 @@ function TaskCenter() {
 }
 
 function DeveloperConsole() {
+  const [tab, setTab] = useState<'monitor' | 'users' | 'models' | 'packages' | 'announcements'>('users')
+  return (
+    <div className="max-w-6xl mx-auto space-y-4">
+      <div className="bg-white rounded-2xl p-3 shadow border flex items-center gap-2 flex-wrap">
+        <button onClick={() => setTab('users')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'users' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>用户管理</button>
+        <button onClick={() => setTab('models')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'models' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>模型开关</button>
+        <button onClick={() => setTab('packages')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'packages' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>套餐管理</button>
+        <button onClick={() => setTab('announcements')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'announcements' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>公告发布</button>
+        <button onClick={() => setTab('monitor')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'monitor' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>系统监控</button>
+      </div>
+      {tab === 'users' && <AdminUsersPanel />}
+      {tab === 'models' && <AdminModelControlsPanel />}
+      {tab === 'packages' && <AdminPackagesPanel />}
+      {tab === 'announcements' && <AdminAnnouncementsPanel />}
+      {tab === 'monitor' && <AdminMonitoringPanel />}
+    </div>
+  )
+}
+
+function AdminUsersPanel() {
+  const [q, setQ] = useState('')
+  const [plan, setPlan] = useState('')
+  const [frozen, setFrozen] = useState<'all' | 'true' | 'false'>('all')
+  const [users, setUsers] = useState<AdminUserItem[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const load = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await adminListUsers({ q, plan: plan || undefined, frozen: frozen === 'all' ? undefined : frozen, limit: 100 })
+      setUsers(r.users || [])
+    } catch (e: any) {
+      setErr(e?.message || '加载用户失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const setPlanForUser = async (userId: string, planId: string) => {
+    setNotice('')
+    try {
+      await adminUpdateUser({ userId, action: 'setPlan', planId })
+      setNotice('套餐更新成功')
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '更新套餐失败')
+    }
+  }
+
+  const toggleFreeze = async (userId: string, isFrozen: boolean) => {
+    setNotice('')
+    try {
+      await adminUpdateUser({ userId, action: 'setFrozen', isFrozen, freezeReason: isFrozen ? '运营后台手动冻结' : '' })
+      setNotice(isFrozen ? '用户已冻结' : '用户已解冻')
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '更新冻结状态失败')
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold">用户管理</h3>
+          <p className="text-sm text-gray-500 mt-1">查询用户、改套餐、冻结/解冻账号</p>
+        </div>
+        <button onClick={() => void load()} className="px-3 py-2 border rounded-lg text-sm">{busy ? '刷新中...' : '刷新'}</button>
+      </div>
+      <div className="grid md:grid-cols-4 gap-3">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索邮箱/昵称" className="px-3 py-2 border rounded-lg" />
+        <select value={plan} onChange={(e) => setPlan(e.target.value)} className="px-3 py-2 border rounded-lg">
+          <option value="">全部套餐</option>
+          <option value="trial">trial</option>
+          <option value="basic">basic</option>
+          <option value="pro">pro</option>
+          <option value="enterprise">enterprise</option>
+        </select>
+        <select value={frozen} onChange={(e) => setFrozen(e.target.value as any)} className="px-3 py-2 border rounded-lg">
+          <option value="all">全部状态</option>
+          <option value="false">未冻结</option>
+          <option value="true">已冻结</option>
+        </select>
+        <button onClick={() => void load()} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">查询</button>
+      </div>
+      {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
+      {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
+      <div className="overflow-x-auto border rounded-xl">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="text-left px-3 py-2">用户</th>
+              <th className="text-left px-3 py-2">套餐</th>
+              <th className="text-left px-3 py-2">状态</th>
+              <th className="text-left px-3 py-2">注册时间</th>
+              <th className="text-left px-3 py-2">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-t">
+                <td className="px-3 py-2">
+                  <div className="font-medium text-gray-900">{u.display_name || '-'}</div>
+                  <div className="text-xs text-gray-500">{u.email}</div>
+                </td>
+                <td className="px-3 py-2">
+                  <select
+                    value={String(u.subscription?.plan_id || 'trial')}
+                    onChange={(e) => void setPlanForUser(u.id, e.target.value)}
+                    className="px-2 py-1 border rounded-lg"
+                  >
+                    <option value="trial">trial</option>
+                    <option value="basic">basic</option>
+                    <option value="pro">pro</option>
+                    <option value="enterprise">enterprise</option>
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  {u.is_frozen ? <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">已冻结</span> : <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">正常</span>}
+                </td>
+                <td className="px-3 py-2 text-gray-600">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                <td className="px-3 py-2">
+                  <button onClick={() => void toggleFreeze(u.id, !u.is_frozen)} className={`px-2 py-1 rounded-lg text-xs ${u.is_frozen ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    {u.is_frozen ? '解冻' : '冻结'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {users.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-gray-400">暂无用户数据</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function AdminModelControlsPanel() {
+  const [type, setType] = useState<'video' | 'image' | 'llm'>('video')
+  const [controls, setControls] = useState<any[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const allModelIds = useMemo(() => {
+    const list = type === 'video' ? VIDEO_MODELS.map((m) => m.id) : type === 'image' ? IMAGE_MODELS.map((m) => m.id) : ['gpt-4o']
+    const fromDb = controls.map((c) => String(c.model_id || '')).filter(Boolean)
+    return Array.from(new Set([...list, ...fromDb]))
+  }, [type, controls])
+
+  const load = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await adminListModelControls(type)
+      setControls(r.controls || [])
+    } catch (e: any) {
+      setErr(e?.message || '加载模型开关失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type])
+
+  const byId = useMemo(() => {
+    const map: Record<string, any> = {}
+    for (const c of controls) map[String(c.model_id)] = c
+    return map
+  }, [controls])
+
+  const save = async (modelId: string, patch: { enabled?: boolean; recommended?: boolean; note?: string }) => {
+    setNotice('')
+    try {
+      const cur = byId[modelId] || {}
+      await adminUpdateModelControl({
+        modelId,
+        type,
+        enabled: patch.enabled != null ? patch.enabled : cur.enabled !== false,
+        recommended: patch.recommended != null ? patch.recommended : !!cur.recommended,
+        note: patch.note != null ? patch.note : cur.note || '',
+      })
+      setNotice('模型配置已保存')
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '保存模型配置失败')
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold">模型开关</h3>
+          <p className="text-sm text-gray-500 mt-1">控制模型可用/禁用与推荐默认</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={type} onChange={(e) => setType(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm">
+            <option value="video">video</option>
+            <option value="image">image</option>
+            <option value="llm">llm</option>
+          </select>
+          <button onClick={() => void load()} className="px-3 py-2 border rounded-lg text-sm">{busy ? '刷新中...' : '刷新'}</button>
+        </div>
+      </div>
+      {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
+      {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
+      <div className="space-y-2">
+        {allModelIds.map((id) => {
+          const item = byId[id] || {}
+          const enabled = item.enabled !== false
+          const recommended = !!item.recommended
+          return (
+            <div key={id} className="border rounded-lg p-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="font-medium text-sm">{id}</div>
+                <div className="text-xs text-gray-500">{item.note || '-'}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => void save(id, { enabled: !enabled })} className={`px-2 py-1 text-xs rounded-lg ${enabled ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  {enabled ? '禁用' : '启用'}
+                </button>
+                <button onClick={() => void save(id, { recommended: !recommended, enabled: true })} className={`px-2 py-1 text-xs rounded-lg ${recommended ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
+                  {recommended ? '取消推荐' : '设为推荐'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function AdminPackagesPanel() {
+  const [configs, setConfigs] = useState<any[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const load = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await adminListPackageConfigs()
+      setConfigs(r.configs || [])
+    } catch (e: any) {
+      setErr(e?.message || '加载套餐配置失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const updateOne = async (idx: number, patch: any) => {
+    const next = [...configs]
+    next[idx] = { ...next[idx], ...patch }
+    setConfigs(next)
+  }
+
+  const saveOne = async (row: any) => {
+    setNotice('')
+    try {
+      const features = String(row.featuresText || '')
+        .split('\n')
+        .map((x) => x.trim())
+        .filter(Boolean)
+      await adminUpsertPackageConfig({
+        planId: row.plan_id,
+        name: row.name,
+        priceCents: Number(row.price_cents || 0),
+        currency: row.currency || 'CNY',
+        dailyQuota: Number(row.daily_quota || 0),
+        features,
+        modelWhitelist: Array.isArray(row.model_whitelist) ? row.model_whitelist : [],
+        enabled: row.enabled !== false,
+      })
+      setNotice(`套餐 ${row.plan_id} 已保存`)
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '保存套餐失败')
+    }
+  }
+
+  const rows = configs.map((r) => ({ ...r, featuresText: Array.isArray(r.features) ? r.features.join('\n') : '' }))
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold">套餐管理（配置化）</h3>
+          <p className="text-sm text-gray-500 mt-1">可配置价格、日额度、特性文案</p>
+        </div>
+        <button onClick={() => void load()} className="px-3 py-2 border rounded-lg text-sm">{busy ? '刷新中...' : '刷新'}</button>
+      </div>
+      {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
+      {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
+      <div className="grid md:grid-cols-2 gap-4">
+        {rows.map((r, idx) => (
+          <div key={r.plan_id} className="border rounded-xl p-4 space-y-3">
+            <div className="font-semibold">{r.plan_id}</div>
+            <input value={r.name || ''} onChange={(e) => void updateOne(idx, { name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="套餐名称" />
+            <div className="grid grid-cols-2 gap-2">
+              <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(idx, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
+              <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(idx, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
+            </div>
+            <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(idx, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void updateOne(idx, { enabled: e.target.checked })} />
+              启用
+            </label>
+            <button onClick={() => void saveOne(r)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AdminAnnouncementsPanel() {
+  const [list, setList] = useState<any[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [form, setForm] = useState<any>({ title: '', content: '', type: 'system', target: 'all', status: 'draft' })
+
+  const load = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await adminListAnnouncements()
+      setList(r.announcements || [])
+    } catch (e: any) {
+      setErr(e?.message || '加载公告失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const submit = async () => {
+    setNotice('')
+    try {
+      await adminUpsertAnnouncement(form)
+      setNotice('公告已保存')
+      setForm({ title: '', content: '', type: 'system', target: 'all', status: 'draft' })
+      await load()
+    } catch (e: any) {
+      setErr(e?.message || '保存公告失败')
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold">公告发布（定向触达）</h3>
+          <p className="text-sm text-gray-500 mt-1">按目标用户发布草稿/上线/下线公告</p>
+        </div>
+        <button onClick={() => void load()} className="px-3 py-2 border rounded-lg text-sm">{busy ? '刷新中...' : '刷新'}</button>
+      </div>
+      {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
+      {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
+      <div className="border rounded-xl p-4 space-y-3">
+        <input value={form.title} onChange={(e) => setForm((x: any) => ({ ...x, title: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="公告标题" />
+        <textarea value={form.content} onChange={(e) => setForm((x: any) => ({ ...x, content: e.target.value }))} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="公告内容" />
+        <div className="grid grid-cols-3 gap-2">
+          <select value={form.type} onChange={(e) => setForm((x: any) => ({ ...x, type: e.target.value }))} className="px-3 py-2 border rounded-lg">
+            <option value="system">system</option>
+            <option value="activity">activity</option>
+            <option value="release">release</option>
+          </select>
+          <select value={form.target} onChange={(e) => setForm((x: any) => ({ ...x, target: e.target.value }))} className="px-3 py-2 border rounded-lg">
+            <option value="all">all</option>
+            <option value="trial">trial</option>
+            <option value="basic">basic</option>
+            <option value="pro">pro</option>
+            <option value="enterprise">enterprise</option>
+          </select>
+          <select value={form.status} onChange={(e) => setForm((x: any) => ({ ...x, status: e.target.value }))} className="px-3 py-2 border rounded-lg">
+            <option value="draft">draft</option>
+            <option value="published">published</option>
+            <option value="offline">offline</option>
+          </select>
+        </div>
+        <button onClick={() => void submit()} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存公告</button>
+      </div>
+      <div className="space-y-2">
+        {list.map((a) => (
+          <div key={a.id} className="border rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div className="font-medium">{a.title}</div>
+              <div className="text-xs text-gray-500">{a.status} · {a.target}</div>
+            </div>
+            <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.content}</div>
+            <div className="mt-2">
+              <button onClick={() => setForm({ id: a.id, title: a.title, content: a.content, type: a.type, target: a.target, status: a.status || 'draft' })} className="px-2 py-1 rounded border text-xs">
+                编辑
+              </button>
+            </div>
+          </div>
+        ))}
+        {list.length === 0 && <div className="text-sm text-gray-400 py-4 text-center">暂无公告</div>}
+      </div>
+    </div>
+  )
+}
+
+function AdminMonitoringPanel() {
   const accessToken = localStorage.getItem('tikgen.accessToken') || ''
   const [stats, setStats] = useState<MonitoringStats | null>(null)
   const [loading, setLoading] = useState(false)

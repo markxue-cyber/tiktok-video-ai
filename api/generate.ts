@@ -45,6 +45,35 @@ async function updateTaskByProviderId(providerTaskId: string, patch: any) {
     // never block generation if task logging fails
   }
 }
+
+async function ensureModelEnabled(modelId: string, type: 'video' | 'image' | 'llm') {
+  try {
+    const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
+    const resp = await fetch(
+      `${supabaseBaseUrl()}/rest/v1/model_controls?model_id=eq.${encodeURIComponent(modelId)}&type=eq.${encodeURIComponent(type)}&select=enabled`,
+      {
+        method: 'GET',
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+      },
+    )
+    const text = await resp.text()
+    const data = (() => {
+      try {
+        return text ? JSON.parse(text) : []
+      } catch {
+        return []
+      }
+    })()
+    const row = Array.isArray(data) ? data[0] : null
+    if (row && row.enabled === false) return false
+    return true
+  } catch {
+    return true
+  }
+}
 export default async function handler(req, res) {
   // 打印请求信息
   console.log('Request method:', req.method)
@@ -57,6 +86,17 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: 'API Key未配置' })
     }
 
+    const inferCode = (message: string): string => {
+      const t = String(message || '').toLowerCase()
+      if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) return 'QUOTA_EXHAUSTED'
+      if (t.includes('timeout') || t.includes('超时')) return 'UPSTREAM_TIMEOUT'
+      if (t.includes('model') && (t.includes('does not exist') || t.includes('invalid field') || t.includes('not in') || t.includes('不存在'))) {
+        return 'MODEL_UNAVAILABLE'
+      }
+      if (t.includes('missingparameter') || (t.includes('missing') && t.includes('content'))) return 'UPSTREAM_BAD_REQUEST'
+      return 'UPSTREAM_ERROR'
+    }
+
     // 提交视频生成任务
     if (req.method === 'POST') {
       // 保险栓：防止非用户确认的请求触发计费
@@ -64,7 +104,13 @@ export default async function handler(req, res) {
       if (!billableConfirmed) {
         return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
       }
-      const consumed = await checkAndConsume(req, { type: 'video' })
+      let consumed
+      try {
+        consumed = await checkAndConsume(req, { type: 'video' })
+      } catch (e: any) {
+        const msg = String(e?.message || '额度校验失败')
+        return res.status(200).json({ success: false, error: msg, code: inferCode(msg) })
+      }
       if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
       const { prompt, model, duration, aspect_ratio, resolution, refImage } = req.body || {}
 
@@ -106,6 +152,10 @@ export default async function handler(req, res) {
       }
       
       const apiModel = model ? (modelMap[model] || model) : 'doubao-seedance-1-5-pro-251215'
+      const enabled = await ensureModelEnabled(String(apiModel), 'video')
+      if (!enabled) {
+        return res.status(200).json({ success: false, error: `模型 ${apiModel} 已被后台禁用`, code: 'MODEL_UNAVAILABLE' })
+      }
       
       console.log('Submitting with model:', apiModel)
 
@@ -135,9 +185,11 @@ export default async function handler(req, res) {
 
       // 检查是否有错误
       if (submitData.error) {
+        const msg = submitData.error.message || JSON.stringify(submitData.error)
         return res.status(200).json({ 
           success: false, 
-          error: submitData.error.message || JSON.stringify(submitData.error)
+          error: msg,
+          code: inferCode(msg),
         })
       }
 
@@ -148,6 +200,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ 
           success: false, 
           error: '无法获取任务ID（聚合API未返回可识别的task_id/id）',
+          code: 'UPSTREAM_NO_TASKID',
           raw: submitData
         })
       }
@@ -198,12 +251,16 @@ export default async function handler(req, res) {
         await updateTaskByProviderId(taskId, { status: 'processing' })
       }
 
+      const failReason = statusData.fail_reason
+      const failCode = inferCode(failReason || statusData?.error?.message || '')
+
       return res.status(200).json({
         success: true,
         status: statusData.status,
         progress: statusData.progress,
         videoUrl: statusData.data?.output || statusData.data?.outputs?.[0],
-        failReason: statusData.fail_reason
+        failReason,
+        failCode,
       })
     }
 
@@ -211,6 +268,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error:', error)
-    return res.status(500).json({ success: false, error: error.message })
+    const msg = String((error as any)?.message || 'Unknown error')
+    return res.status(200).json({ success: false, error: msg, code: inferCode(msg) })
   }
 }

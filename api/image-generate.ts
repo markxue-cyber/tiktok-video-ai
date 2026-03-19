@@ -27,6 +27,35 @@ async function writeTaskRow(payload: any) {
     // never block generation if task logging fails
   }
 }
+
+async function ensureModelEnabled(modelId: string, type: 'video' | 'image' | 'llm') {
+  try {
+    const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
+    const resp = await fetch(
+      `${supabaseBaseUrl()}/rest/v1/model_controls?model_id=eq.${encodeURIComponent(modelId)}&type=eq.${encodeURIComponent(type)}&select=enabled`,
+      {
+        method: 'GET',
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+      },
+    )
+    const text = await resp.text()
+    const data = (() => {
+      try {
+        return text ? JSON.parse(text) : []
+      } catch {
+        return []
+      }
+    })()
+    const row = Array.isArray(data) ? data[0] : null
+    if (row && row.enabled === false) return false
+    return true
+  } catch {
+    return true
+  }
+}
 export default async function handler(req, res) {
   try {
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
@@ -167,6 +196,21 @@ export default async function handler(req, res) {
     }
 
     let usedModel = String(model || '').trim()
+    if (usedModel) {
+      const enabled = await ensureModelEnabled(usedModel, 'image')
+      if (!enabled) {
+        await writeTaskRow({
+          user_id: consumed?.user?.id || null,
+          type: 'image',
+          model: usedModel,
+          status: 'failed',
+          provider_task_id: null,
+          output_url: null,
+          raw: { reason: 'model disabled by admin' },
+        })
+        return res.status(200).json({ success: false, error: `模型 ${usedModel} 已被后台禁用`, code: 'MODEL_UNAVAILABLE' })
+      }
+    }
     let { resp: upstreamResp, raw: rawText, parsed: data } = await callUpstream(usedModel || undefined)
 
     let errorCode = 'UPSTREAM_ERROR'
