@@ -9,7 +9,6 @@ import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
-import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { Sentry } from './sentry'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -2621,15 +2620,12 @@ function Assets() {
 
 function TaskCenter() {
   const PAGE_SIZE = 20
-  const accessToken = localStorage.getItem('tikgen.accessToken') || ''
   const [tasks, setTasks] = useState<GenerationTaskItem[]>([])
-  const [stats, setStats] = useState<MonitoringStats | null>(null)
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
-  const [statsError, setStatsError] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'image'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'processing' | 'succeeded' | 'failed'>('all')
 
@@ -2653,19 +2649,7 @@ function TaskCenter() {
       setLoading(true)
       setError('')
       try {
-        await Promise.all([
-          load(true),
-          (async () => {
-            try {
-              if (!accessToken) return
-              const s = await getMonitoringStatsAPI(accessToken, 'system')
-              setStats(s)
-              setStatsError('')
-            } catch (e: any) {
-              setStatsError(e?.message || '统计获取失败')
-            }
-          })(),
-        ])
+        await load(true)
       } catch (e: any) {
         setError(e?.message || '获取任务失败')
       } finally {
@@ -2695,56 +2679,6 @@ function TaskCenter() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <div className="mb-5 rounded-xl border bg-gray-50 p-4">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold text-gray-900">系统稳定性监控（近24小时）</div>
-            {stats ? (
-              <div className="text-xs text-gray-500">{stats.scope === 'system' ? '范围：全系统' : '范围：当前账号'}</div>
-            ) : null}
-          </div>
-          {statsError ? (
-            <div className="mt-2 text-sm text-red-600">{statsError}</div>
-          ) : stats ? (
-            <>
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-3">
-                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">任务总数</div><div className="text-lg font-bold">{stats.total}</div></div>
-                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">失败率</div><div className="text-lg font-bold text-red-600">{(stats.failedRate * 100).toFixed(1)}%</div></div>
-                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">成功</div><div className="text-lg font-bold text-emerald-600">{stats.byStatus.succeeded}</div></div>
-                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">失败</div><div className="text-lg font-bold text-red-600">{stats.byStatus.failed}</div></div>
-                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">图片任务</div><div className="text-lg font-bold">{stats.byType.image}</div></div>
-                <div className="rounded-lg bg-white border p-3"><div className="text-xs text-gray-500">视频任务</div><div className="text-lg font-bold">{stats.byType.video}</div></div>
-              </div>
-              <div className="mt-3 grid md:grid-cols-2 gap-3">
-                <div className="rounded-lg bg-white border p-3">
-                  <div className="text-sm font-medium mb-2">错误分布 Top</div>
-                  {stats.errorTop.length ? (
-                    <div className="space-y-1">
-                      {stats.errorTop.slice(0, 5).map((x, i) => (
-                        <div key={i} className="text-xs text-gray-700 flex items-center justify-between gap-2">
-                          <span className="truncate">{x.message}</span>
-                          <span className="text-red-600 font-semibold">{x.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-400">暂无错误</div>
-                  )}
-                </div>
-                <div className="rounded-lg bg-white border p-3">
-                  <div className="text-sm font-medium mb-2">支付状态分布</div>
-                  <div className="grid grid-cols-4 gap-2 text-xs">
-                    <div className="rounded bg-gray-50 p-2 text-center"><div className="text-gray-500">创建</div><div className="font-semibold">{stats.orders24h.byStatus.created}</div></div>
-                    <div className="rounded bg-emerald-50 p-2 text-center"><div className="text-emerald-700">已支付</div><div className="font-semibold text-emerald-700">{stats.orders24h.byStatus.paid}</div></div>
-                    <div className="rounded bg-red-50 p-2 text-center"><div className="text-red-600">失败</div><div className="font-semibold text-red-600">{stats.orders24h.byStatus.failed}</div></div>
-                    <div className="rounded bg-gray-50 p-2 text-center"><div className="text-gray-500">退款</div><div className="font-semibold">{stats.orders24h.byStatus.refunded}</div></div>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="mt-2 text-sm text-gray-400">统计加载中...</div>
-          )}
-        </div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">任务中心</h2>
           <div className="flex items-center gap-2">
