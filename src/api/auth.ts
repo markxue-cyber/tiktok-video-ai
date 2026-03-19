@@ -38,6 +38,17 @@ export async function apiLogin(params: { email: string; password: string }) {
   return data
 }
 
+export async function apiRefresh(refreshToken: string) {
+  const resp = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `刷新会话失败(${resp.status})`)
+  return data
+}
+
 export async function apiMe(accessToken: string) {
   const resp = await fetch('/api/me', {
     headers: { Authorization: `Bearer ${accessToken}` },

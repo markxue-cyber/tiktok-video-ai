@@ -5,7 +5,7 @@ import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProduct
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
-import { apiLogin, apiMe, apiRegister } from './api/auth'
+import { apiLogin, apiMe, apiRefresh, apiRegister } from './api/auth'
 import { createOrder } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 
@@ -145,6 +145,7 @@ let assetsMemoryCache: {
 let assetsPrefetching = false
 let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
+const SESSION_KEY = 'tikgen.session'
 
 async function prefetchAssetsCacheIfNeeded() {
   if (assetsPrefetching) return
@@ -198,10 +199,38 @@ function App() {
   const [mainNav, setMainNav] = useState<'create' | 'tools' | 'assets' | 'benefits'>('create')
   const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
   const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
+  const [authHydrating, setAuthHydrating] = useState<boolean>(() => !!localStorage.getItem('tikgen.accessToken'))
+
+  const readSession = () => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  }
+
+  const saveSession = (session: any) => {
+    try {
+      if (!session?.access_token) return
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      localStorage.setItem('tikgen.accessToken', String(session.access_token))
+    } catch {
+      // ignore
+    }
+  }
+
+  const clearSession = () => {
+    localStorage.removeItem('tikgen.accessToken')
+    localStorage.removeItem(SESSION_KEY)
+  }
 
   useEffect(() => {
     ;(async () => {
-      if (!accessToken) return
+      if (!accessToken) {
+        setAuthHydrating(false)
+        return
+      }
       try {
         const me = await apiMe(accessToken)
         const plan = me?.subscription?.planId || 'trial'
@@ -216,14 +245,43 @@ function App() {
         })
         setPage('home')
       } catch {
-        localStorage.removeItem('tikgen.accessToken')
-        setAccessToken('')
+        try {
+          const sess = readSession()
+          const rt = String(sess?.refresh_token || '').trim()
+          if (!rt) throw new Error('missing refresh token')
+          const rr = await apiRefresh(rt)
+          const nextSession = rr?.session || null
+          if (!nextSession?.access_token) throw new Error('refresh failed')
+          saveSession(nextSession)
+          const nextToken = String(nextSession.access_token)
+          setAccessToken(nextToken)
+
+          const me = await apiMe(nextToken)
+          const plan = me?.subscription?.planId || 'trial'
+          const end = me?.subscription?.currentPeriodEnd ? String(me.subscription.currentPeriodEnd).slice(0, 10) : ''
+          setUser({
+            id: me?.user?.id,
+            name: me?.user?.name || me?.user?.email || '用户',
+            email: me?.user?.email,
+            credits: 0,
+            package: plan,
+            packageExpiresAt: end,
+          })
+          setPage('home')
+        } catch {
+          clearSession()
+          setAccessToken('')
+          setUser(null)
+          setPage('landing')
+        }
+      } finally {
+        setAuthHydrating(false)
       }
     })()
   }, [accessToken])
 
   const handleLogout = () => {
-    localStorage.removeItem('tikgen.accessToken')
+    clearSession()
     setAccessToken('')
     setUser(null)
     setPage('landing')
@@ -255,6 +313,20 @@ function App() {
       if (timerId != null) clearTimeout(timerId)
     }
   }, [accessToken, page])
+
+  if (authHydrating) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white border rounded-2xl px-6 py-5 shadow-sm flex items-center">
+          <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
+          <div>
+            <div className="font-medium text-gray-900">正在恢复登录状态</div>
+            <div className="text-sm text-gray-500">请稍等...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (page === 'landing')
     return (
@@ -409,9 +481,10 @@ function App() {
                     setAuthMode('login')
                     throw new Error('注册成功：请先去邮箱点击验证链接，然后再回来登录')
                   }
-                  const token = data?.session?.access_token
+                  const session = data?.session || null
+                  const token = session?.access_token
                   if (!token) throw new Error('登录成功但未返回 token')
-                  localStorage.setItem('tikgen.accessToken', token)
+                  saveSession(session)
                   setAccessToken(token)
                 } catch (e:any) {
                   const msg = String(e?.message || '登录失败')
