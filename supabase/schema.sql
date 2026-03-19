@@ -76,3 +76,18 @@ create table if not exists public.generation_tasks (
 
 create index if not exists generation_tasks_user_idx on public.generation_tasks(user_id, created_at desc);
 
+-- Assets library (user uploads + AI outputs), permanently retained
+create table if not exists public.assets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  source text not null check (source in ('user_upload','ai_generated')),
+  type text not null check (type in ('image','video')),
+  url text not null,
+  name text,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists assets_user_created_idx on public.assets(user_id, created_at desc);
+create index if not exists assets_user_source_idx on public.assets(user_id, source, created_at desc);
+

@@ -7,6 +7,7 @@ import { applyImageStyleTags } from './api/imageStyle'
 import { qcEcommerceImage } from './api/imageQc'
 import { apiLogin, apiMe, apiRegister } from './api/auth'
 import { createOrder } from './api/payments'
+import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -106,6 +107,28 @@ const IMAGE_MODEL_CAPS: Record<string, ImageModelCaps> = {
   midjourney: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
 }
 const PACKAGES = [{ id: 'trial', name: '试用版', price: '¥0', features: ['每天3次', '基础功能'] }, { id: 'basic', name: '基础版', price: '¥69/月', features: ['每天20次', '全部模型'] }, { id: 'pro', name: '专业版', price: '¥249/月', features: ['无限次数', '4K输出'] }, { id: 'enterprise', name: '旗舰版', price: '¥1199/月', features: ['企业级', 'API接入'] }]
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('读取文件失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function guessAssetType(file: File): 'image' | 'video' {
+  return String(file.type || '').startsWith('video/') ? 'video' : 'image'
+}
+
+async function safeArchiveAsset(params: { source: 'user_upload' | 'ai_generated'; type: 'image' | 'video'; url: string; name?: string; metadata?: any }) {
+  try {
+    if (!params.url) return
+    await createAssetAPI(params)
+  } catch {
+    // Never block core generation/upload UX due to archive write failure.
+  }
+}
 
 function App() {
   const [page, setPage] = useState<'landing' | 'auth' | 'home'>('landing')
@@ -770,6 +793,13 @@ function VideoGenerator() {
         if (status === 'succeeded' || status === 'success' || status === 'completed') {
           if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
           setGeneratedVideo(s.videoUrl)
+          await safeArchiveAsset({
+            source: 'ai_generated',
+            type: 'video',
+            url: s.videoUrl,
+            name: `video-${Date.now()}.mp4`,
+            metadata: { from: 'video_generator', model, size, resolution, durationSec },
+          })
           setStatusText('生成完成')
           setIsGenerating(false)
           return
@@ -980,14 +1010,20 @@ function VideoGenerator() {
             <input
               type="file"
               accept="image/*"
-              onChange={(e: any) => {
+              onChange={async (e: any) => {
                 const f: File | undefined = e.target.files?.[0]
                 if (!f) return
                 const preview = URL.createObjectURL(f)
                 setRefImagePreviewUrl(preview)
-                const reader = new FileReader()
-                reader.onload = () => setRefImageDataUrl(String(reader.result || ''))
-                reader.readAsDataURL(f)
+                const dataUrl = await fileToDataUrl(f)
+                setRefImageDataUrl(dataUrl)
+                await safeArchiveAsset({
+                  source: 'user_upload',
+                  type: 'image',
+                  url: dataUrl,
+                  name: f.name,
+                  metadata: { from: 'video_generator_ref', mime: f.type, size: f.size },
+                })
               }}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
@@ -1481,6 +1517,13 @@ function ImageGenerator() {
         refImage: refImageDataUrl || undefined,
       })
       setGeneratedImage(r.imageUrl)
+      await safeArchiveAsset({
+        source: 'ai_generated',
+        type: 'image',
+        url: r.imageUrl,
+        name: `image-${Date.now()}.png`,
+        metadata: { from: 'image_generator', model, size, resolution },
+      })
       clearInterval(timer)
       // 如果生成很快，给用户一个“完成感”
       const elapsed = Date.now() - startedAt
@@ -1582,6 +1625,13 @@ function ImageGenerator() {
         refImage: refImageDataUrl || undefined,
       })
       setGeneratedImage(r.imageUrl)
+      await safeArchiveAsset({
+        source: 'ai_generated',
+        type: 'image',
+        url: r.imageUrl,
+        name: `image-${Date.now()}.png`,
+        metadata: { from: 'image_generator_retry', model, size, resolution },
+      })
       clearInterval(timer)
       const elapsed = Date.now() - startedAt
       if (elapsed < 1200) {
@@ -1781,14 +1831,20 @@ function ImageGenerator() {
             <input
               type="file"
               accept="image/*"
-              onChange={(e: any) => {
+              onChange={async (e: any) => {
                 const f: File | undefined = e.target.files?.[0]
                 if (!f) return
                 const preview = URL.createObjectURL(f)
                 setRefImagePreviewUrl(preview)
-                const reader = new FileReader()
-                reader.onload = () => setRefImageDataUrl(String(reader.result || ''))
-                reader.readAsDataURL(f)
+                const dataUrl = await fileToDataUrl(f)
+                setRefImageDataUrl(dataUrl)
+                await safeArchiveAsset({
+                  source: 'user_upload',
+                  type: 'image',
+                  url: dataUrl,
+                  name: f.name,
+                  metadata: { from: 'image_generator_ref', mime: f.type, size: f.size },
+                })
               }}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
@@ -1937,22 +1993,274 @@ function ImageGenerator() {
 }
 
 function Assets() {
+  const PAGE_SIZE = 24
+  const [userUploads, setUserUploads] = useState<AssetItem[]>([])
+  const [aiOutputs, setAiOutputs] = useState<AssetItem[]>([])
+  const [userOffset, setUserOffset] = useState(0)
+  const [aiOffset, setAiOffset] = useState(0)
+  const [userHasMore, setUserHasMore] = useState(true)
+  const [aiHasMore, setAiHasMore] = useState(true)
+  const [userFilter, setUserFilter] = useState<'all' | 'image' | 'video'>('all')
+  const [aiFilter, setAiFilter] = useState<'all' | 'image' | 'video'>('all')
+  const [loading, setLoading] = useState(false)
+  const [loadingMoreUser, setLoadingMoreUser] = useState(false)
+  const [loadingMoreAi, setLoadingMoreAi] = useState(false)
+  const [error, setError] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [busyId, setBusyId] = useState('')
+
+  const loadSource = async (source: 'user_upload' | 'ai_generated', reset: boolean) => {
+    const isUser = source === 'user_upload'
+    const filter = isUser ? userFilter : aiFilter
+    const currentOffset = reset ? 0 : isUser ? userOffset : aiOffset
+    const r = await listAssetsAPI({
+      source,
+      type: filter === 'all' ? undefined : filter,
+      limit: PAGE_SIZE,
+      offset: currentOffset,
+    })
+    const list = r.assets || []
+    if (isUser) {
+      if (reset) setUserUploads(list)
+      else setUserUploads((prev) => [...prev, ...list])
+      setUserOffset((r.nextOffset ?? (currentOffset + list.length)))
+      setUserHasMore(Boolean(r.hasMore))
+    } else {
+      if (reset) setAiOutputs(list)
+      else setAiOutputs((prev) => [...prev, ...list])
+      setAiOffset((r.nextOffset ?? (currentOffset + list.length)))
+      setAiHasMore(Boolean(r.hasMore))
+    }
+  }
+
+  const refreshAll = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      await loadSource('user_upload', true)
+      await loadSource('ai_generated', true)
+    } catch (e: any) {
+      setError(e?.message || '获取资产失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    refreshAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    // filter changed -> reset this section pagination
+    ;(async () => {
+      try {
+        await loadSource('user_upload', true)
+      } catch {
+        // handled in UI on next manual refresh
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userFilter])
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        await loadSource('ai_generated', true)
+      } catch {
+        // handled in UI on next manual refresh
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiFilter])
+
+  const handleStandaloneUpload = async (files: FileList | null) => {
+    if (!files?.length) return
+    setUploading(true)
+    setError('')
+    try {
+      for (const f of Array.from(files)) {
+        const dataUrl = await fileToDataUrl(f)
+        await createAssetAPI({
+          source: 'user_upload',
+          type: guessAssetType(f),
+          url: dataUrl,
+          name: f.name,
+          metadata: { from: 'assets_upload', mime: f.type, size: f.size },
+        })
+      }
+      await refreshAll()
+    } catch (e: any) {
+      setError(e?.message || '上传失败')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRename = async (a: AssetItem) => {
+    const next = window.prompt('输入新的资产名称', a.name || '')
+    if (next == null) return
+    setBusyId(a.id)
+    setError('')
+    try {
+      await updateAssetAPI({ id: a.id, name: next })
+      if (a.source === 'user_upload') await loadSource('user_upload', true)
+      else await loadSource('ai_generated', true)
+    } catch (e: any) {
+      setError(e?.message || '重命名失败')
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  const handleDelete = async (a: AssetItem) => {
+    if (!window.confirm('确认删除该资产吗？删除后不可恢复。')) return
+    setBusyId(a.id)
+    setError('')
+    try {
+      await deleteAssetAPI(a.id)
+      if (a.source === 'user_upload') {
+        setUserUploads((prev) => prev.filter((x) => x.id !== a.id))
+      } else {
+        setAiOutputs((prev) => prev.filter((x) => x.id !== a.id))
+      }
+    } catch (e: any) {
+      setError(e?.message || '删除失败')
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  const renderAssetCard = (a: AssetItem) => {
+    const isImage = a.type === 'image'
+    return (
+      <div key={a.id} className="rounded-xl border bg-white p-3">
+        <div className="h-28 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden">
+          {isImage ? (
+            <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-cover" />
+          ) : (
+            <video src={a.url} className="w-full h-full object-cover" />
+          )}
+        </div>
+        <div className="mt-2 text-xs text-gray-600 truncate">{a.name || `${a.type} 资产`}</div>
+        <div className="mt-1 text-[11px] text-gray-400">{new Date(a.created_at).toLocaleString()}</div>
+        <div className="mt-2 flex gap-2">
+          <a href={a.url} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 rounded border">预览</a>
+          <a href={a.url} download className="text-xs px-2 py-1 rounded border">下载</a>
+          <button disabled={busyId === a.id} onClick={() => handleRename(a)} className="text-xs px-2 py-1 rounded border disabled:opacity-50">重命名</button>
+          <button disabled={busyId === a.id} onClick={() => handleDelete(a)} className="text-xs px-2 py-1 rounded border text-red-600 border-red-200 disabled:opacity-50">删除</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">资产库</h2>
-        <button className="px-4 py-2 bg-gray-900 text-white rounded-lg">上传素材</button>
+        <div className="flex items-center gap-2">
+          <button onClick={refreshAll} className="px-3 py-2 border rounded-lg text-sm">刷新</button>
+          <label className="px-4 py-2 bg-gray-900 text-white rounded-lg cursor-pointer">
+            {uploading ? '上传中...' : '上传素材'}
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => handleStandaloneUpload(e.target.files)}
+            />
+          </label>
+        </div>
       </div>
+      {!!error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>}
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 shadow-lg">
-          <h3 className="font-bold mb-3">用户上传</h3>
-          <p className="text-sm text-gray-500">展示用户上传的图片/视频。创作模块上传内容也会自动归档到这里（下一版接入）。</p>
-          <div className="mt-6 h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无素材</div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold">用户上传</h3>
+            <div className="flex items-center gap-1">
+              {(['all', 'image', 'video'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setUserFilter(f)}
+                  className={`px-2.5 py-1 text-xs rounded-lg border ${userFilter === f ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600'}`}
+                >
+                  {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-sm text-gray-500">包含：创作模块上传 + 资产库手动上传，均归档到当前账号。</p>
+          <div className="mt-4">
+            {loading ? (
+              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
+            ) : userUploads.length ? (
+              <>
+                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{userUploads.map(renderAssetCard)}</div>
+                {userHasMore && (
+                  <button
+                    disabled={loadingMoreUser}
+                    onClick={async () => {
+                      setLoadingMoreUser(true)
+                      try {
+                        await loadSource('user_upload', false)
+                      } finally {
+                        setLoadingMoreUser(false)
+                      }
+                    }}
+                    className="mt-3 w-full py-2 rounded-lg border text-sm disabled:opacity-50"
+                  >
+                    {loadingMoreUser ? '加载中...' : '加载更多'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无素材</div>
+            )}
+          </div>
         </div>
         <div className="bg-white rounded-2xl p-6 shadow-lg">
-          <h3 className="font-bold mb-3">AI生成</h3>
-          <p className="text-sm text-gray-500">展示视频生成、图片生成与工具模块产出的素材（下一版接入）。</p>
-          <div className="mt-6 h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无生成记录</div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold">AI生成</h3>
+            <div className="flex items-center gap-1">
+              {(['all', 'image', 'video'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setAiFilter(f)}
+                  className={`px-2.5 py-1 text-xs rounded-lg border ${aiFilter === f ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600'}`}
+                >
+                  {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-sm text-gray-500">包含：视频生成、图片生成成功后的结果，自动归档到当前账号。</p>
+          <div className="mt-4">
+            {loading ? (
+              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
+            ) : aiOutputs.length ? (
+              <>
+                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{aiOutputs.map(renderAssetCard)}</div>
+                {aiHasMore && (
+                  <button
+                    disabled={loadingMoreAi}
+                    onClick={async () => {
+                      setLoadingMoreAi(true)
+                      try {
+                        await loadSource('ai_generated', false)
+                      } finally {
+                        setLoadingMoreAi(false)
+                      }
+                    }}
+                    className="mt-3 w-full py-2 rounded-lg border text-sm disabled:opacity-50"
+                  >
+                    {loadingMoreAi ? '加载中...' : '加载更多'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无生成记录</div>
+            )}
+          </div>
         </div>
       </div>
     </div>
