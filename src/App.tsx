@@ -3864,6 +3864,8 @@ function AdminPackagesPanel() {
       })
       setNotice(`套餐 ${row.plan_id} 已保存`)
       await load()
+      // 保存成功后回到只读状态
+      setEditingPlanId(null)
     } catch (e: any) {
       setErr(e?.message || '保存套餐失败')
     } finally {
