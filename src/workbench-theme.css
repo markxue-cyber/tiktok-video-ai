@@ -156,3 +156,20 @@
   background-clip: text !important;
 }
 
+/* Fix ugly "white" separators in step headers (e.g. bg-gray-200). */
+.workbench-root [class*="bg-gray-200"] {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+.workbench-root [class*="border-gray-200"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Generation modal "AI parsing" overlay: reduce transparency for the mask/card. */
+.workbench-root .fixed div[class*="absolute"][class*="inset-0"][class*="bg-white/70"] {
+  background-color: rgba(0, 0, 0, 0.48) !important;
+}
+.workbench-root .fixed div[class*="absolute"][class*="inset-0"][class*="bg-white/70"] .bg-white {
+  background-color: rgba(12, 14, 30, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
