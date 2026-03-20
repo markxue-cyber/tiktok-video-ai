@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loading Preview 8</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#090b16,#030409);font-family:Inter,"PingFang SC",sans-serif}
+    .card{width:min(700px,92vw);padding:34px;border-radius:22px;border:1px solid rgba(255,255,255,.12);background:rgba(10,13,31,.84);text-align:center}
+    h1{margin:0;color:#f6f4ff;font-size:30px}.sub{margin:10px 0 18px;color:rgba(232,226,255,.72)}
+    .hex{width:120px;height:120px;margin:0 auto 16px;position:relative}
+    .hex div{position:absolute;inset:0;clip-path:polygon(25% 6%,75% 6%,94% 50%,75% 94%,25% 94%,6% 50%);border:2px solid rgba(167,139,250,.5);animation:spin 2.2s linear infinite}
+    .hex div:nth-child(2){inset:18px;border-color:rgba(56,189,248,.65);animation-direction:reverse}
+    .hex div:nth-child(3){inset:36px;border-color:rgba(255,255,255,.35)}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="hex"><div></div><div></div><div></div></div>
+    <h1>生成引擎启动中</h1>
+    <div class="sub">正在初始化参数与任务队列，请稍等…</div>
+  </section>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loading Preview 11</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(70rem 32rem at 50% 0%,rgba(192,132,252,.16),transparent 56%),linear-gradient(180deg,#070914,#020307);font-family:Inter,"PingFang SC",sans-serif}
+    .card{width:min(760px,92vw);padding:34px;border-radius:24px;border:1px solid rgba(255,255,255,.11);background:rgba(9,12,28,.85)}
+    .top{display:flex;justify-content:space-between;align-items:center;color:#f6f3ff}
+    .top h1{margin:0;font-size:28px}
+    .eta{font-size:13px;color:rgba(215,225,255,.82)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+    .cell{height:64px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);position:relative;overflow:hidden}
+    .cell i{position:absolute;inset:0;background:linear-gradient(120deg,transparent,rgba(255,255,255,.18),transparent);transform:translateX(-120%);animation:s 1.8s ease-in-out infinite}
+    .cell:nth-child(2) i{animation-delay:.12s}.cell:nth-child(3) i{animation-delay:.24s}.cell:nth-child(4) i{animation-delay:.36s}
+    .cell:nth-child(5) i{animation-delay:.48s}.cell:nth-child(6) i{animation-delay:.6s}
+    .sub{margin-top:14px;color:rgba(229,224,255,.7);font-size:15px}
+    @keyframes s{0%{transform:translateX(-120%)} 60%,100%{transform:translateX(140%)}}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="top"><h1>多阶段处理中</h1><div class="eta">预计 00:52</div></div>
+    <div class="grid">
+      <div class="cell"><i></i></div><div class="cell"><i></i></div><div class="cell"><i></i></div>
+      <div class="cell"><i></i></div><div class="cell"><i></i></div><div class="cell"><i></i></div>
+    </div>
+    <div class="sub">任务正在排队、生成与质检流程中切换，请稍后。</div>
+  </section>
+</body>
+</html>

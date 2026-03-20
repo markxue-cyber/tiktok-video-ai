@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loading Preview 10</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(180deg,#080a14,#03040a);font-family:Inter,"PingFang SC",sans-serif}
+    .card{width:min(680px,92vw);padding:34px;border-radius:20px;border:1px solid rgba(255,255,255,.1);background:rgba(12,14,29,.78);text-align:center}
+    .spinner{width:88px;height:88px;margin:0 auto 14px;position:relative}
+    .spinner:before,.spinner:after{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid transparent}
+    .spinner:before{border-top-color:#a78bfa;animation:r 1.2s linear infinite}
+    .spinner:after{inset:14px;border-right-color:#67e8f9;animation:r2 1s linear infinite}
+    h1{margin:0;color:#f8f6ff;font-size:28px}.sub{margin:10px 0 16px;color:rgba(236,231,255,.7)}
+    .chips{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+    .chips span{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(234,228,255,.8)}
+    @keyframes r{to{transform:rotate(360deg)}} @keyframes r2{to{transform:rotate(-360deg)}}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="spinner"></div>
+    <h1>图片生成中</h1>
+    <div class="sub">已进入高质量渲染阶段，请稍等片刻…</div>
+    <div class="chips"><span>构图</span><span>光影</span><span>质检</span></div>
+  </section>
+</body>
+</html>
