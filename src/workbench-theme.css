@@ -58,6 +58,32 @@
   background-color: rgba(255,255,255,.04) !important;
 }
 
+/* Hover/active polish (avoid "too white" on menu hover) */
+.workbench-root aside button:hover {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.workbench-root aside button:hover span,
+.workbench-root aside button:hover svg {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* Modals (Help Center / Feedback) should be opaque enough. */
+.workbench-root .fixed .bg-white {
+  background-color: rgba(12, 14, 30, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.workbench-root .fixed .border {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+/* Icons inside modals: tint away from pure white. */
+.workbench-root .fixed svg {
+  color: rgba(235, 226, 255, 0.82) !important;
+}
+
 /* Convert common light panels into glass panels. */
 .workbench-root .bg-white,
 .workbench-root .bg-gray-50,
