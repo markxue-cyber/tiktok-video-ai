@@ -169,6 +169,71 @@ async function safeArchiveAsset(params: { source: 'user_upload' | 'ai_generated'
   }
 }
 
+function GenerationLoadingCard({
+  title,
+  subtitle,
+  chips,
+  statusText,
+  progressText,
+}: {
+  title: string
+  subtitle: string
+  chips?: string[]
+  statusText?: string
+  progressText?: string
+}) {
+  return (
+    <div className="h-96 rounded-xl border border-white/10 bg-[linear-gradient(180deg,#080a14,#03040a)] px-6 text-center flex flex-col items-center justify-center">
+      <div className="relative w-[88px] h-[88px] mb-3">
+        <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-400 animate-spin" />
+        <div className="absolute inset-[14px] rounded-full border-[3px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
+      </div>
+      <h3 className="text-[28px] leading-none font-semibold text-white">{title}</h3>
+      <p className="mt-2 text-sm text-white/70">{subtitle}</p>
+      {Array.isArray(chips) && chips.length > 0 ? (
+        <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+          {chips.map((chip) => (
+            <span key={chip} className="px-2.5 py-1 rounded-full text-xs border border-white/15 bg-white/5 text-white/80">
+              {chip}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {statusText ? <p className="mt-4 text-sm text-white/75">{statusText}</p> : null}
+      {progressText ? <p className="mt-1 text-xs text-white/55">{progressText}</p> : null}
+    </div>
+  )
+}
+
+const LOADING_COPY = {
+  tech: {
+    image: {
+      title: '图片生成中',
+      subtitle: '正在进行多阶段渲染与细节增强，请稍等片刻...',
+      chips: ['构图', '光影', '质检'],
+    },
+    video: {
+      title: '视频生成中',
+      subtitle: '正在计算运镜轨迹与画面细节，请稍等片刻...',
+      chips: ['构图', '运镜', '质检'],
+    },
+  },
+  premium: {
+    image: {
+      title: '图片生成中',
+      subtitle: '高品质画面正在精修中，请稍候...',
+      chips: ['构图美学', '光影层次', '品质校验'],
+    },
+    video: {
+      title: '视频生成中',
+      subtitle: '高阶视觉表达正在生成中，请稍候...',
+      chips: ['镜头语言', '节奏质感', '品质校验'],
+    },
+  },
+} as const
+
+const ACTIVE_LOADING_COPY_STYLE: keyof typeof LOADING_COPY = 'tech'
+
 const ASSETS_CACHE_KEY = 'tikgen.assets.cache.v1'
 let assetsMemoryCache: {
   userUploads: AssetItem[]
@@ -2192,12 +2257,13 @@ function VideoGenerator({
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">生成结果</h2>
         {isGenerating ? (
-          <div className="h-96 flex flex-col items-center justify-center bg-gray-50 rounded-xl px-6 text-center">
-            <RefreshCw className="w-16 h-16 animate-spin text-purple-500" />
-            <p className="mt-4 text-lg text-purple-600 font-medium">{statusText || '视频生成中...'}</p>
-            <p className="text-sm text-gray-500 mt-1">进度：{progress}</p>
-            {taskId && <p className="text-xs text-gray-400 mt-3 break-all">任务ID：{taskId}</p>}
-          </div>
+          <GenerationLoadingCard
+            title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.title}
+            subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.subtitle}
+            chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.chips}
+            statusText={statusText || '视频生成中...'}
+            progressText={`进度：${progress}${taskId ? ` | 任务ID：${taskId}` : ''}`}
+          />
         ) : errorText ? (
           <div className="h-96 flex flex-col items-center justify-center text-center bg-red-50 rounded-xl px-6">
             <p className="text-red-600 font-medium">生成失败</p>
@@ -3236,23 +3302,12 @@ function ImageGenerator({
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">生成结果</h2>
         {isGenerating ? (
-          <div className="h-96 flex flex-col items-center justify-center bg-gray-50 rounded-xl px-6 text-center">
-            <RefreshCw className="w-16 h-16 animate-spin text-purple-500" />
-            <p className="mt-4 text-lg text-purple-600 font-medium">图片生成中，请稍等...</p>
-            <div className="w-full max-w-md mt-6">
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                <span>生成进度</span>
-                <span className="tabular-nums">{Math.max(1, Math.min(99, genProgress))}%</span>
-              </div>
-              <div className="h-3 bg-white rounded-full border overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all"
-                  style={{ width: `${Math.max(1, Math.min(99, genProgress))}%` }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-gray-500">生成完成后会自动进行一次电商主图质检</div>
-            </div>
-          </div>
+          <GenerationLoadingCard
+            title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
+            subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.subtitle}
+            chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
+            progressText={`生成进度：${Math.max(1, Math.min(99, genProgress))}%`}
+          />
         ) : generatedImage ? (
           <div>
             <img src={generatedImage} alt="生成图片" className="w-full rounded-xl" />
