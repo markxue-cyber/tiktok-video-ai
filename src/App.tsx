@@ -319,6 +319,7 @@ function App() {
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [annBusy, setAnnBusy] = useState(false)
   const [readAnnouncementIds, setReadAnnouncementIds] = useState<string[]>([])
+  const announcementsRef = useRef<HTMLDivElement | null>(null)
 
   const readSession = () => {
     try {
@@ -536,6 +537,22 @@ function App() {
       }
     })()
   }, [accessToken, user?.package])
+
+  useEffect(() => {
+    if (!showAnnouncements) return
+    const onPointerDown = (ev: MouseEvent | TouchEvent) => {
+      const target = ev.target as Node | null
+      if (!target) return
+      if (announcementsRef.current?.contains(target)) return
+      setShowAnnouncements(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [showAnnouncements])
 
   if (page === 'landing')
     return (
@@ -923,7 +940,7 @@ function App() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="relative">
+              <div ref={announcementsRef} className="relative">
                 <button
                   onClick={() => {
                     const next = !showAnnouncements
