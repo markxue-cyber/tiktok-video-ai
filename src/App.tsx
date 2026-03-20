@@ -556,7 +556,7 @@ function App() {
                 <Library className="w-5 h-5 text-indigo-300" />
                 <span className="font-semibold">资产沉淀</span>
               </div>
-              <p className="text-white/60 mt-2 text-sm">用户上传与AI生成素材自动归档到资产库。</p>
+              <p className="text-white/60 mt-2 text-sm">本地上传与AI生成素材自动归档到资产库。</p>
             </div>
           </div>
         </div>
@@ -3310,7 +3310,7 @@ function Assets() {
       <div className="grid md:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold">用户上传</h3>
+            <h3 className="font-bold">本地上传</h3>
             <div className="flex items-center gap-1">
               {(['all', 'image', 'video'] as const).map((f) => (
                 <button
@@ -3323,7 +3323,7 @@ function Assets() {
               ))}
             </div>
           </div>
-          <p className="text-sm text-gray-500">包含：创作模块上传 + 资产库手动上传，均归档到当前账号。</p>
+          <p className="text-sm text-gray-500">包含：本地上传（创作模块上传 + 资产库手动上传），均归档到当前账号。</p>
           <div className="mt-4">
             {loading ? (
               <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
