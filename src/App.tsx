@@ -1242,7 +1242,7 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
       onMouseEnter={onMouseEnter}
       onClick={clickable ? onClick : undefined}
       title={collapsed ? label : undefined}
-      className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 rounded-xl transition-all ${
+      className={`group relative w-full flex items-center ${collapsed ? 'justify-center px-2 overflow-visible' : 'space-x-3 px-4'} py-3 rounded-xl transition-all ${
         active
           ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
           : clickable
@@ -1252,6 +1252,7 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
     >
       {icon}
       {!collapsed && <span className="font-medium">{label}</span>}
+      {collapsed && <span className="workbench-nav-tip">{label}</span>}
     </button>
   )
 }
@@ -2177,7 +2178,7 @@ function VideoGenerator({
           </div>
           {isAiBusy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-              <div className="relative bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center min-w-[360px]">
+              <div className="relative bg-white shadow-lg border rounded-2xl px-8 py-7 min-w-[360px] max-w-md w-[min(100%,420px)]">
                 <button
                   onClick={handleCloseAiBusy}
                   className="absolute right-3 top-3 p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/10"
@@ -2185,14 +2186,12 @@ function VideoGenerator({
                 >
                   <X className="w-4 h-4" />
                 </button>
-                <div className="flex items-center">
-                  <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
-                  <div>
-                    <div className="font-medium">
-                      {modalStep === 3 ? '视频脚本优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
-                    </div>
-                    <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
+                <div className="flex flex-col items-center text-center pt-1">
+                  <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mb-3 shrink-0" />
+                  <div className="font-medium">
+                    {modalStep === 3 ? '视频脚本优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
                   </div>
+                  <div className="text-sm text-gray-500 mt-1">请稍等，预计几秒钟...</div>
                 </div>
               </div>
             </div>
@@ -3297,7 +3296,7 @@ function ImageGenerator({
           </div>
           {isAiBusy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-              <div className="relative bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center min-w-[360px]">
+              <div className="relative bg-white shadow-lg border rounded-2xl px-8 py-7 min-w-[360px] max-w-md w-[min(100%,420px)]">
                 <button
                   onClick={handleCloseAiBusy}
                   className="absolute right-3 top-3 p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/10"
@@ -3305,10 +3304,10 @@ function ImageGenerator({
                 >
                   <X className="w-4 h-4" />
                 </button>
-                <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
-                <div>
+                <div className="flex flex-col items-center text-center pt-1">
+                  <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mb-3 shrink-0" />
                   <div className="font-medium">{modalStep === 2 ? '图片优化提示词AI生成中' : '商品信息解析中'}</div>
-                  <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
+                  <div className="text-sm text-gray-500 mt-1">请稍等，预计几秒钟...</div>
                 </div>
               </div>
             </div>

@@ -269,6 +269,31 @@
   color: rgba(232, 225, 255, 0.92) !important;
 }
 
+.workbench-root .workbench-nav-tip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 60;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 15, 34, 0.96);
+  color: rgba(237, 230, 255, 0.96);
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(3, 6, 18, 0.35);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.workbench-root aside button.group:hover .workbench-nav-tip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
 .workbench-root .workbench-user-menu-pop {
   transform-origin: top right;
   animation: workbench-user-menu-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
