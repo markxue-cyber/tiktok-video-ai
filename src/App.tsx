@@ -921,12 +921,14 @@ function App() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             )}
-            {navCollapsed && (
-              <button onClick={() => setNavCollapsed(false)} className="absolute top-4 right-2 p-1 rounded-md hover:bg-gray-100" title="展开导航">
+          </div>
+          {navCollapsed && (
+            <div className="mt-2 flex justify-center">
+              <button onClick={() => setNavCollapsed(false)} className="p-1.5 rounded-md hover:bg-gray-100" title="展开导航">
                 <ChevronRight className="w-4 h-4 rotate-180" />
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <nav className={`p-3 space-y-2 ${navCollapsed ? 'items-center' : ''}`}>
           <NavPrimary collapsed={navCollapsed} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} onClick={() => setMainNav('create')} />
