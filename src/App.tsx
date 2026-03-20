@@ -3127,7 +3127,7 @@ function ImageGenerator({
             <label className="block text-sm font-medium">参考图（可上传 1-5 张，至少 1 张）</label>
             <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-3">
+          <div className="border-2 border-dashed border-gray-300 rounded-xl p-2.5">
             {refImages.length ? (
               <div className="grid grid-cols-5 gap-2">
                 {refImages.map((img, i) => (
@@ -3139,12 +3139,12 @@ function ImageGenerator({
                 ))}
               </div>
             ) : (
-              <div className="py-3 text-center min-h-[180px] flex flex-col items-center justify-center">
-                <Upload className="w-7 h-7 mx-auto text-gray-300 mb-2" />
-                <div className="text-lg font-semibold mb-1">点击或拖拽上传图片</div>
-                <div className="text-[11px] text-gray-500 mb-3">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
+              <div className="py-2 text-center min-h-[150px] flex flex-col items-center justify-center">
+                <Upload className="w-6 h-6 mx-auto text-gray-300 mb-1.5" />
+                <div className="text-base font-semibold mb-1">点击或拖拽上传图片</div>
+                <div className="text-[10px] text-gray-500 mb-2.5">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
                 <div className="flex items-center justify-center gap-2">
-                  <label className="px-3.5 py-1.5 rounded-lg border text-sm cursor-pointer hover:bg-gray-50">
+                  <label className="px-3 py-1.5 rounded-lg border text-xs cursor-pointer hover:bg-gray-50">
                     选择文件
                     <input
                       type="file"
@@ -3162,7 +3162,7 @@ function ImageGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-3.5 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
+                    className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
                   >
                     从资产库选择
                   </button>
