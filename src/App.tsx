@@ -2348,6 +2348,7 @@ function ImageGenerator({
   const [refUploadNotice, setRefUploadNotice] = useState('')
   const [refUploadBusy, setRefUploadBusy] = useState(false)
   const [previewRefImage, setPreviewRefImage] = useState<{ url: string; name: string; index: number } | null>(null)
+  const [draggingRefId, setDraggingRefId] = useState('')
   const refUploadInputRef = useRef<HTMLInputElement | null>(null)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
@@ -2394,6 +2395,19 @@ function ImageGenerator({
 
   const removeRefImage = (id: string) => {
     setRefImages((prev) => prev.filter((x) => x.id !== id))
+  }
+
+  const moveRefImage = (fromId: string, toId: string) => {
+    if (!fromId || !toId || fromId === toId) return
+    setRefImages((prev) => {
+      const fromIdx = prev.findIndex((x) => x.id === fromId)
+      const toIdx = prev.findIndex((x) => x.id === toId)
+      if (fromIdx < 0 || toIdx < 0) return prev
+      const next = [...prev]
+      const [picked] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, picked)
+      return next
+    })
   }
 
   const handleLocalRefUpload = async (files: FileList | null) => {
@@ -3247,7 +3261,10 @@ function ImageGenerator({
 
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">参考图（支持上传1-5张）</label>
+            <div>
+              <label className="block text-sm font-medium">参考图</label>
+              <div className="text-[11px] text-gray-500 mt-0.5">支持上传1-5张图片</div>
+            </div>
             <div className="text-xs text-gray-500">{refUploadBusy ? '上传中...' : `${refImages.length}/${MAX_REF_IMAGES}`}</div>
           </div>
           <div
@@ -3279,7 +3296,23 @@ function ImageGenerator({
               <div className="space-y-2">
                 <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
                   {refImages.map((img, i) => (
-                    <div key={img.id} className="relative rounded-lg overflow-hidden border bg-gray-50">
+                    <div
+                      key={img.id}
+                      draggable
+                      onDragStart={() => setDraggingRefId(img.id)}
+                      onDragEnd={() => setDraggingRefId('')}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        moveRefImage(draggingRefId, img.id)
+                        setDraggingRefId('')
+                      }}
+                      className={`relative rounded-lg overflow-hidden border bg-gray-50 ${draggingRefId === img.id ? 'opacity-60 ring-1 ring-purple-300' : ''}`}
+                    >
                       <button
                         type="button"
                         onClick={(e) => {
@@ -3291,7 +3324,7 @@ function ImageGenerator({
                       >
                         <img src={img.url} alt={img.name || `参考图${i + 1}`} className="w-full h-20 object-cover" />
                       </button>
-                      {i === 0 && <span className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">主参考</span>}
+                      {i === 0 && <span className="absolute left-1 top-1 text-xs px-2 py-1 rounded bg-black/65 text-white font-medium">主参考</span>}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
