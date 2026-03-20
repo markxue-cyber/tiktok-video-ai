@@ -2677,6 +2677,25 @@ function ImageGenerator({
     setPrompt(optimizedPrompt)
   }
 
+  const handlePrev = () => {
+    if (isAiBusy) return
+    if (modalStep > 1) setModalStep(modalStep - 1)
+  }
+
+  const handleStepJump = (target: 1 | 2) => {
+    if (isAiBusy) return
+    if (target === modalStep) return
+    if (target === 1) {
+      setModalStep(1)
+      return
+    }
+    if (modalStep === 1 && !optimizedPrompt && !Object.keys(promptParts || {}).length) {
+      void handleNext()
+      return
+    }
+    setModalStep(2)
+  }
+
   const buildPromptFromParts = (parts: any) => {
     const pick = (k: string) => String(parts?.[k] || '').trim()
     const segs = [pick('subject'), pick('scene'), pick('composition'), pick('lighting'), pick('camera'), pick('style'), pick('quality'), pick('extra')].filter(Boolean)
@@ -3084,16 +3103,30 @@ function ImageGenerator({
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
           <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">一键生成提示词</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
-          <div className="px-6 py-4 border-b bg-gray-50 flex items-center">
-            {['商品信息解析', '图片优化提示词'].map((s, i) => (
-              <div key={i} className="flex items-center flex-1">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${modalStep > i + 1 ? 'bg-green-500 text-white' : modalStep === i + 1 ? 'bg-purple-500 text-white' : 'bg-gray-300'}`}>
-                  {modalStep > i + 1 ? <Check className="w-4 h-4" /> : i + 1}
-                </div>
-                <span className={`ml-2 text-sm ${modalStep === i + 1 ? 'font-medium' : 'text-gray-400'}`}>{s}</span>
-                {i < 1 && <div className="flex-1 h-0.5 bg-gray-200 mx-4" />}
-              </div>
-            ))}
+          <div className="px-6 py-4 border-b bg-gray-50">
+            <div className="flex items-center justify-center gap-4">
+              {[{ title: '商品信息解析', idx: 1 as const }, { title: '图片优化提示词', idx: 2 as const }].map((step, i) => {
+                const done = modalStep > step.idx
+                const active = modalStep === step.idx
+                return (
+                  <div key={step.idx} className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => handleStepJump(step.idx)}
+                      className="flex items-center gap-2"
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${
+                        done ? 'bg-green-500 border-green-400 text-white' : active ? 'bg-purple-600 border-purple-400 text-white shadow-[0_0_0_2px_rgba(168,85,247,0.35)]' : 'bg-gray-200 border-gray-300 text-gray-600'
+                      }`}>
+                        {done ? <Check className="w-4 h-4" /> : step.idx}
+                      </div>
+                      <span className={`text-sm ${active ? 'font-semibold text-purple-700' : done ? 'text-green-700' : 'text-gray-500'}`}>{step.title}</span>
+                    </button>
+                    {i < 1 && <div className={`w-16 h-0.5 mx-3 ${modalStep > step.idx ? 'bg-green-400' : 'bg-gray-300'}`} />}
+                  </div>
+                )
+              })}
+            </div>
           </div>
           <div className="p-6">
             {modalStep === 1 && (<div className="space-y-4">{refImagePreviewUrl && <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 rounded-lg" />}{['name', 'category', 'sellingPoints', 'targetAudience'].map(f => <div key={f}><label className="block text-sm font-medium mb-1">{f === 'name' ? '产品名称' : f === 'category' ? '产品类目' : f === 'sellingPoints' ? '核心卖点' : '目标人群'}</label><input value={productInfo[f as keyof typeof productInfo]} onChange={e => setProductInfo({...productInfo, [f]: e.target.value})} className="w-full px-4 py-2 border rounded-lg" /></div>)}<div><label className="block text-sm font-medium mb-1">图片语言</label><select value={productInfo.language} onChange={e => setProductInfo({...productInfo, language: e.target.value})} className="w-full px-4 py-2 border rounded-lg"><option>简体中文</option><option>English</option></select></div></div>)}
@@ -3232,11 +3265,16 @@ function ImageGenerator({
               </div>
             </div>
           )}
-          <div className="p-6 border-t flex justify-end space-x-3">
+          <div className="p-6 border-t flex items-center justify-between">
             <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg">取消</button>
-            <button disabled={isAiBusy} onClick={handleNext} className="px-4 py-2 bg-purple-500 text-white rounded-lg disabled:opacity-50">
-              {isAiBusy ? '处理中...' : modalStep === 2 ? '确认' : '下一步'}
-            </button>
+            <div className="flex items-center gap-3">
+              {modalStep > 1 && (
+                <button onClick={handlePrev} disabled={isAiBusy} className="px-4 py-2 border rounded-lg disabled:opacity-50">上一步</button>
+              )}
+              <button disabled={isAiBusy} onClick={handleNext} className="px-4 py-2 bg-purple-500 text-white rounded-lg disabled:opacity-50">
+                {isAiBusy ? '处理中...' : modalStep === 2 ? '确认' : '下一步'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
