@@ -1536,6 +1536,7 @@ function VideoGenerator({
   const [assetList, setAssetList] = useState<AssetItem[]>([])
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
+  const [previewRefImage, setPreviewRefImage] = useState<{ url: string; name: string; index: number } | null>(null)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
@@ -2423,6 +2424,15 @@ function ImageGenerator({
   }
 
   useEffect(() => {
+    if (!previewRefImage) return
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewRefImage(null)
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [previewRefImage])
+
+  useEffect(() => {
     ;(async () => {
       try {
         const token = localStorage.getItem('tikgen.accessToken') || ''
@@ -3200,8 +3210,22 @@ function ImageGenerator({
               <div className="grid grid-cols-5 gap-2">
                 {refImages.map((img, i) => (
                   <div key={img.id} className="relative rounded-lg overflow-hidden border bg-gray-50">
-                    <img src={img.url} alt={img.name || `参考图${i + 1}`} className="w-full h-20 object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPreviewRefImage({ url: img.url, name: img.name || `参考图${i + 1}`, index: i })}
+                      className="block w-full"
+                      title="点击预览"
+                    >
+                      <img src={img.url} alt={img.name || `参考图${i + 1}`} className="w-full h-20 object-cover" />
+                    </button>
                     {i === 0 && <span className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">主参考</span>}
+                    <button
+                      onClick={() => setPreviewRefImage({ url: img.url, name: img.name || `参考图${i + 1}`, index: i })}
+                      className="absolute left-1 bottom-1 h-5 px-1.5 rounded bg-black/60 text-white text-[10px] inline-flex items-center gap-1"
+                      title="预览"
+                    >
+                      <Eye className="w-3 h-3" /> 预览
+                    </button>
                     <button onClick={() => removeRefImage(img.id)} className="absolute right-1 top-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs">×</button>
                   </div>
                 ))}
@@ -3434,6 +3458,24 @@ function ImageGenerator({
           <div className="px-5 py-4 border-t flex items-center justify-end gap-2">
             <button onClick={() => setShowAssetPicker(false)} className="px-4 py-2 rounded-lg border">取消</button>
             <button onClick={confirmAssetPick} className="px-4 py-2 rounded-lg bg-purple-600 text-white">确认选择（{assetSelectedIds.size}）</button>
+          </div>
+        </div>
+      </div>
+    )}
+    {previewRefImage && (
+      <div className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreviewRefImage(null)}>
+        <div className="relative max-w-4xl w-full" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setPreviewRefImage(null)}
+            className="absolute -top-10 right-0 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+          >
+            关闭
+          </button>
+          <div className="rounded-2xl border border-white/20 bg-white/5 p-2">
+            <img src={previewRefImage.url} alt={previewRefImage.name} className="w-full max-h-[78vh] object-contain rounded-xl" />
+          </div>
+          <div className="mt-2 text-center text-xs text-white/70">
+            {previewRefImage.name}（{previewRefImage.index + 1}/{refImages.length}）
           </div>
         </div>
       </div>
