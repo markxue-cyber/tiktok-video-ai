@@ -252,6 +252,7 @@ let assetsPrefetching = false
 let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
 const SESSION_KEY = 'tikgen.session'
+const SUPPORT_TICKET_ENABLED = false
 
 function parseSessionFromUrl(): null | {
   access_token: string
@@ -1082,9 +1083,11 @@ function App() {
                   </div>
                 )}
               </div>
-              <button onClick={() => setShowFeedback(true)} className="workbench-topicon-btn p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="工单/客服">
-                <MessageSquare className="w-5 h-5" />
-              </button>
+              {SUPPORT_TICKET_ENABLED ? (
+                <button onClick={() => setShowFeedback(true)} className="workbench-topicon-btn p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="工单/客服">
+                  <MessageSquare className="w-5 h-5" />
+                </button>
+              ) : null}
               <button onClick={() => setShowHelp(true)} className="workbench-topicon-btn p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
                 <Library className="w-5 h-5" />
               </button>
@@ -1151,7 +1154,7 @@ function App() {
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
         </div>
       </main>
-      <FeedbackLite open={showFeedback} onClose={() => setShowFeedback(false)} currentPage={currentPageLabel} />
+      {SUPPORT_TICKET_ENABLED ? <FeedbackLite open={showFeedback} onClose={() => setShowFeedback(false)} currentPage={currentPageLabel} /> : null}
       {showHelp && (
         <div className="fixed inset-0 bg-black/45 z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl border shadow-2xl p-6">
@@ -1466,7 +1469,7 @@ function HelpCenter() {
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border p-6 shadow-sm">
         <h2 className="text-xl font-bold">帮助中心 / FAQ</h2>
-        <p className="text-sm text-gray-500 mt-1">先搜索关键词；仍无法解决可点击右上角“工单/客服”。</p>
+        <p className="text-sm text-gray-500 mt-1">先搜索关键词；若仍无法解决，请联系管理员。</p>
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -4080,14 +4083,16 @@ function DeveloperConsole() {
         <button onClick={() => setTab('models')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'models' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>模型开关</button>
         <button onClick={() => setTab('packages')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'packages' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>套餐管理</button>
         <button onClick={() => setTab('announcements')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'announcements' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>公告发布</button>
-        <button onClick={() => setTab('tickets')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'tickets' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>工单管理</button>
+        {SUPPORT_TICKET_ENABLED ? (
+          <button onClick={() => setTab('tickets')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'tickets' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>工单管理</button>
+        ) : null}
         <button onClick={() => setTab('monitor')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'monitor' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>系统监控</button>
       </div>
       {tab === 'users' && <AdminUsersPanel />}
       {tab === 'models' && <AdminModelControlsPanel />}
       {tab === 'packages' && <AdminPackagesPanel />}
       {tab === 'announcements' && <AdminAnnouncementsPanel />}
-      {tab === 'tickets' && <AdminSupportTicketsPanel />}
+      {SUPPORT_TICKET_ENABLED && tab === 'tickets' && <AdminSupportTicketsPanel />}
       {tab === 'monitor' && <AdminMonitoringPanel />}
     </div>
   )
