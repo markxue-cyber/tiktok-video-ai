@@ -4078,6 +4078,13 @@ function AdminUsersPanel() {
     }
   }
 
+  const planLabel: Record<string, string> = {
+    trial: '试用版',
+    basic: '基础版',
+    pro: '专业版',
+    enterprise: '旗舰版',
+  }
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
       <div className="flex items-center justify-between">
@@ -4091,10 +4098,10 @@ function AdminUsersPanel() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索邮箱/昵称" className="px-3 py-2 border rounded-lg" />
         <select value={plan} onChange={(e) => setPlan(e.target.value)} className="px-3 py-2 border rounded-lg">
           <option value="">全部套餐</option>
-          <option value="trial">trial</option>
-          <option value="basic">basic</option>
-          <option value="pro">pro</option>
-          <option value="enterprise">enterprise</option>
+          <option value="trial">{planLabel.trial}</option>
+          <option value="basic">{planLabel.basic}</option>
+          <option value="pro">{planLabel.pro}</option>
+          <option value="enterprise">{planLabel.enterprise}</option>
         </select>
         <select value={frozen} onChange={(e) => setFrozen(e.target.value as any)} className="px-3 py-2 border rounded-lg">
           <option value="all">全部状态</option>
@@ -4105,42 +4112,53 @@ function AdminUsersPanel() {
       </div>
       {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
       {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
-      <div className="overflow-x-auto border rounded-xl">
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.02] shadow-[0_18px_50px_rgba(2,6,23,0.32)]">
         <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
+          <thead className="bg-white/[0.03] text-white/60">
             <tr>
-              <th className="text-left px-3 py-2">用户</th>
-              <th className="text-left px-3 py-2">套餐</th>
-              <th className="text-left px-3 py-2">状态</th>
-              <th className="text-left px-3 py-2">注册时间</th>
-              <th className="text-left px-3 py-2">操作</th>
+              <th className="text-left px-4 py-3 font-medium">用户</th>
+              <th className="text-left px-4 py-3 font-medium">套餐</th>
+              <th className="text-left px-4 py-3 font-medium">状态</th>
+              <th className="text-left px-4 py-3 font-medium">注册时间</th>
+              <th className="text-left px-4 py-3 font-medium">操作</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="px-3 py-2">
-                  <div className="font-medium text-gray-900">{u.display_name || '-'}</div>
-                  <div className="text-xs text-gray-500">{u.email}</div>
+              <tr key={u.id} className="border-t border-white/10 hover:bg-white/[0.03] transition-colors">
+                <td className="px-4 py-3">
+                  <div className="font-medium text-white/90">{u.display_name || '-'}</div>
+                  <div className="text-xs text-white/55">{u.email}</div>
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   <select
                     value={String(u.subscription?.plan_id || 'trial')}
                     onChange={(e) => void setPlanForUser(u.id, e.target.value)}
-                    className="px-2 py-1 border rounded-lg"
+                    className="px-2.5 py-1.5 border border-white/15 bg-white/[0.03] rounded-lg text-white/85"
                   >
-                    <option value="trial">trial</option>
-                    <option value="basic">basic</option>
-                    <option value="pro">pro</option>
-                    <option value="enterprise">enterprise</option>
+                    <option value="trial">{planLabel.trial}</option>
+                    <option value="basic">{planLabel.basic}</option>
+                    <option value="pro">{planLabel.pro}</option>
+                    <option value="enterprise">{planLabel.enterprise}</option>
                   </select>
                 </td>
-                <td className="px-3 py-2">
-                  {u.is_frozen ? <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">已冻结</span> : <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">正常</span>}
+                <td className="px-4 py-3">
+                  {u.is_frozen ? (
+                    <span className="text-xs px-2.5 py-1 rounded-full border border-red-300/25 bg-red-500/15 text-red-200">已冻结</span>
+                  ) : (
+                    <span className="text-xs px-2.5 py-1 rounded-full border border-emerald-300/25 bg-emerald-500/15 text-emerald-200">正常</span>
+                  )}
                 </td>
-                <td className="px-3 py-2 text-gray-600">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
-                <td className="px-3 py-2">
-                  <button onClick={() => void toggleFreeze(u.id, !u.is_frozen)} className={`px-2 py-1 rounded-lg text-xs ${u.is_frozen ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                <td className="px-4 py-3 text-white/65">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => void toggleFreeze(u.id, !u.is_frozen)}
+                    className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                      u.is_frozen
+                        ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/18'
+                        : 'border-red-300/30 bg-red-500/10 text-red-200 hover:bg-red-500/18'
+                    }`}
+                  >
                     {u.is_frozen ? '解冻' : '冻结'}
                   </button>
                 </td>
@@ -4148,7 +4166,7 @@ function AdminUsersPanel() {
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-gray-400">暂无用户数据</td>
+                <td colSpan={5} className="px-4 py-10 text-center text-white/45">暂无用户数据</td>
               </tr>
             )}
           </tbody>
