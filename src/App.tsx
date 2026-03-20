@@ -2696,6 +2696,38 @@ function ImageGenerator({
     setModalStep(2)
   }
 
+  const startSmoothGenProgress = () => {
+    const startedAt = Date.now()
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - startedAt
+      // 目标时长约 22s，平滑趋近 97%，避免卡在 90%
+      const ratio = Math.min(1, elapsed / 22000)
+      const eased = 1 - Math.pow(1 - ratio, 1.35)
+      const target = 2 + eased * 95
+      setGenProgress((p) => Math.max(p, Math.min(97, Math.floor(target))))
+    }, 280)
+    return () => clearInterval(timer)
+  }
+
+  const completeGenProgress = async () => {
+    await new Promise<void>((resolve) => {
+      const timer = setInterval(() => {
+        let done = false
+        setGenProgress((p) => {
+          if (p >= 100) {
+            done = true
+            return 100
+          }
+          return Math.min(100, p + 2)
+        })
+        if (done) {
+          clearInterval(timer)
+          resolve()
+        }
+      }, 35)
+    })
+  }
+
   const buildPromptFromParts = (parts: any) => {
     const pick = (k: string) => String(parts?.[k] || '').trim()
     const segs = [pick('subject'), pick('scene'), pick('composition'), pick('lighting'), pick('camera'), pick('style'), pick('quality'), pick('extra')].filter(Boolean)
@@ -2927,15 +2959,7 @@ function ImageGenerator({
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
     setGenProgress(1)
-    const startedAt = Date.now()
-    const timer = setInterval(() => {
-      setGenProgress((p) => {
-        // ease-out: 快到 70%，再慢慢到 90%
-        const target = p < 70 ? 70 : 90
-        const step = p < 70 ? 6 : 2
-        return Math.min(target, p + step)
-      })
-    }, 700)
+    const stopProgress = startSmoothGenProgress()
     try {
       const r = await generateImageAPI({
         prompt,
@@ -2955,14 +2979,8 @@ function ImageGenerator({
         name: `image-${Date.now()}.png`,
         metadata: { from: 'image_generator', model, size, resolution },
       })
-      clearInterval(timer)
-      // 如果生成很快，给用户一个“完成感”
-      const elapsed = Date.now() - startedAt
-      if (elapsed < 1200) {
-        setGenProgress(92)
-        await new Promise((rr) => setTimeout(rr, 350))
-      }
-      setGenProgress(100)
+      stopProgress()
+      await completeGenProgress()
       // 仅在生成成功后做一次电商质检（仍需用户点击生成触发，且有计费保险栓）
       setIsQcBusy(true)
       try {
@@ -2984,7 +3002,7 @@ function ImageGenerator({
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution } })
       setGenErrorText(e?.message || '生成失败')
       setGenErrorCode(e?.code || 'UNKNOWN')
-      clearInterval(timer)
+      stopProgress()
       setGenProgress(0)
     } finally {
       setIsGenerating(false)
@@ -3040,14 +3058,7 @@ function ImageGenerator({
     setGeneratedImage('')
     setQcResult(null)
     setGenProgress(1)
-    const startedAt = Date.now()
-    const timer = setInterval(() => {
-      setGenProgress((p) => {
-        const target = p < 70 ? 70 : 90
-        const step = p < 70 ? 6 : 2
-        return Math.min(target, p + step)
-      })
-    }, 700)
+    const stopProgress = startSmoothGenProgress()
     try {
       const r = await generateImageAPI({
         prompt: buildPromptFromParts(nextParts),
@@ -3066,13 +3077,8 @@ function ImageGenerator({
         name: `image-${Date.now()}.png`,
         metadata: { from: 'image_generator_retry', model, size, resolution },
       })
-      clearInterval(timer)
-      const elapsed = Date.now() - startedAt
-      if (elapsed < 1200) {
-        setGenProgress(92)
-        await new Promise((rr) => setTimeout(rr, 350))
-      }
-      setGenProgress(100)
+      stopProgress()
+      await completeGenProgress()
       setIsQcBusy(true)
       try {
         const qc = await qcEcommerceImage({
@@ -3091,7 +3097,7 @@ function ImageGenerator({
       }
     } catch (e: any) {
       alert(e?.message || '修复重试失败')
-      clearInterval(timer)
+      stopProgress()
       setGenProgress(0)
     } finally {
       setIsGenerating(false)
