@@ -2330,7 +2330,9 @@ function ImageGenerator({
   const [assetList, setAssetList] = useState<AssetItem[]>([])
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
+  const [refUploadNotice, setRefUploadNotice] = useState('')
   const [previewRefImage, setPreviewRefImage] = useState<{ url: string; name: string; index: number } | null>(null)
+  const refUploadInputRef = useRef<HTMLInputElement | null>(null)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('nano-banana-2')
@@ -2381,7 +2383,12 @@ function ImageGenerator({
   const handleLocalRefUpload = async (files: FileList | null) => {
     if (!files?.length) return
     const remain = Math.max(0, MAX_REF_IMAGES - refImages.length)
-    if (remain <= 0) return
+    if (remain <= 0) {
+      setRefUploadNotice('最大可支持上传5张。')
+      return
+    }
+    if (files.length > remain) setRefUploadNotice('最大可支持上传5张。只上传前5张。')
+    else setRefUploadNotice('')
     const picked = Array.from(files).slice(0, remain)
     const next: Array<{ id: string; url: string; name?: string; source: 'local' }> = []
     for (const f of picked) {
@@ -3219,55 +3226,115 @@ function ImageGenerator({
 
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">参考图（可上传 1-5 张，至少 1 张）</label>
+            <label className="block text-sm font-medium">参考图（支持上传1-5张）</label>
             <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-2.5">
+          <div
+            className="border-2 border-dashed border-gray-300 rounded-xl p-2.5"
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onDrop={async (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              await handleLocalRefUpload(e.dataTransfer?.files || null)
+            }}
+            onClick={() => refUploadInputRef.current?.click()}
+          >
+            <input
+              ref={refUploadInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={async (e: any) => {
+                await handleLocalRefUpload(e.target.files || null)
+                e.target.value = ''
+              }}
+              className="hidden"
+            />
             {refImages.length ? (
-              <div className="grid grid-cols-5 gap-2">
-                {refImages.map((img, i) => (
-                  <div key={img.id} className="relative rounded-lg overflow-hidden border bg-gray-50">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewRefImage({ url: img.url, name: img.name || `参考图${i + 1}`, index: i })}
-                      className="block w-full"
-                      title="点击预览"
-                    >
-                      <img src={img.url} alt={img.name || `参考图${i + 1}`} className="w-full h-20 object-cover" />
-                    </button>
-                    {i === 0 && <span className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">主参考</span>}
-                    <button
-                      onClick={() => setPreviewRefImage({ url: img.url, name: img.name || `参考图${i + 1}`, index: i })}
-                      className="absolute left-1 bottom-1 h-5 px-1.5 rounded bg-black/60 text-white text-[10px] inline-flex items-center gap-1"
-                      title="预览"
-                    >
-                      <Eye className="w-3 h-3" /> 预览
-                    </button>
-                    <button onClick={() => removeRefImage(img.id)} className="absolute right-1 top-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs">×</button>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                <div className="grid grid-cols-5 gap-2">
+                  {refImages.map((img, i) => (
+                    <div key={img.id} className="relative rounded-lg overflow-hidden border bg-gray-50">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPreviewRefImage({ url: img.url, name: img.name || `参考图${i + 1}`, index: i })
+                        }}
+                        className="block w-full"
+                        title="点击预览"
+                      >
+                        <img src={img.url} alt={img.name || `参考图${i + 1}`} className="w-full h-20 object-cover" />
+                      </button>
+                      {i === 0 && <span className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">主参考</span>}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPreviewRefImage({ url: img.url, name: img.name || `参考图${i + 1}`, index: i })
+                        }}
+                        className="absolute left-1 bottom-1 h-5 px-1.5 rounded bg-black/60 text-white text-[10px] inline-flex items-center gap-1"
+                        title="预览"
+                      >
+                        <Eye className="w-3 h-3" /> 预览
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeRefImage(img.id)
+                        }}
+                        className="absolute right-1 top-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      refUploadInputRef.current?.click()
+                    }}
+                    className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+                  >
+                    继续上传
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAssetSelectedIds(new Set())
+                      setShowAssetPicker(true)
+                    }}
+                    className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+                  >
+                    从资产库选择
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="py-2 text-center min-h-[150px] flex flex-col items-center justify-center">
                 <Upload className="w-6 h-6 mx-auto text-gray-300 mb-1.5" />
                 <div className="text-base font-semibold mb-1">点击或拖拽上传图片</div>
-                <div className="text-[10px] text-gray-500 mb-2.5">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
+                <div className="text-[10px] text-gray-500 mb-2.5">支持上传1-5张；格式 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
                 <div className="flex items-center justify-center gap-2">
-                  <label className="px-3 py-1.5 rounded-lg border text-xs cursor-pointer hover:bg-gray-50">
+                  <label
+                    className="px-3 py-1.5 rounded-lg border text-xs cursor-pointer hover:bg-gray-50"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      refUploadInputRef.current?.click()
+                    }}
+                  >
                     选择文件
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={async (e: any) => {
-                        await handleLocalRefUpload(e.target.files || null)
-                        e.target.value = ''
-                      }}
-                      className="hidden"
-                    />
                   </label>
                   <button
-                    onClick={() => {
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
@@ -3279,23 +3346,24 @@ function ImageGenerator({
               </div>
             )}
           </div>
+          {refUploadNotice ? <div className="mt-2 text-xs text-amber-500">{refUploadNotice}</div> : null}
         </div>
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">比例</label>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {imageCaps.aspectRatios.map((ar) => (
               <button
                 key={ar}
                 onClick={() => setSize(ar)}
-                className={`rounded-xl border px-2 py-2 text-sm shrink-0 w-[92px] ${size === ar ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                className={`rounded-lg border px-1.5 py-1.5 text-xs shrink-0 w-[74px] ${size === ar ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <div className="h-7 flex items-center justify-center">
+                <div className="h-5 flex items-center justify-center">
                   <div
                     className="bg-gray-400/80 rounded-sm"
                     style={{
-                      width: ar === '16:9' ? 24 : ar === '4:3' ? 20 : ar === '1:1' ? 16 : ar === '3:4' ? 12 : 10,
-                      height: ar === '9:16' ? 24 : ar === '3:4' ? 20 : ar === '1:1' ? 16 : ar === '4:3' ? 14 : ar === '16:9' ? 10 : 8,
+                      width: ar === '16:9' ? 20 : ar === '4:3' ? 17 : ar === '1:1' ? 13 : ar === '3:4' ? 10 : 8,
+                      height: ar === '9:16' ? 20 : ar === '3:4' ? 16 : ar === '1:1' ? 13 : ar === '4:3' ? 12 : ar === '16:9' ? 8 : 6,
                     }}
                   />
                 </div>
