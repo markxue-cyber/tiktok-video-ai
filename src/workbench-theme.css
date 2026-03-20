@@ -20,6 +20,16 @@
   color: rgba(255,255,255,.90) !important;
 }
 
+/* Tailwind often uses text-white/*; tone them down to avoid pure-white突兀感. */
+.workbench-root [class*="text-white"]:not(aside button.text-white) {
+  color: rgba(255,255,255,.78) !important;
+}
+
+/* Reduce border-white/* brightness. */
+.workbench-root [class*="border-white"] {
+  border-color: rgba(255,255,255,.18) !important;
+}
+
 /* Convert common light panels into glass panels. */
 .workbench-root .bg-white,
 .workbench-root .bg-gray-50,
