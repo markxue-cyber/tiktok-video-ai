@@ -3266,11 +3266,15 @@ function ImageGenerator({
             </div>
           )}
           <div className="p-6 border-t flex items-center justify-between">
-            <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg">取消</button>
-            <div className="flex items-center gap-3">
-              {modalStep > 1 && (
+            <div>
+              {modalStep > 1 ? (
                 <button onClick={handlePrev} disabled={isAiBusy} className="px-4 py-2 border rounded-lg disabled:opacity-50">上一步</button>
+              ) : (
+                <div />
               )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg">取消</button>
               <button disabled={isAiBusy} onClick={handleNext} className="px-4 py-2 bg-purple-500 text-white rounded-lg disabled:opacity-50">
                 {isAiBusy ? '处理中...' : modalStep === 2 ? '确认' : '下一步'}
               </button>
