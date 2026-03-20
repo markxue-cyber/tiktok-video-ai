@@ -989,7 +989,7 @@ function App() {
         </div>
         <button
           onClick={() => setNavCollapsed((v) => !v)}
-          className={`absolute top-5 ${navCollapsed ? 'right-2' : 'right-3'} w-7 h-7 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/80`}
+          className={`absolute top-5 ${navCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-3'} w-7 h-7 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/80`}
           title={navCollapsed ? '展开导航' : '收起导航'}
           aria-label={navCollapsed ? '展开导航' : '收起导航'}
         >
