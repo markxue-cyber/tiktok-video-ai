@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading Preview 3 - Glass Radar</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(66rem 36rem at 50% -10%, rgba(129, 140, 248, .2), transparent 52%),
+          linear-gradient(180deg, #0a0d22, #050713);
+      }
+      .panel {
+        width: min(680px, 92vw);
+        border-radius: 26px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: linear-gradient(180deg, rgba(11,15,37,.86), rgba(7,10,26,.82));
+        box-shadow: 0 24px 80px rgba(0,0,0,.45);
+        text-align: center;
+        padding: 40px 34px;
+      }
+      .radar {
+        width: 122px;
+        height: 122px;
+        margin: 0 auto 20px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.12);
+        position: relative;
+        overflow: hidden;
+      }
+      .radar::before, .radar::after {
+        content: "";
+        position: absolute;
+        inset: 16px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.15);
+      }
+      .radar::after { inset: 34px; }
+      .sweep {
+        position: absolute;
+        inset: 0;
+        background: conic-gradient(from 0deg, rgba(99,102,241,.0) 0deg, rgba(99,102,241,.0) 300deg, rgba(99,102,241,.5) 340deg, rgba(99,102,241,.0) 360deg);
+        animation: rotate 1.4s linear infinite;
+      }
+      .dot {
+        position: absolute;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #84ccff;
+        box-shadow: 0 0 10px rgba(132,204,255,.9);
+        top: 34%; left: 64%;
+        animation: blink 1.2s ease-in-out infinite;
+      }
+      .dot2 { top: 62%; left: 38%; animation-delay: .45s; }
+      h1 { margin: 0; font-size: 30px; color: #f6f2ff; }
+      p { margin: 10px 0 0; font-size: 16px; color: rgba(232, 226, 255, .74); }
+      .eta {
+        margin-top: 20px;
+        font-size: 13px;
+        color: rgba(190, 230, 255, .92);
+        letter-spacing: .8px;
+      }
+      @keyframes rotate { to { transform: rotate(360deg); } }
+      @keyframes blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <section class="panel">
+      <div class="radar">
+        <div class="sweep"></div>
+        <div class="dot"></div>
+        <div class="dot dot2"></div>
+      </div>
+      <h1>生成中，请稍等</h1>
+      <p>模型正在进行多轮优化与质量校验，马上就好。</p>
+      <div class="eta">EST. 00:38</div>
+    </section>
+  </body>
+  </html>

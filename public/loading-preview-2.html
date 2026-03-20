@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading Preview 2 - Pulse Matrix</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(70rem 35rem at 12% 0%, rgba(236, 72, 153, .16), transparent 58%),
+          radial-gradient(70rem 35rem at 90% 100%, rgba(56, 189, 248, .18), transparent 58%),
+          linear-gradient(180deg, #080a1b, #02030a);
+      }
+      .panel {
+        width: min(700px, 92vw);
+        border: 1px solid rgba(255,255,255,.1);
+        border-radius: 22px;
+        padding: 38px 32px 34px;
+        background: rgba(10, 13, 35, .8);
+        backdrop-filter: blur(12px);
+        text-align: center;
+      }
+      .grid {
+        width: 110px;
+        margin: 0 auto 18px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .dot {
+        width: 30px; height: 30px;
+        border-radius: 8px;
+        background: rgba(255,255,255,.08);
+        border: 1px solid rgba(255,255,255,.09);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      .dot:nth-child(2) { animation-delay: .12s; }
+      .dot:nth-child(3) { animation-delay: .24s; }
+      .dot:nth-child(4) { animation-delay: .36s; }
+      .dot:nth-child(5) { animation-delay: .48s; }
+      .dot:nth-child(6) { animation-delay: .6s; }
+      .dot:nth-child(7) { animation-delay: .72s; }
+      .dot:nth-child(8) { animation-delay: .84s; }
+      .dot:nth-child(9) { animation-delay: .96s; }
+      h1 { margin: 0; font-size: 30px; color: #f8f5ff; }
+      p { margin: 10px 0 0; color: rgba(229, 223, 255, .72); font-size: 16px; }
+      .steps {
+        margin: 18px auto 0;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .steps span {
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.04);
+        color: rgba(234, 230, 255, .82);
+      }
+      @keyframes pulse {
+        0%, 100% {
+          transform: scale(.92);
+          background: rgba(255,255,255,.07);
+          border-color: rgba(255,255,255,.10);
+        }
+        50% {
+          transform: scale(1);
+          background: linear-gradient(135deg, rgba(167, 139, 250, .75), rgba(56, 189, 248, .75));
+          border-color: rgba(176, 226, 255, .7);
+          box-shadow: 0 0 14px rgba(107, 179, 255, .35);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="panel">
+      <div class="grid">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <h1>视频生成中</h1>
+      <p>镜头合成与运动计算中，预计 2-4 分钟…</p>
+      <div class="steps">
+        <span>解析脚本</span>
+        <span>构建分镜</span>
+        <span>渲染画面</span>
+      </div>
+    </section>
+  </body>
+  </html>
