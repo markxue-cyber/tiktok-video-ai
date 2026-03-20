@@ -354,6 +354,8 @@ function App() {
           packageExpiresAt: end,
         })
         setPage('home')
+        // Keep "处理中..." until we leave the auth page.
+        setAuthBusy(false)
       } catch {
         try {
           const sess = readSession()
@@ -378,10 +380,13 @@ function App() {
             packageExpiresAt: end,
           })
           setPage('home')
+          // Keep "处理中..." until we leave the auth page.
+          setAuthBusy(false)
         } catch {
           clearSession()
           setAccessToken('')
           setUser(null)
+          setAuthBusy(false)
           setPage('landing')
         }
       } finally {
@@ -658,6 +663,7 @@ function App() {
                   return setAuthError(authMode === 'recoverReset' ? '请输入新密码' : '请输入密码')
                 if ((authMode === 'register' || authMode === 'recoverReset') && authPassword !== authPassword2) return setAuthError('两次密码不一致')
                 setAuthBusy(true)
+                let keepBusyAfterToken = false
                 try {
                   const data =
                     authMode === 'recover'
@@ -695,6 +701,9 @@ function App() {
                   saveSession(session)
                   Sentry.captureMessage('auth_login_success', { level: 'info', extra: { mode: authMode } })
                   setAccessToken(token)
+                  // 登录成功后还需要等 apiMe(accessToken) 完成校验才会跳转首页；
+                  // 为了避免按钮文案在等待期间回到“登录”，这里保留 busy 状态，交由 accessToken effect 统一置回。
+                  keepBusyAfterToken = true
                 } catch (e:any) {
                   const msg = String(e?.message || '登录失败')
                   Sentry.captureException(e, { extra: { scene: 'auth_submit', mode: authMode } })
@@ -707,7 +716,7 @@ function App() {
                   }
                   setAuthError(msg)
                 } finally {
-                  setAuthBusy(false)
+                  if (!keepBusyAfterToken) setAuthBusy(false)
                 }
               }}
               className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl"
