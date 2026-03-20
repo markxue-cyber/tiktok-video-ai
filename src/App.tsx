@@ -26,6 +26,7 @@ import {
 import { listPackageConfigsPublic, type PackageConfigItem } from './api/packageConfigs'
 import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
+import './workbench-theme.css'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -814,7 +815,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex workbench-root">
       <aside className="w-64 bg-white shadow-xl fixed h-full z-30">
         <div className="p-4 border-b"><div className="flex items-center space-x-3"><div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div><span className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">TikGen AI</span></div></div>
         <nav className="p-4 space-y-2">

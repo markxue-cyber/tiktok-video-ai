@@ -1,0 +1,64 @@
+/*
+ * Workbench dark/tech theme (deep curtain / glass).
+ * Goal: migrate the look without touching interactive logic.
+ */
+
+.workbench-root {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 500px at 20% 10%, rgba(124,58,237,.35), transparent 55%),
+    radial-gradient(800px 420px at 80% 15%, rgba(236,72,153,.25), transparent 55%),
+    radial-gradient(800px 520px at 50% 90%, rgba(59,130,246,.22), transparent 50%),
+    linear-gradient(180deg, #0b1026, #050610) !important;
+  color: rgba(255,255,255,.92);
+}
+
+/* Make gray/slate text visible on the dark glass theme. */
+.workbench-root [class*="text-gray-"],
+.workbench-root [class*="text-slate-"],
+.workbench-root [class*="text-black-"] {
+  color: rgba(255,255,255,.90) !important;
+}
+
+/* Convert common light panels into glass panels. */
+.workbench-root .bg-white,
+.workbench-root .bg-gray-50,
+.workbench-root .bg-gray-100 {
+  background-color: rgba(255,255,255,.045) !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+.workbench-root header {
+  background: rgba(255,255,255,.03) !important;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 18px 60px rgba(0,0,0,.35) !important;
+  backdrop-filter: blur(10px);
+}
+
+.workbench-root aside {
+  background: rgba(255,255,255,.03) !important;
+  border-right: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 50px rgba(0,0,0,.35) !important;
+}
+
+.workbench-root .border {
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+.workbench-root .shadow-xl,
+.workbench-root .shadow-2xl,
+.workbench-root .shadow-lg,
+.workbench-root .shadow-sm {
+  box-shadow: 0 18px 60px rgba(0,0,0,.20) !important;
+}
+
+.workbench-root .bg-gray-900 {
+  background: rgba(0,0,0,.22) !important;
+}
+
+.workbench-root .bg-black\/45,
+.workbench-root .bg-black\\/45 {
+  background: rgba(0,0,0,.35) !important;
+}
+
