@@ -3864,12 +3864,12 @@ function AdminPackagesPanel() {
       })
       setNotice(`套餐 ${row.plan_id} 已保存`)
       await load()
-      // 保存成功后回到只读状态
-      setEditingPlanId(null)
     } catch (e: any) {
       setErr(e?.message || '保存套餐失败')
     } finally {
       setSavingPlanId('')
+      // 无论保存成功与否，都退出编辑态，避免出现“保存后仍可编辑/需点取消”的体验问题
+      setEditingPlanId(null)
     }
   }
 
