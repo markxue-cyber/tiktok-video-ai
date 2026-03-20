@@ -1000,17 +1000,37 @@ function App() {
           {navCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
         </button>
         <nav className={`p-3 space-y-2 ${navCollapsed ? 'items-center' : ''}`}>
-          <NavPrimary collapsed={navCollapsed} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} onClick={() => setMainNav('create')} />
-          {!navCollapsed && mainNav === 'create' && (
+          <NavPrimary collapsed={navCollapsed} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} clickable={false} />
+          {!navCollapsed && (
             <div className="pl-3 space-y-1">
-              <NavSecondary collapsed={false} icon={<Video className="w-4 h-4" />} label="视频生成" active={createNav === 'video'} onClick={() => setCreateNav('video')} />
-              <NavSecondary collapsed={false} icon={<Image className="w-4 h-4" />} label="图片生成" active={createNav === 'image'} onClick={() => setCreateNav('image')} />
+              <NavSecondary
+                collapsed={false}
+                icon={<Video className="w-4.5 h-4.5" />}
+                label="视频生成"
+                active={mainNav === 'create' && createNav === 'video'}
+                onClick={() => {
+                  setMainNav('create')
+                  setCreateNav('video')
+                }}
+                className="text-base font-semibold py-2.5"
+              />
+              <NavSecondary
+                collapsed={false}
+                icon={<Image className="w-4.5 h-4.5" />}
+                label="图片生成"
+                active={mainNav === 'create' && createNav === 'image'}
+                onClick={() => {
+                  setMainNav('create')
+                  setCreateNav('image')
+                }}
+                className="text-base font-semibold py-2.5"
+              />
             </div>
           )}
 
           <NavPrimary collapsed={navCollapsed} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
           <NavPrimary collapsed={navCollapsed} icon={<Library className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
-          <NavPrimary collapsed={navCollapsed} icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} onClick={() => setMainNav('tools')} />
+          <NavPrimary collapsed={navCollapsed} icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} clickable={false} />
           {!navCollapsed && mainNav === 'tools' && (
             <div className="pl-3 space-y-1">
               <NavSecondary collapsed={false} icon={<Scissors className="w-4 h-4" />} label="去字幕" active={toolNav === 'subtitle'} onClick={() => setToolNav('subtitle')} />
@@ -1091,11 +1111,15 @@ function App() {
               <button onClick={() => setShowHelp(true)} className="workbench-topicon-btn p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
                 <Library className="w-5 h-5" />
               </button>
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-pink-50 to-purple-50 px-4 py-2 rounded-full"><Zap className="w-5 h-5 text-pink-500" /><span className="font-bold text-pink-600">{user?.credits}</span><span className="text-sm text-pink-500">积分</span></div>
-              <div className="flex items-center space-x-2 px-3 py-1.5 bg-amber-50 rounded-full">
-                <Crown className="w-4 h-4 text-amber-500" />
-                <span className="text-sm font-medium text-amber-700">{currentPackage?.name}</span>
-                <span className="text-xs text-amber-600/80">至 {user?.packageExpiresAt}</span>
+              <div className="flex items-center h-11 space-x-2 bg-gradient-to-r from-pink-50/70 to-purple-50/70 px-3.5 rounded-full border border-white/15">
+                <Zap className="w-4 h-4 text-pink-400/80" />
+                <span className="font-bold text-pink-500/90">{user?.credits}</span>
+                <span className="text-sm text-pink-400/90">积分</span>
+              </div>
+              <div className="flex items-center h-11 space-x-2 px-3.5 bg-amber-50/70 rounded-full border border-white/15">
+                <Crown className="w-3.5 h-3.5 text-amber-500/80" />
+                <span className="text-sm font-medium text-amber-700/90">{currentPackage?.name}</span>
+                <span className="text-xs text-amber-600/75">至 {user?.packageExpiresAt}</span>
               </div>
               <div className="relative">
                 <button
@@ -1170,14 +1194,18 @@ function App() {
   )
 }
 
-function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed }: any) {
+function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, clickable = true }: any) {
   return (
     <button
       onMouseEnter={onMouseEnter}
-      onClick={onClick}
+      onClick={clickable ? onClick : undefined}
       title={collapsed ? label : undefined}
       className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 rounded-xl transition-all ${
-        active ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white' : 'text-gray-700 hover:bg-gray-100'
+        active
+          ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
+          : clickable
+            ? 'text-gray-700 hover:bg-gray-100'
+            : 'text-gray-600 cursor-default'
       }`}
     >
       {icon}
@@ -1186,14 +1214,14 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed }: a
   )
 }
 
-function NavSecondary({ icon, label, active, onClick, collapsed }: any) {
+function NavSecondary({ icon, label, active, onClick, collapsed, className = '' }: any) {
   return (
     <button
       onClick={onClick}
       title={collapsed ? label : undefined}
       className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-all text-sm ${
         active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
-      }`}
+      } ${className}`}
     >
       {icon}
       {!collapsed && <span>{label}</span>}
