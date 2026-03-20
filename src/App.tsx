@@ -3578,13 +3578,13 @@ function ImageGenerator({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setAssetTab('user_upload')}
-                className={`px-3 py-1.5 rounded-lg text-sm border ${assetTab === 'user_upload' ? 'bg-gray-900 text-white border-purple-400/70 shadow-[0_0_0_1px_rgba(167,139,250,0.45)]' : 'bg-gray-100 text-gray-700 border-white/15'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm border-2 ${assetTab === 'user_upload' ? 'bg-gray-900 text-white border-purple-400 shadow-[0_0_0_1px_rgba(167,139,250,0.55)]' : 'bg-gray-100 text-gray-700 border-transparent hover:bg-gray-200/70'}`}
               >
                 本地上传
               </button>
               <button
                 onClick={() => setAssetTab('ai_generated')}
-                className={`px-3 py-1.5 rounded-lg text-sm border ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white border-purple-400/70 shadow-[0_0_0_1px_rgba(167,139,250,0.45)]' : 'bg-gray-100 text-gray-700 border-white/15'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm border-2 ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white border-purple-400 shadow-[0_0_0_1px_rgba(167,139,250,0.55)]' : 'bg-gray-100 text-gray-700 border-transparent hover:bg-gray-200/70'}`}
               >
                 AI 生成
               </button>
