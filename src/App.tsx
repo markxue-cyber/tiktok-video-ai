@@ -2108,6 +2108,7 @@ function ImageGenerator({
   const [genErrorCode, setGenErrorCode] = useState('UNKNOWN')
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
+  const aiJobRef = useRef(0)
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
   const [unavailableImageMap, setUnavailableImageMap] = useState<Record<string, string>>({})
   const imageModelOptions = useMemo(
@@ -2260,13 +2261,17 @@ function ImageGenerator({
     setSceneMode('clean')
     setCategoryHint('other')
     setSelectedStyleTags([])
+    const jobId = ++aiJobRef.current
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
+      if (jobId !== aiJobRef.current) return
       setProductInfo(parsed)
     } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '解析失败')
     } finally {
+      if (jobId !== aiJobRef.current) return
       setIsAiBusy(false)
     }
   }
@@ -2275,9 +2280,11 @@ function ImageGenerator({
     setAiError('')
     if (modalStep === 1) {
       setModalStep(2)
+      const jobId = ++aiJobRef.current
       setIsAiBusy(true)
       try {
         const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution, sceneMode })
+        if (jobId !== aiJobRef.current) return
         setOptimizedPrompt(r.prompt)
         setOptimizedNegativePrompt(r.negativePrompt || '')
         const hint = String((r as any)?.categoryHint || 'other')
@@ -2287,8 +2294,10 @@ function ImageGenerator({
         setPromptParts(initialParts)
         setOptimizedPrompt(r.prompt || buildPromptFromParts(initialParts))
       } catch (e: any) {
+        if (jobId !== aiJobRef.current) return
         setAiError(e?.message || '提示词生成失败')
       } finally {
+        if (jobId !== aiJobRef.current) return
         setIsAiBusy(false)
       }
       return
@@ -2376,6 +2385,7 @@ function ImageGenerator({
     const tags = selectedStyleTags
     if (!tags.length) return
     setAiError('')
+    const jobId = ++aiJobRef.current
     setIsAiBusy(true)
     try {
       const currentParts = Object.keys(promptParts || {}).length ? promptParts : {}
@@ -2393,16 +2403,30 @@ function ImageGenerator({
         sceneMode,
         learnedTweaks: learned,
       })
+      if (jobId !== aiJobRef.current) return
       setPromptParts(result.parts || currentParts)
       const nextPrompt = result.prompt || buildPromptFromParts(result.parts || currentParts)
       setOptimizedPrompt(nextPrompt)
       setOptimizedNegativePrompt(result.negativePrompt || '')
       setSelectedStyleTags([])
     } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
       setAiError(e?.message || 'AI精修失败')
     } finally {
+      if (jobId !== aiJobRef.current) return
       setIsAiBusy(false)
     }
+  }
+
+  const handleCloseAiBusy = () => {
+    aiJobRef.current += 1
+    setIsAiBusy(false)
+    setAiError('')
+    if (modalStep === 1) {
+      setShowModal(false)
+      return
+    }
+    setModalStep(1)
   }
 
   const applyInfographicTemplate = (tpl: 'feature' | 'scene') => {
@@ -2815,7 +2839,14 @@ function ImageGenerator({
           </div>
           {isAiBusy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-              <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center">
+              <div className="relative bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center min-w-[360px]">
+                <button
+                  onClick={handleCloseAiBusy}
+                  className="absolute right-3 top-3 p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/10"
+                  aria-label="关闭"
+                >
+                  <X className="w-4 h-4" />
+                </button>
                 <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
                 <div>
                   <div className="font-medium">{modalStep === 2 ? '图片优化提示词AI生成中' : '商品信息解析中'}</div>

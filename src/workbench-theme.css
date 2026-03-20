@@ -206,7 +206,7 @@
 }
 .workbench-root .fixed [class*="border-b"],
 .workbench-root .fixed [class*="border-t"] {
-  border-color: rgba(255, 255, 255, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
 }
 .workbench-root .fixed .bg-gray-50,
 .workbench-root .fixed .bg-gray-100,
@@ -227,6 +227,12 @@
 }
 .workbench-root .fixed [class*="shadow"] {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Further dim separator lines in modal content/steps. */
+.workbench-root .fixed [class*="h-0.5"],
+.workbench-root .fixed [class*="h-px"] {
+  background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 /* Header utility icons: deeper, coordinated tone. */
