@@ -20,6 +20,7 @@ export type SupportTicketItem = {
   kind: 'bug' | 'suggestion' | 'other'
   subject: string
   content: string
+  admin_note?: string
   email?: string
   priority?: 'low' | 'normal' | 'high' | 'urgent'
   created_at: string

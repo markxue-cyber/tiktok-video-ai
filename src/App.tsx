@@ -1400,6 +1400,7 @@ function FeedbackLite({
                       <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">{statusLabel[t.status] || t.status}</span>
                     </div>
                     <div className="text-gray-600 mt-1">{t.content.slice(0, 40) || '(空)'}{t.content.length > 40 ? '...' : ''}</div>
+                    {t.admin_note ? <div className="mt-1 text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-2 py-1">官方回复：{t.admin_note}</div> : null}
                   </div>
                 ))}
               </div>

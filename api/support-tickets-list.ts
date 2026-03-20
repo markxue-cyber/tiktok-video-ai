@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
     const params = new URLSearchParams()
     params.set('user_id', `eq.${userId}`)
-    params.set('select', 'id,ticket_no,status,kind,subject,content,email,created_at,updated_at,closed_at,priority')
+    params.set('select', 'id,ticket_no,status,kind,subject,content,email,created_at,updated_at,closed_at,priority,admin_note')
     params.set('order', 'created_at.desc')
     params.set('limit', String(limit))
     const resp = await fetch(`${baseUrl()}/rest/v1/support_tickets?${params.toString()}`, {
