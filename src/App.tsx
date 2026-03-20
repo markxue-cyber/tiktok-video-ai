@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -1423,6 +1423,12 @@ function VideoGenerator({
 }) {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
+  const [refImages, setRefImages] = useState<Array<{ id: string; url: string; name?: string; source: 'local' | 'asset' }>>([])
+  const [showAssetPicker, setShowAssetPicker] = useState(false)
+  const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
+  const [assetList, setAssetList] = useState<AssetItem[]>([])
+  const [assetBusy, setAssetBusy] = useState(false)
+  const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
   const [size, setSize] = useState<VideoAspect>('9:16')
@@ -2192,6 +2198,12 @@ function ImageGenerator({
 }) {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
+  const [refImages, setRefImages] = useState<Array<{ id: string; url: string; name?: string; source: 'local' | 'asset' }>>([])
+  const [showAssetPicker, setShowAssetPicker] = useState(false)
+  const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
+  const [assetList, setAssetList] = useState<AssetItem[]>([])
+  const [assetBusy, setAssetBusy] = useState(false)
+  const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('seedream')
   const [size, setSize] = useState<ImageAspect>('1:1')
@@ -2225,6 +2237,72 @@ function ImageGenerator({
       })),
     [imageModels, unavailableImageMap],
   )
+  const MAX_REF_IMAGES = 5
+
+  useEffect(() => {
+    const first = refImages[0]?.url || ''
+    setRefImagePreviewUrl(first)
+    setRefImageDataUrl(first)
+  }, [refImages])
+
+  const removeRefImage = (id: string) => {
+    setRefImages((prev) => prev.filter((x) => x.id !== id))
+  }
+
+  const handleLocalRefUpload = async (files: FileList | null) => {
+    if (!files?.length) return
+    const remain = Math.max(0, MAX_REF_IMAGES - refImages.length)
+    if (remain <= 0) return
+    const picked = Array.from(files).slice(0, remain)
+    const next: Array<{ id: string; url: string; name?: string; source: 'local' }> = []
+    for (const f of picked) {
+      const dataUrl = await fileToDataUrl(f)
+      next.push({ id: `local_${Date.now()}_${Math.random().toString(16).slice(2)}`, url: dataUrl, name: f.name, source: 'local' })
+      await safeArchiveAsset({
+        source: 'user_upload',
+        type: 'image',
+        url: dataUrl,
+        name: f.name,
+        metadata: { from: 'image_generator_ref_multi', mime: f.type, size: f.size },
+      })
+    }
+    setRefImages((prev) => [...prev, ...next].slice(0, MAX_REF_IMAGES))
+  }
+
+  const loadAssetPicker = async (source: 'user_upload' | 'ai_generated') => {
+    setAssetBusy(true)
+    try {
+      const r = await listAssetsAPI({ source, type: 'image', limit: 60, offset: 0 })
+      setAssetList((r.assets || []).filter((x) => x.type === 'image'))
+    } finally {
+      setAssetBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showAssetPicker) return
+    void loadAssetPicker(assetTab)
+  }, [showAssetPicker, assetTab])
+
+  const toggleAssetPick = (id: string) => {
+    setAssetSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else {
+        const already = refImages.length + next.size
+        if (already >= MAX_REF_IMAGES) return next
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const confirmAssetPick = () => {
+    const picked = assetList.filter((x) => assetSelectedIds.has(x.id)).map((x) => ({ id: `asset_${x.id}`, url: x.url, name: x.name || '资产图片', source: 'asset' as const }))
+    if (picked.length) setRefImages((prev) => [...prev, ...picked].slice(0, MAX_REF_IMAGES))
+    setAssetSelectedIds(new Set())
+    setShowAssetPicker(false)
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -2354,8 +2432,8 @@ function ImageGenerator({
   }, [templatePreset, onTemplateApplied])
 
   const handlePromptGen = async () => {
-    if (!refImageDataUrl) {
-      alert('请先上传参考图')
+    if (!refImages.length) {
+      alert('请先上传至少1张参考图')
       return
     }
     setShowModal(true)
@@ -2629,6 +2707,10 @@ function ImageGenerator({
   }
 
   const handleGenerate = async () => {
+    if (!refImages.length) {
+      alert('请至少上传1张参考图')
+      return
+    }
     if (!prompt) {
       alert('请输入图片描述')
       return
@@ -2973,53 +3055,96 @@ function ImageGenerator({
   }
 
   return (
+    <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">创建图片</h2>
         <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">上传参考图</label>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center relative">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={async (e: any) => {
-                const f: File | undefined = e.target.files?.[0]
-                if (!f) return
-                const preview = URL.createObjectURL(f)
-                setRefImagePreviewUrl(preview)
-                const dataUrl = await fileToDataUrl(f)
-                setRefImageDataUrl(dataUrl)
-                await safeArchiveAsset({
-                  source: 'user_upload',
-                  type: 'image',
-                  url: dataUrl,
-                  name: f.name,
-                  metadata: { from: 'image_generator_ref', mime: f.type, size: f.size },
-                })
-              }}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-            {refImagePreviewUrl ? (
-              <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto" />
+          <label className="block text-sm font-medium mb-1">模型选择</label>
+          <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+            {imageModelOptions.map((m) => (
+              <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
+                {m.name}
+                {m.unavailableReason ? `（暂不可用）` : ''}
+              </option>
+            ))}
+          </select>
+          {imageModelOptions.some((m) => m.unavailableReason) && (
+            <div className="mt-1 text-xs text-amber-600">已标记“暂不可用”的模型不可选，系统会自动使用可用模型。</div>
+          )}
+        </div>
+
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium">参考图（可上传 1-5 张，至少 1 张）</label>
+            <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
+          </div>
+          <div className="border-2 border-dashed border-gray-300 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <label className="px-3 py-1.5 rounded-lg border text-sm cursor-pointer hover:bg-gray-50">
+                本地上传
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={async (e: any) => {
+                    await handleLocalRefUpload(e.target.files || null)
+                    e.target.value = ''
+                  }}
+                  className="hidden"
+                />
+              </label>
+              <button
+                onClick={() => {
+                  setAssetSelectedIds(new Set())
+                  setShowAssetPicker(true)
+                }}
+                className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
+              >
+                从资产库选择
+              </button>
+            </div>
+            {refImages.length ? (
+              <div className="grid grid-cols-5 gap-2">
+                {refImages.map((img, i) => (
+                  <div key={img.id} className="relative rounded-lg overflow-hidden border bg-gray-50">
+                    <img src={img.url} alt={img.name || `参考图${i + 1}`} className="w-full h-20 object-cover" />
+                    {i === 0 && <span className="absolute left-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white">主参考</span>}
+                    <button onClick={() => removeRefImage(img.id)} className="absolute right-1 top-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs">×</button>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <>
-                <Upload className="w-10 h-10 mx-auto text-gray-400" />
-                <p className="text-gray-500 mt-2">点击上传参考图</p>
-              </>
+              <div className="text-sm text-gray-500 py-6 text-center">请至少上传 1 张图片</div>
             )}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">尺寸</label>
-            <select value={size} onChange={e => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {imageCaps.aspectRatios.map((ar) => (
-                <option key={ar} value={ar}>
-                  {ar}
-                </option>
-              ))}
-            </select>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">比例</label>
+          <div className="grid grid-cols-6 gap-2">
+            {imageCaps.aspectRatios.map((ar) => (
+              <button
+                key={ar}
+                onClick={() => setSize(ar)}
+                className={`rounded-xl border px-2 py-2 text-sm ${size === ar ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}
+              >
+                <div className="h-7 flex items-center justify-center">
+                  <div
+                    className="bg-gray-400/80 rounded-sm"
+                    style={{
+                      width: ar === '16:9' ? 24 : ar === '4:3' ? 20 : ar === '1:1' ? 16 : ar === '3:4' ? 12 : 10,
+                      height: ar === '9:16' ? 24 : ar === '3:4' ? 20 : ar === '1:1' ? 16 : ar === '4:3' ? 14 : ar === '16:9' ? 10 : 8,
+                    }}
+                  />
+                </div>
+                <div>{ar}</div>
+              </button>
+            ))}
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium mb-1">分辨率</label>
             <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
@@ -3030,10 +3155,12 @@ function ImageGenerator({
               ))}
             </select>
           </div>
+          <div />
         </div>
+
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">图片文案描述</label>
+            <label className="block text-sm font-medium">提示词</label>
             <button
               onClick={handlePromptGen}
               className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
@@ -3042,24 +3169,6 @@ function ImageGenerator({
             </button>
           </div>
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入画面描述/风格，或使用一键生成提示词..." />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">AI模型</label>
-            <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {imageModelOptions.map((m) => (
-                <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
-                  {m.name}
-                  {m.unavailableReason ? `（暂不可用）` : ''}
-                </option>
-              ))}
-            </select>
-            {imageModelOptions.some((m) => m.unavailableReason) && (
-              <div className="mt-1 text-xs text-amber-600">已标记“暂不可用”的模型不可选，系统会自动使用可用模型。</div>
-            )}
-          </div>
-          <div />
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成图片'}</button>
       </div>
@@ -3163,6 +3272,52 @@ function ImageGenerator({
         )}
       </div>
     </div>
+    {showAssetPicker && (
+      <div className="fixed inset-0 z-50 bg-black/55 flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl max-h-[88vh] overflow-hidden bg-white rounded-2xl border shadow-2xl flex flex-col">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <div className="text-lg font-semibold">从资产库选择</div>
+            <button onClick={() => setShowAssetPicker(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="px-5 py-3 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setAssetTab('user_upload')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'user_upload' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>上传资产</button>
+              <button onClick={() => setAssetTab('ai_generated')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>AI 生成</button>
+            </div>
+            <div className="text-sm text-gray-500">已选 {assetSelectedIds.size}/{Math.max(0, MAX_REF_IMAGES - refImages.length)}</div>
+          </div>
+          <div className="p-5 overflow-auto flex-1">
+            {assetBusy ? (
+              <div className="text-sm text-gray-500">加载中...</div>
+            ) : assetList.length === 0 ? (
+              <div className="text-sm text-gray-500">暂无可选图片资产</div>
+            ) : (
+              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                {assetList.map((a) => {
+                  const checked = assetSelectedIds.has(a.id)
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => toggleAssetPick(a.id)}
+                      className={`relative rounded-xl overflow-hidden border ${checked ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'}`}
+                    >
+                      <img src={a.url} alt={a.name || 'asset'} className="w-full h-24 object-cover" />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <div className="px-5 py-4 border-t flex items-center justify-end gap-2">
+            <button onClick={() => setShowAssetPicker(false)} className="px-4 py-2 rounded-lg border">取消</button>
+            <button onClick={confirmAssetPick} className="px-4 py-2 rounded-lg bg-purple-600 text-white">确认选择（{assetSelectedIds.size}）</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
