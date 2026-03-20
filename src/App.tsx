@@ -178,7 +178,7 @@ function GenerationLoadingCard({
 }: {
   title: string
   subtitle: string
-  chips?: string[]
+  chips?: readonly string[]
   statusText?: string
   progressText?: string
 }) {
