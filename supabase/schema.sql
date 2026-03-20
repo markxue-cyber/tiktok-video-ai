@@ -157,3 +157,25 @@ create table if not exists public.announcements (
 
 create index if not exists announcements_status_idx on public.announcements(status, starts_at desc, created_at desc);
 
+-- Support tickets (user <-> admin workflow, v1 without threaded replies)
+create table if not exists public.support_tickets (
+  id uuid primary key default gen_random_uuid(),
+  ticket_no text not null unique,
+  user_id uuid not null references public.users(id) on delete cascade,
+  email text,
+  kind text not null check (kind in ('bug', 'suggestion', 'other')),
+  subject text not null,
+  content text not null,
+  attachments jsonb not null default '[]'::jsonb,
+  status text not null default 'open' check (status in ('open', 'in_progress', 'resolved', 'closed')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  admin_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  closed_at timestamptz
+);
+
+create index if not exists support_tickets_user_created_idx on public.support_tickets(user_id, created_at desc);
+create index if not exists support_tickets_status_created_idx on public.support_tickets(status, created_at desc);
+create index if not exists support_tickets_ticket_no_idx on public.support_tickets(ticket_no);
+

@@ -16,15 +16,19 @@ import {
   adminListAnnouncements,
   adminListModelControls,
   adminListPackageConfigs,
+  adminListSupportTickets,
   adminListUsers,
   adminUpdateModelControl,
+  adminUpdateSupportTicket,
   adminUpdateUser,
   adminUpsertAnnouncement,
   adminUpsertPackageConfig,
+  type AdminSupportTicketItem,
   type AdminUserItem,
 } from './api/admin'
 import { listPackageConfigsPublic, type PackageConfigItem } from './api/packageConfigs'
 import { listAnnouncementsPublic } from './api/announcements'
+import { createSupportTicket, listMySupportTickets, type SupportTicketItem } from './api/support'
 import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
 import './workbench-theme.css'
@@ -248,7 +252,6 @@ let assetsPrefetching = false
 let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
 const SESSION_KEY = 'tikgen.session'
-const SUPPORT_EMAIL = 'haoxue2027@gmail.com'
 
 function parseSessionFromUrl(): null | {
   access_token: string
@@ -1299,84 +1302,59 @@ function FeedbackLite({
   const [desc, setDesc] = useState('')
   const [email, setEmail] = useState('')
   const [notice, setNotice] = useState('')
-  const [recentTickets, setRecentTickets] = useState<
-    Array<{
-      id: string
-      kind: 'bug' | 'suggestion' | 'other'
-      desc: string
-      email: string
-      page: string
-      createdAt: string
-      status: 'submitted'
-    }>
-  >([])
+  const [busy, setBusy] = useState(false)
+  const [recentTickets, setRecentTickets] = useState<SupportTicketItem[]>([])
+  const [legacyCount, setLegacyCount] = useState(0)
 
   useEffect(() => {
     if (!open) return
-    try {
-      const raw = localStorage.getItem('tikgen.support.tickets.v1')
-      const parsed = raw ? JSON.parse(raw) : []
-      if (Array.isArray(parsed)) {
-        setRecentTickets(parsed.slice(0, 5))
+    ;(async () => {
+      try {
+        const r = await listMySupportTickets(8)
+        setRecentTickets(r.tickets || [])
+      } catch (e: any) {
+        setNotice(e?.message || '获取工单失败，请稍后重试')
+        setRecentTickets([])
       }
-    } catch {
-      setRecentTickets([])
-    }
+      try {
+        const raw = localStorage.getItem('tikgen.support.tickets.v1')
+        const parsed = raw ? JSON.parse(raw) : []
+        setLegacyCount(Array.isArray(parsed) ? parsed.length : 0)
+      } catch {
+        setLegacyCount(0)
+      }
+    })()
   }, [open])
 
   if (!open) return null
 
-  const ticketId = `TK${Date.now().toString().slice(-8)}`
-
-  const buildBody = () => {
-    const lines = [
-      `工单号: ${ticketId}`,
-      `问题类型: ${kind}`,
-      `当前页面: ${currentPage}`,
-      `用户邮箱(可选): ${email || '(未填写)'}`,
-      `提交时间: ${new Date().toISOString()}`,
-      `处理状态: submitted`,
-      '',
-      '问题描述:',
-      desc || '(未填写)',
-    ]
-    return lines.join('\n')
-  }
+  const statusLabel: Record<string, string> = { open: '待处理', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
+  const kindLabel: Record<string, string> = { bug: 'Bug/报错', suggestion: '功能建议', other: '其他' }
 
   const handleSubmit = async () => {
     if (!desc.trim()) {
       setNotice('请先填写问题描述')
       return
     }
-    const ticket = {
-      id: ticketId,
-      kind,
-      desc: desc.trim(),
-      email: email.trim(),
-      page: currentPage,
-      createdAt: new Date().toISOString(),
-      status: 'submitted' as const,
-    }
+    setBusy(true)
+    setNotice('')
     try {
-      const raw = localStorage.getItem('tikgen.support.tickets.v1')
-      const parsed = raw ? JSON.parse(raw) : []
-      const next = Array.isArray(parsed) ? [ticket, ...parsed].slice(0, 50) : [ticket]
-      localStorage.setItem('tikgen.support.tickets.v1', JSON.stringify(next))
-      setRecentTickets(next.slice(0, 5))
-    } catch {
-      // ignore localStorage errors
-    }
-
-    const subject = encodeURIComponent(`[TikGen反馈] ${kind}`)
-    const body = encodeURIComponent(buildBody())
-    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`
-    window.location.href = mailto
-    try {
-      await navigator.clipboard.writeText(buildBody())
-      setNotice(`工单 ${ticketId} 已提交。已尝试打开邮件客户端，并复制工单内容到剪贴板。`)
+      const subject = `[${kindLabel[kind] || '反馈'}] ${currentPage}`
+      const r = await createSupportTicket({
+        kind,
+        subject,
+        content: desc.trim(),
+        email: email.trim(),
+        page: currentPage,
+      })
+      setNotice(`工单 ${r.ticket.ticket_no} 已提交，我们会尽快处理。`)
       setDesc('')
-    } catch {
-      setNotice(`工单 ${ticketId} 已提交。已尝试打开邮件客户端。若未打开，请手动发送到支持邮箱。`)
+      const list = await listMySupportTickets(8)
+      setRecentTickets(list.tickets || [])
+    } catch (e: any) {
+      setNotice(e?.message || '提交工单失败，请稍后重试。')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -1406,7 +1384,7 @@ function FeedbackLite({
           </div>
           {!!notice && <div className="text-sm text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg p-2">{notice}</div>}
           <div className="rounded-xl border p-3 bg-gray-50">
-            <div className="text-sm font-semibold text-gray-800 mb-2">最近工单（仅本机记录）</div>
+            <div className="text-sm font-semibold text-gray-800 mb-2">最近工单（服务端）</div>
             {recentTickets.length === 0 ? (
               <div className="text-xs text-gray-500">暂无记录</div>
             ) : (
@@ -1414,21 +1392,28 @@ function FeedbackLite({
                 {recentTickets.map((t) => (
                   <div key={t.id} className="text-xs bg-white border rounded-lg p-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-700">{t.id}</span>
-                      <span className="text-gray-500">{new Date(t.createdAt).toLocaleString()}</span>
+                      <span className="font-medium text-gray-700">{t.ticket_no}</span>
+                      <span className="text-gray-500">{new Date(t.created_at).toLocaleString()}</span>
                     </div>
-                    <div className="text-gray-600 mt-1">{t.desc.slice(0, 40) || '(空)'}{t.desc.length > 40 ? '...' : ''}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{kindLabel[t.kind] || t.kind}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">{statusLabel[t.status] || t.status}</span>
+                    </div>
+                    <div className="text-gray-600 mt-1">{t.content.slice(0, 40) || '(空)'}{t.content.length > 40 ? '...' : ''}</div>
                   </div>
                 ))}
               </div>
             )}
+            {legacyCount > 0 ? <div className="mt-2 text-[11px] text-gray-500">本机历史记录 {legacyCount} 条（旧版）。</div> : null}
           </div>
         </div>
         <div className="p-5 border-t flex items-center justify-between">
-          <div className="text-xs text-gray-500">支持邮箱：{SUPPORT_EMAIL}</div>
+          <div className="text-xs text-gray-500">提交后可在此处查看处理状态</div>
           <div className="flex items-center gap-3">
             <button onClick={onClose} className="px-4 py-2 border rounded-lg">取消</button>
-            <button onClick={handleSubmit} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white">提交工单</button>
+            <button disabled={busy} onClick={handleSubmit} className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-50">
+              {busy ? '提交中...' : '提交工单'}
+            </button>
           </div>
         </div>
       </div>
@@ -4086,7 +4071,7 @@ function TaskCenter() {
 }
 
 function DeveloperConsole() {
-  const [tab, setTab] = useState<'monitor' | 'users' | 'models' | 'packages' | 'announcements'>('users')
+  const [tab, setTab] = useState<'monitor' | 'users' | 'models' | 'packages' | 'announcements' | 'tickets'>('users')
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="bg-white rounded-2xl p-3 shadow border flex items-center gap-2 flex-wrap">
@@ -4094,12 +4079,14 @@ function DeveloperConsole() {
         <button onClick={() => setTab('models')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'models' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>模型开关</button>
         <button onClick={() => setTab('packages')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'packages' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>套餐管理</button>
         <button onClick={() => setTab('announcements')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'announcements' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>公告发布</button>
+        <button onClick={() => setTab('tickets')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'tickets' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>工单管理</button>
         <button onClick={() => setTab('monitor')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'monitor' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>系统监控</button>
       </div>
       {tab === 'users' && <AdminUsersPanel />}
       {tab === 'models' && <AdminModelControlsPanel />}
       {tab === 'packages' && <AdminPackagesPanel />}
       {tab === 'announcements' && <AdminAnnouncementsPanel />}
+      {tab === 'tickets' && <AdminSupportTicketsPanel />}
       {tab === 'monitor' && <AdminMonitoringPanel />}
     </div>
   )
@@ -4685,6 +4672,195 @@ function AdminAnnouncementsPanel() {
         ))}
         {list.length === 0 && <div className="text-sm text-gray-400 py-4 text-center">暂无公告</div>}
       </div>
+    </div>
+  )
+}
+
+function AdminSupportTicketsPanel() {
+  const [q, setQ] = useState('')
+  const [status, setStatus] = useState<'all' | 'open' | 'in_progress' | 'resolved' | 'closed'>('all')
+  const [tickets, setTickets] = useState<AdminSupportTicketItem[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [selected, setSelected] = useState<AdminSupportTicketItem | null>(null)
+  const [updating, setUpdating] = useState(false)
+  const [noteDraft, setNoteDraft] = useState('')
+
+  const statusLabel: Record<string, string> = { open: '待处理', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
+  const priorityLabel: Record<string, string> = { low: '低', normal: '中', high: '高', urgent: '紧急' }
+  const kindLabel: Record<string, string> = { bug: 'Bug/报错', suggestion: '功能建议', other: '其他' }
+
+  const load = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await adminListSupportTickets({ q, status, limit: 100 })
+      setTickets(r.tickets || [])
+    } catch (e: any) {
+      setErr(e?.message || '加载工单失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const updateTicket = async (params: { status?: 'open' | 'in_progress' | 'resolved' | 'closed'; priority?: 'low' | 'normal' | 'high' | 'urgent' }) => {
+    if (!selected) return
+    setUpdating(true)
+    setErr('')
+    setNotice('')
+    try {
+      await adminUpdateSupportTicket({ ticketId: selected.id, ...params, adminNote: noteDraft })
+      setNotice('工单更新成功')
+      await load()
+      const latest = tickets.find((x) => x.id === selected.id)
+      if (latest) setSelected(latest)
+    } catch (e: any) {
+      setErr(e?.message || '更新工单失败')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold">工单管理</h3>
+          <p className="text-sm text-gray-500 mt-1">查看用户工单、更新状态与备注</p>
+        </div>
+        <button onClick={() => void load()} className="px-3 py-2 border rounded-lg text-sm">{busy ? '刷新中...' : '刷新'}</button>
+      </div>
+      <div className="grid md:grid-cols-3 gap-3">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索工单号/邮箱/主题" className="px-3 py-2 border rounded-lg" />
+        <select value={status} onChange={(e) => setStatus(e.target.value as any)} className="px-3 py-2 border rounded-lg">
+          <option value="all">全部状态</option>
+          <option value="open">待处理</option>
+          <option value="in_progress">处理中</option>
+          <option value="resolved">已解决</option>
+          <option value="closed">已关闭</option>
+        </select>
+        <button onClick={() => void load()} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">查询</button>
+      </div>
+      {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
+      {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
+
+      <div className="overflow-x-auto border rounded-xl">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="text-left px-3 py-2">工单号</th>
+              <th className="text-left px-3 py-2">类型</th>
+              <th className="text-left px-3 py-2">用户</th>
+              <th className="text-left px-3 py-2">状态</th>
+              <th className="text-left px-3 py-2">优先级</th>
+              <th className="text-left px-3 py-2">提交时间</th>
+              <th className="text-left px-3 py-2">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.map((t) => (
+              <tr key={t.id} className="border-t">
+                <td className="px-3 py-2 font-medium">{t.ticket_no}</td>
+                <td className="px-3 py-2">{kindLabel[t.kind] || t.kind}</td>
+                <td className="px-3 py-2 text-xs text-gray-600">{t.email || t.user_id}</td>
+                <td className="px-3 py-2">{statusLabel[t.status] || t.status}</td>
+                <td className="px-3 py-2">{priorityLabel[t.priority] || t.priority}</td>
+                <td className="px-3 py-2 text-gray-600">{new Date(t.created_at).toLocaleString()}</td>
+                <td className="px-3 py-2">
+                  <button
+                    onClick={() => {
+                      setSelected(t)
+                      setNoteDraft(String(t.admin_note || ''))
+                    }}
+                    className="px-2.5 py-1 rounded border text-xs"
+                  >
+                    处理
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {tickets.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-gray-400">暂无工单数据</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <div className="rounded-xl border p-4 bg-gray-50 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">工单详情：{selected.ticket_no}</div>
+            <button onClick={() => setSelected(null)} className="px-2 py-1 rounded border text-xs">关闭</button>
+          </div>
+          <div className="text-sm text-gray-700">主题：{selected.subject}</div>
+          <div className="text-sm text-gray-700 whitespace-pre-wrap">描述：{selected.content}</div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">状态</label>
+              <select
+                value={selected.status}
+                onChange={async (e) => {
+                  const next = e.target.value as 'open' | 'in_progress' | 'resolved' | 'closed'
+                  setSelected((prev) => (prev ? { ...prev, status: next } : prev))
+                  await updateTicket({ status: next })
+                }}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+                disabled={updating}
+              >
+                <option value="open">待处理</option>
+                <option value="in_progress">处理中</option>
+                <option value="resolved">已解决</option>
+                <option value="closed">已关闭</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">优先级</label>
+              <select
+                value={selected.priority}
+                onChange={async (e) => {
+                  const next = e.target.value as 'low' | 'normal' | 'high' | 'urgent'
+                  setSelected((prev) => (prev ? { ...prev, priority: next } : prev))
+                  await updateTicket({ priority: next })
+                }}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+                disabled={updating}
+              >
+                <option value="low">低</option>
+                <option value="normal">中</option>
+                <option value="high">高</option>
+                <option value="urgent">紧急</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">管理员备注</label>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+              placeholder="输入处理说明..."
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={() => void updateTicket({})}
+              disabled={updating}
+              className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm disabled:opacity-50"
+            >
+              {updating ? '保存中...' : '保存备注'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -112,3 +112,47 @@ export async function adminUpsertAnnouncement(params: any) {
   if (!resp.ok || !data?.success) throw new Error(data?.error || `保存公告失败(${resp.status})`)
   return data
 }
+
+export type AdminSupportTicketItem = {
+  id: string
+  ticket_no: string
+  user_id: string
+  email?: string
+  kind: 'bug' | 'suggestion' | 'other'
+  subject: string
+  content: string
+  status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  admin_note?: string
+  created_at: string
+  updated_at?: string
+  closed_at?: string | null
+}
+
+export async function adminListSupportTickets(params?: { q?: string; status?: 'all' | 'open' | 'in_progress' | 'resolved' | 'closed'; limit?: number; offset?: number }) {
+  const sp = new URLSearchParams()
+  if (params?.q) sp.set('q', params.q)
+  if (params?.status) sp.set('status', params.status)
+  if (params?.limit) sp.set('limit', String(params.limit))
+  if (params?.offset != null) sp.set('offset', String(params.offset))
+  const resp = await fetch(`/api/admin/support-tickets/list${sp.toString() ? `?${sp.toString()}` : ''}`, { headers: { ...authHeader() } })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `获取工单失败(${resp.status})`)
+  return data as { success: true; tickets: AdminSupportTicketItem[]; nextOffset?: number; hasMore?: boolean }
+}
+
+export async function adminUpdateSupportTicket(params: {
+  ticketId: string
+  status?: 'open' | 'in_progress' | 'resolved' | 'closed'
+  priority?: 'low' | 'normal' | 'high' | 'urgent'
+  adminNote?: string
+}) {
+  const resp = await fetch('/api/admin/support-tickets/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(params),
+  })
+  const data = await readJsonOrText(resp)
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `更新工单失败(${resp.status})`)
+  return data as { success: true; ticket: AdminSupportTicketItem }
+}
