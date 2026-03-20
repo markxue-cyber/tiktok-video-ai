@@ -58,6 +58,22 @@
   background-color: rgba(255,255,255,.04) !important;
 }
 
+/* Inside fixed modals, avoid "washed out" purple/gray blocks. */
+.workbench-root .fixed [class*="bg-purple-50"],
+.workbench-root .fixed [class*="bg-purple-100"],
+.workbench-root .fixed [class*="bg-indigo-50"],
+.workbench-root .fixed [class*="bg-pink-50"] {
+  background-color: rgba(124,58,237,.16) !important;
+  border-color: rgba(167,139,250,.22) !important;
+}
+
+/* Reduce modal text overall brightness slightly. */
+.workbench-root .fixed [class*="text-gray-"],
+.workbench-root .fixed [class*="text-slate-"],
+.workbench-root .fixed [class*="text-black-"] {
+  color: rgba(255,255,255,.68) !important;
+}
+
 /* Hover/active polish (avoid "too white" on menu hover) */
 .workbench-root aside button:hover {
   background-color: rgba(255, 255, 255, 0.035) !important;
