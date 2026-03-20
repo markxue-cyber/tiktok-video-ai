@@ -74,7 +74,9 @@ export default async function handler(req, res) {
     if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
 
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
-    const { prompt, model, size, resolution, aspect_ratio, refImage, negativePrompt, negative_prompt } = req.body || {}
+    const { prompt, model, size, resolution, aspect_ratio, refImage, negativePrompt, negative_prompt, n, count, num_images } = req.body || {}
+    const nRaw = Number(n ?? count ?? num_images ?? 1)
+    const imageCount = Number.isFinite(nRaw) ? Math.max(1, Math.min(4, Math.floor(nRaw))) : 1
     const neg = String(negativePrompt || negative_prompt || '').trim()
 
     const modelId = String(model || '').toLowerCase()
@@ -179,6 +181,9 @@ export default async function handler(req, res) {
           prompt: prompt || '生成一张商品展示图',
           ...negativeFields,
           model: modelToUse || undefined,
+          n: imageCount,
+          count: imageCount,
+          num_images: imageCount,
           ...sizeFields,
           // 尝试以常见字段名透传参考图（不同聚合/模型可能字段不同）
           ...refFields,

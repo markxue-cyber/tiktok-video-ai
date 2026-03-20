@@ -5,6 +5,7 @@ export async function generateImageAPI(params: {
   aspectRatio: string
   resolution: string
   refImage?: string
+  imageCount?: number
 }): Promise<{ imageUrl: string; size?: string }> {
   const token = localStorage.getItem('tikgen.accessToken') || ''
   if (!token) throw new Error('请先登录再生成图片')
@@ -26,6 +27,9 @@ export async function generateImageAPI(params: {
       aspect_ratio: params.aspectRatio,
       resolution: params.resolution,
       refImage: params.refImage,
+      n: params.imageCount || 1,
+      count: params.imageCount || 1,
+      num_images: params.imageCount || 1,
     }),
   })
 

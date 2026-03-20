@@ -2210,6 +2210,7 @@ function ImageGenerator({
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
+  const [imageCount, setImageCount] = useState<1 | 2 | 3 | 4>(1)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedImage, setGeneratedImage] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -2740,6 +2741,7 @@ function ImageGenerator({
         aspectRatio: size,
         resolution,
         refImage: refImageDataUrl || undefined,
+        imageCount,
       })
       setGeneratedImage(r.imageUrl)
       Sentry.captureMessage('image_generation_success', { level: 'info', extra: { model, size, resolution } })
@@ -2851,6 +2853,7 @@ function ImageGenerator({
         aspectRatio: size,
         resolution,
         refImage: refImageDataUrl || undefined,
+        imageCount,
       })
       setGeneratedImage(r.imageUrl)
       await safeArchiveAsset({
@@ -3078,30 +3081,6 @@ function ImageGenerator({
             <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
           <div className="border-2 border-dashed border-gray-300 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <label className="px-3 py-1.5 rounded-lg border text-sm cursor-pointer hover:bg-gray-50">
-                本地上传
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={async (e: any) => {
-                    await handleLocalRefUpload(e.target.files || null)
-                    e.target.value = ''
-                  }}
-                  className="hidden"
-                />
-              </label>
-              <button
-                onClick={() => {
-                  setAssetSelectedIds(new Set())
-                  setShowAssetPicker(true)
-                }}
-                className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
-              >
-                从资产库选择
-              </button>
-            </div>
             {refImages.length ? (
               <div className="grid grid-cols-5 gap-2">
                 {refImages.map((img, i) => (
@@ -3113,19 +3092,47 @@ function ImageGenerator({
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-gray-500 py-6 text-center">请至少上传 1 张图片</div>
+              <div className="py-8 text-center">
+                <Upload className="w-14 h-14 mx-auto text-gray-300 mb-4" />
+                <div className="text-3xl font-semibold mb-2">点击或拖拽上传图片</div>
+                <div className="text-sm text-gray-500 mb-6">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
+                <div className="flex items-center justify-center gap-3">
+                  <label className="px-5 py-2.5 rounded-xl border text-base cursor-pointer hover:bg-gray-50">
+                    选择文件
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={async (e: any) => {
+                        await handleLocalRefUpload(e.target.files || null)
+                        e.target.value = ''
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    onClick={() => {
+                      setAssetSelectedIds(new Set())
+                      setShowAssetPicker(true)
+                    }}
+                    className="px-5 py-2.5 rounded-xl border text-base hover:bg-gray-50"
+                  >
+                    从资产库选择
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">比例</label>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {imageCaps.aspectRatios.map((ar) => (
               <button
                 key={ar}
                 onClick={() => setSize(ar)}
-                className={`rounded-xl border px-2 py-2 text-sm ${size === ar ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                className={`rounded-xl border px-2 py-2 text-sm shrink-0 w-[92px] ${size === ar ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}
               >
                 <div className="h-7 flex items-center justify-center">
                   <div
@@ -3153,7 +3160,14 @@ function ImageGenerator({
               ))}
             </select>
           </div>
-          <div />
+          <div>
+            <label className="block text-sm font-medium mb-1">生成张数</label>
+            <select value={imageCount} onChange={(e) => setImageCount(Number(e.target.value) as 1 | 2 | 3 | 4)} className="w-full px-3 py-2 border rounded-lg text-sm">
+              {[1, 2, 3, 4].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="mb-6">
