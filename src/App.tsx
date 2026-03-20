@@ -2739,14 +2739,16 @@ function ImageGenerator({
 
   const startSmoothGenProgress = () => {
     const startedAt = Date.now()
+    // 指数趋近上限：在不知道真实耗时时，避免 20s 内就顶到 97% 然后长时间不动
+    const cap = 95
+    const tauMs = 44000 // 越大整体越慢；约 90s 时在 80%+，约 2–3 分钟仍不会贴死上限
+    const tickMs = 320
     const timer = setInterval(() => {
       const elapsed = Date.now() - startedAt
-      // 目标时长约 22s，平滑趋近 97%，避免卡在 90%
-      const ratio = Math.min(1, elapsed / 22000)
-      const eased = 1 - Math.pow(1 - ratio, 1.35)
-      const target = 2 + eased * 95
-      setGenProgress((p) => Math.max(p, Math.min(97, Math.floor(target))))
-    }, 280)
+      const eased = 1 - Math.exp(-elapsed / tauMs)
+      const target = 2 + (cap - 2) * eased
+      setGenProgress((p) => Math.max(p, Math.min(cap, Math.round(target))))
+    }, tickMs)
     return () => clearInterval(timer)
   }
 
@@ -2759,13 +2761,14 @@ function ImageGenerator({
             done = true
             return 100
           }
-          return Math.min(100, p + 2)
+          const step = p >= 96 ? 1 : p >= 90 ? 2 : 3
+          return Math.min(100, p + step)
         })
         if (done) {
           clearInterval(timer)
           resolve()
         }
-      }, 35)
+      }, 40)
     })
   }
 
