@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading Preview 4 - Film Strip</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        font-family: Inter, "PingFang SC", sans-serif;
+        background: radial-gradient(70rem 34rem at 50% -10%, rgba(99,102,241,.2), transparent 56%), linear-gradient(180deg,#0a0d20,#04060f);
+      }
+      .panel {
+        width: min(760px, 92vw);
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 24px;
+        padding: 34px 30px;
+        background: rgba(11,14,34,.82);
+      }
+      h1 { margin: 0; text-align: center; color: #f7f3ff; font-size: 30px; }
+      p { margin: 8px 0 18px; text-align: center; color: rgba(232,226,255,.72); }
+      .strip {
+        height: 76px; border-radius: 14px; overflow: hidden;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.03);
+        position: relative;
+      }
+      .frames {
+        display: flex; gap: 10px; position: absolute; inset: 12px;
+        animation: move 2.6s linear infinite;
+      }
+      .frame {
+        width: 96px; border-radius: 10px; flex: 0 0 auto;
+        background: linear-gradient(135deg, rgba(167,139,250,.75), rgba(56,189,248,.72));
+        position: relative;
+      }
+      .frame::before {
+        content: ""; position: absolute; inset: 10px;
+        border-radius: 6px; background: rgba(8,10,25,.45);
+      }
+      .dots { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+      .dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.22); animation: blink 1.2s infinite; }
+      .dots i:nth-child(2){ animation-delay:.15s; }.dots i:nth-child(3){ animation-delay:.3s; }
+      @keyframes move { from { transform: translateX(0);} to { transform: translateX(-106px);} }
+      @keyframes blink { 0%,100%{opacity:.25} 50%{opacity:1;background:#8fd3ff;} }
+    </style>
+  </head>
+  <body>
+    <section class="panel">
+      <h1>视频渲染中</h1>
+      <p>正在逐帧合成并优化运动连贯性，请稍等…</p>
+      <div class="strip">
+        <div class="frames">
+          <div class="frame"></div><div class="frame"></div><div class="frame"></div><div class="frame"></div><div class="frame"></div><div class="frame"></div>
+        </div>
+      </div>
+      <div class="dots"><i></i><i></i><i></i></div>
+    </section>
+  </body>
+  </html>

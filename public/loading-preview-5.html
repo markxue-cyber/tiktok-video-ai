@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading Preview 5 - Elegant Minimal</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        font-family: Inter, "PingFang SC", sans-serif;
+        background: linear-gradient(180deg,#0b0d18,#070810);
+      }
+      .box {
+        width: min(620px, 92vw);
+        padding: 38px 30px;
+        border-radius: 22px;
+        border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.02);
+        text-align: center;
+      }
+      .ring {
+        width: 82px; height: 82px; margin: 0 auto 16px;
+        border-radius: 50%;
+        border: 2px solid rgba(255,255,255,.12);
+        border-top-color: #b88dff;
+        animation: spin 1s linear infinite;
+      }
+      h1 { margin: 0; font-size: 28px; color: #faf7ff; }
+      p { margin: 8px 0 0; color: rgba(238,234,255,.68); }
+      .meter {
+        margin-top: 18px; height: 4px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.08);
+      }
+      .meter > i {
+        display: block; height: 100%; width: 35%;
+        background: linear-gradient(90deg,#be92ff,#73c2ff);
+        animation: flow 1.6s ease-in-out infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg);} }
+      @keyframes flow { 0%{transform:translateX(-130%)} 60%{transform:translateX(220%)} 100%{transform:translateX(220%)} }
+    </style>
+  </head>
+  <body>
+    <section class="box">
+      <div class="ring"></div>
+      <h1>图片生成中</h1>
+      <p>正在优化细节与光影层次，请稍等片刻。</p>
+      <div class="meter"><i></i></div>
+    </section>
+  </body>
+  </html>

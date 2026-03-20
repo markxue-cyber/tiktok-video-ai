@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loading Preview 7 - Constellation</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; min-height: 100vh; display: grid; place-items: center;
+        font-family: Inter, "PingFang SC", sans-serif;
+        background: linear-gradient(180deg,#070911,#03040a);
+      }
+      .panel {
+        width: min(740px, 92vw);
+        border: 1px solid rgba(255,255,255,.1);
+        border-radius: 24px;
+        background: rgba(10,12,26,.84);
+        padding: 36px 30px;
+        text-align: center;
+      }
+      h1 { margin: 0; color: #f4f6ff; font-size: 30px; }
+      p { margin: 10px 0 18px; color: rgba(230,233,255,.7); }
+      svg { width: 180px; height: 120px; }
+      .node { fill: #a4d7ff; animation: blink 1.6s infinite; }
+      .n2{animation-delay:.2s}.n3{animation-delay:.4s}.n4{animation-delay:.6s}.n5{animation-delay:.8s}
+      .line { stroke: rgba(168,139,250,.55); stroke-width: 2; stroke-dasharray: 6 8; animation: dash 1.3s linear infinite; }
+      @keyframes blink { 0%,100%{opacity:.35} 50%{opacity:1} }
+      @keyframes dash { to { stroke-dashoffset: -28; } }
+    </style>
+  </head>
+  <body>
+    <section class="panel">
+      <svg viewBox="0 0 220 140" aria-hidden="true">
+        <line class="line" x1="22" y1="28" x2="86" y2="52"/>
+        <line class="line" x1="86" y1="52" x2="132" y2="34"/>
+        <line class="line" x1="132" y1="34" x2="190" y2="58"/>
+        <line class="line" x1="86" y1="52" x2="116" y2="104"/>
+        <line class="line" x1="116" y1="104" x2="178" y2="96"/>
+        <circle class="node n1" cx="22" cy="28" r="5"/>
+        <circle class="node n2" cx="86" cy="52" r="6"/>
+        <circle class="node n3" cx="132" cy="34" r="5"/>
+        <circle class="node n4" cx="190" cy="58" r="5"/>
+        <circle class="node n5" cx="116" cy="104" r="6"/>
+        <circle class="node n6" cx="178" cy="96" r="5"/>
+      </svg>
+      <h1>多阶段计算中</h1>
+      <p>任务在排队、生成、质检阶段间流转，请耐心等待。</p>
+    </section>
+  </body>
+  </html>
