@@ -2387,7 +2387,7 @@ function ImageGenerator({
       setRefUploadNotice('最大可支持上传5张。')
       return
     }
-    if (files.length > remain) setRefUploadNotice('最大可支持上传5张。只上传前5张。')
+    if (files.length > remain) setRefUploadNotice('最大可支持上传5张')
     else setRefUploadNotice('')
     const picked = Array.from(files).slice(0, remain)
     const next: Array<{ id: string; url: string; name?: string; source: 'local' }> = []
