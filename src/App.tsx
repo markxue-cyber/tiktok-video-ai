@@ -1553,6 +1553,7 @@ function VideoGenerator({
   const [assetList, setAssetList] = useState<AssetItem[]>([])
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
+  const [refUploadBusy, setRefUploadBusy] = useState(false)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
@@ -2183,17 +2184,22 @@ function VideoGenerator({
               onChange={async (e: any) => {
                 const f: File | undefined = e.target.files?.[0]
                 if (!f) return
-                const preview = URL.createObjectURL(f)
-                setRefImagePreviewUrl(preview)
-                const dataUrl = await fileToDataUrl(f)
-                setRefImageDataUrl(dataUrl)
-                await safeArchiveAsset({
-                  source: 'user_upload',
-                  type: 'image',
-                  url: dataUrl,
-                  name: f.name,
-                  metadata: { from: 'video_generator_ref', mime: f.type, size: f.size },
-                })
+                setRefUploadBusy(true)
+                try {
+                  const preview = URL.createObjectURL(f)
+                  setRefImagePreviewUrl(preview)
+                  const dataUrl = await fileToDataUrl(f)
+                  setRefImageDataUrl(dataUrl)
+                  await safeArchiveAsset({
+                    source: 'user_upload',
+                    type: 'image',
+                    url: dataUrl,
+                    name: f.name,
+                    metadata: { from: 'video_generator_ref', mime: f.type, size: f.size },
+                  })
+                } finally {
+                  setRefUploadBusy(false)
+                }
               }}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
@@ -2205,7 +2211,16 @@ function VideoGenerator({
                 <p className="text-gray-500 mt-2">点击上传参考图</p>
               </>
             )}
+            {refUploadBusy && (
+              <div className="absolute inset-0 rounded-xl bg-black/35 backdrop-blur-[1px] flex items-center justify-center">
+                <div className="text-sm text-white/90 flex items-center">
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  上传中...
+                </div>
+              </div>
+            )}
           </div>
+          {refUploadBusy ? <div className="mt-2 text-xs text-gray-500">正在上传参考图，请稍候...</div> : null}
         </div>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
@@ -2331,6 +2346,7 @@ function ImageGenerator({
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
   const [refUploadNotice, setRefUploadNotice] = useState('')
+  const [refUploadBusy, setRefUploadBusy] = useState(false)
   const [previewRefImage, setPreviewRefImage] = useState<{ url: string; name: string; index: number } | null>(null)
   const refUploadInputRef = useRef<HTMLInputElement | null>(null)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
@@ -2384,25 +2400,30 @@ function ImageGenerator({
     if (!files?.length) return
     const remain = Math.max(0, MAX_REF_IMAGES - refImages.length)
     if (remain <= 0) {
-      setRefUploadNotice('最大可支持上传5张。')
+      setRefUploadNotice('最大可支持上传5张')
       return
     }
     if (files.length > remain) setRefUploadNotice('最大可支持上传5张')
     else setRefUploadNotice('')
     const picked = Array.from(files).slice(0, remain)
     const next: Array<{ id: string; url: string; name?: string; source: 'local' }> = []
-    for (const f of picked) {
-      const dataUrl = await fileToDataUrl(f)
-      next.push({ id: `local_${Date.now()}_${Math.random().toString(16).slice(2)}`, url: dataUrl, name: f.name, source: 'local' })
-      await safeArchiveAsset({
-        source: 'user_upload',
-        type: 'image',
-        url: dataUrl,
-        name: f.name,
-        metadata: { from: 'image_generator_ref_multi', mime: f.type, size: f.size },
-      })
+    setRefUploadBusy(true)
+    try {
+      for (const f of picked) {
+        const dataUrl = await fileToDataUrl(f)
+        next.push({ id: `local_${Date.now()}_${Math.random().toString(16).slice(2)}`, url: dataUrl, name: f.name, source: 'local' })
+        await safeArchiveAsset({
+          source: 'user_upload',
+          type: 'image',
+          url: dataUrl,
+          name: f.name,
+          metadata: { from: 'image_generator_ref_multi', mime: f.type, size: f.size },
+        })
+      }
+      setRefImages((prev) => [...prev, ...next].slice(0, MAX_REF_IMAGES))
+    } finally {
+      setRefUploadBusy(false)
     }
-    setRefImages((prev) => [...prev, ...next].slice(0, MAX_REF_IMAGES))
   }
 
   const loadAssetPicker = async (source: 'user_upload' | 'ai_generated') => {
@@ -3227,10 +3248,10 @@ function ImageGenerator({
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">参考图（支持上传1-5张）</label>
-            <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
+            <div className="text-xs text-gray-500">{refUploadBusy ? '上传中...' : `${refImages.length}/${MAX_REF_IMAGES}`}</div>
           </div>
           <div
-            className="border-2 border-dashed border-gray-300 rounded-xl p-2.5"
+            className="border-2 border-dashed border-gray-300 rounded-xl p-2.5 relative"
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -3247,6 +3268,7 @@ function ImageGenerator({
               type="file"
               accept="image/*"
               multiple
+              disabled={refUploadBusy}
               onChange={async (e: any) => {
                 await handleLocalRefUpload(e.target.files || null)
                 e.target.value = ''
@@ -3295,6 +3317,7 @@ function ImageGenerator({
                     <>
                       <button
                         type="button"
+                      disabled={refUploadBusy}
                         onClick={(e) => {
                           e.stopPropagation()
                           refUploadInputRef.current?.click()
@@ -3306,6 +3329,7 @@ function ImageGenerator({
                       </button>
                       <button
                         type="button"
+                      disabled={refUploadBusy}
                         onClick={(e) => {
                           e.stopPropagation()
                           setAssetSelectedIds(new Set())
@@ -3337,6 +3361,7 @@ function ImageGenerator({
                   </label>
                   <button
                     type="button"
+                    disabled={refUploadBusy}
                     onClick={(e) => {
                       e.stopPropagation()
                       setAssetSelectedIds(new Set())
@@ -3349,8 +3374,17 @@ function ImageGenerator({
                 </div>
               </div>
             )}
+            {refUploadBusy && (
+              <div className="absolute inset-0 rounded-xl bg-black/30 backdrop-blur-[1px] flex items-center justify-center">
+                <div className="text-sm text-white/90 flex items-center">
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  上传中...
+                </div>
+              </div>
+            )}
           </div>
           {refUploadNotice ? <div className="mt-2 text-xs text-amber-500">{refUploadNotice}</div> : null}
+          {refUploadBusy ? <div className="mt-1 text-xs text-gray-500">正在上传图片，请稍候...</div> : null}
         </div>
 
         <div className="mb-6">
