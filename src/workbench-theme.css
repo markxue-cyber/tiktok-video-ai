@@ -85,6 +85,16 @@
   color: rgba(255, 255, 255, 0.78) !important;
 }
 
+/* Keep selected nav item stable on hover (no color jump). */
+.workbench-root aside button.text-white:hover,
+.workbench-root aside button.text-white:hover span,
+.workbench-root aside button.text-white:hover svg {
+  color: transparent !important;
+  background-image: linear-gradient(90deg, rgba(34, 211, 238, 0.98), rgba(167, 139, 250, 0.98), rgba(236, 72, 153, 0.95));
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
 /* Modals (Help Center / Feedback) should be opaque enough. */
 .workbench-root .fixed .bg-white {
   background-color: rgba(12, 14, 30, 0.78) !important;
