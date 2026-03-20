@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, Menu, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -24,6 +24,7 @@ import {
   type AdminUserItem,
 } from './api/admin'
 import { listPackageConfigsPublic, type PackageConfigItem } from './api/packageConfigs'
+import { listAnnouncementsPublic } from './api/announcements'
 import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
 import './workbench-theme.css'
@@ -314,6 +315,9 @@ function App() {
   const [showFeedback, setShowFeedback] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showAnnouncements, setShowAnnouncements] = useState(false)
+  const [announcements, setAnnouncements] = useState<any[]>([])
+  const [annBusy, setAnnBusy] = useState(false)
 
   const readSession = () => {
     try {
@@ -480,6 +484,41 @@ function App() {
     if (mainNav === 'benefits') return '个人权益'
     return '开发者后台'
   }, [mainNav, createNav, toolNav])
+
+  const ANN_READ_KEY = user?.id ? `tikgen.ann.read.${user.id}` : 'tikgen.ann.read.guest'
+  const unreadCount = useMemo(() => {
+    try {
+      const readIds = JSON.parse(localStorage.getItem(ANN_READ_KEY) || '[]')
+      const readSet = new Set(Array.isArray(readIds) ? readIds.map(String) : [])
+      return announcements.filter((a) => !readSet.has(String(a.id))).length
+    } catch {
+      return announcements.length
+    }
+  }, [announcements, ANN_READ_KEY])
+
+  const markAnnouncementsRead = () => {
+    try {
+      localStorage.setItem(ANN_READ_KEY, JSON.stringify(announcements.map((a) => String(a.id))))
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    if (!accessToken) return
+    ;(async () => {
+      try {
+        setAnnBusy(true)
+        const planId = String(user?.package || 'all')
+        const r = await listAnnouncementsPublic(planId)
+        setAnnouncements(Array.isArray(r.announcements) ? r.announcements : [])
+      } catch {
+        setAnnouncements([])
+      } finally {
+        setAnnBusy(false)
+      }
+    })()
+  }, [accessToken, user?.package])
 
   if (page === 'landing')
     return (
@@ -868,6 +907,40 @@ function App() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    const next = !showAnnouncements
+                    setShowAnnouncements(next)
+                    if (next) markAnnouncementsRead()
+                  }}
+                  className="workbench-topicon-btn p-2 rounded-lg"
+                  title="公告通知"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-pink-500 text-white text-[10px] leading-4 text-center">{Math.min(unreadCount, 9)}</span>}
+                </button>
+                {showAnnouncements && (
+                  <div className="absolute right-0 mt-2 w-96 max-h-96 overflow-auto bg-white border rounded-xl shadow-xl z-30 p-3">
+                    <div className="text-sm font-semibold mb-2">公告中心</div>
+                    {annBusy ? (
+                      <div className="text-xs text-gray-500 py-2">加载中...</div>
+                    ) : announcements.length === 0 ? (
+                      <div className="text-xs text-gray-500 py-2">暂无公告</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {announcements.slice(0, 20).map((a) => (
+                          <div key={a.id} className="border rounded-lg p-2.5">
+                            <div className="text-sm font-medium">{a.title || '公告'}</div>
+                            <div className="text-xs text-gray-500 mt-1">{String(a.published_at || a.created_at || '').slice(0, 10)}</div>
+                            <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap line-clamp-3">{a.content}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <button onClick={() => setShowFeedback(true)} className="workbench-topicon-btn p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="工单/客服">
                 <MessageSquare className="w-5 h-5" />
               </button>
@@ -4170,21 +4243,21 @@ function AdminAnnouncementsPanel() {
         <textarea value={form.content} onChange={(e) => setForm((x: any) => ({ ...x, content: e.target.value }))} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="公告内容" />
         <div className="grid grid-cols-3 gap-2">
           <select value={form.type} onChange={(e) => setForm((x: any) => ({ ...x, type: e.target.value }))} className="px-3 py-2 border rounded-lg">
-            <option value="system">system</option>
-            <option value="activity">activity</option>
-            <option value="release">release</option>
+            <option value="system">系统通知</option>
+            <option value="activity">活动公告</option>
+            <option value="release">版本发布</option>
           </select>
           <select value={form.target} onChange={(e) => setForm((x: any) => ({ ...x, target: e.target.value }))} className="px-3 py-2 border rounded-lg">
-            <option value="all">all</option>
-            <option value="trial">trial</option>
-            <option value="basic">basic</option>
-            <option value="pro">pro</option>
-            <option value="enterprise">enterprise</option>
+            <option value="all">全部用户</option>
+            <option value="trial">试用版用户</option>
+            <option value="basic">基础版用户</option>
+            <option value="pro">专业版用户</option>
+            <option value="enterprise">旗舰版用户</option>
           </select>
           <select value={form.status} onChange={(e) => setForm((x: any) => ({ ...x, status: e.target.value }))} className="px-3 py-2 border rounded-lg">
-            <option value="draft">draft</option>
-            <option value="published">published</option>
-            <option value="offline">offline</option>
+            <option value="draft">草稿</option>
+            <option value="published">已发布</option>
+            <option value="offline">已下线</option>
           </select>
         </div>
         <button onClick={() => void submit()} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存公告</button>
@@ -4194,7 +4267,10 @@ function AdminAnnouncementsPanel() {
           <div key={a.id} className="border rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="font-medium">{a.title}</div>
-              <div className="text-xs text-gray-500">{a.status} · {a.target}</div>
+              <div className="text-xs text-gray-500">
+                {{ draft: '草稿', published: '已发布', offline: '已下线' }[String(a.status)] || a.status} ·{' '}
+                {{ all: '全部用户', trial: '试用版', basic: '基础版', pro: '专业版', enterprise: '旗舰版' }[String(a.target)] || a.target}
+              </div>
             </div>
             <div className="text-sm text-gray-600 mt-1 line-clamp-2">{a.content}</div>
             <div className="mt-2">

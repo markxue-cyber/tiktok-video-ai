@@ -17,6 +17,7 @@
     { "source": "/api/admin/package-configs/delete", "destination": "/api/admin-package-configs-delete" },
     { "source": "/api/admin/announcements/list", "destination": "/api/admin-announcements-list" },
     { "source": "/api/admin/announcements/upsert", "destination": "/api/admin-announcements-upsert" },
+    { "source": "/api/announcements", "destination": "/api/announcements-public" },
     { "source": "/api/package-configs", "destination": "/api/package-configs-public" },
     { "source": "/api/auth/register", "destination": "/api/auth-register" },
     { "source": "/api/auth/login", "destination": "/api/auth-login" },
