@@ -911,9 +911,6 @@ function App() {
         <header className="bg-white shadow-sm sticky top-0 z-20">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="p-2 rounded-lg opacity-80 cursor-default select-none" aria-hidden="true">
-                <Menu className="w-5 h-5" />
-              </div>
               <h1 className="text-xl font-bold">
                 {mainNav === 'create' && createNav === 'video' && '视频生成'}
                 {mainNav === 'create' && createNav === 'image' && '图片生成'}
