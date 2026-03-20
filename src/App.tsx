@@ -977,10 +977,14 @@ function App() {
       <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all relative`}>
         <div className="p-4 border-b">
           <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'justify-between'}`}>
-            <div className={`flex items-center ${navCollapsed ? '' : 'space-x-3'}`}>
-              <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div>
-              {!navCollapsed && <span className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">TikGen AI</span>}
-            </div>
+            {!navCollapsed ? (
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div>
+                <span className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">TikGen AI</span>
+              </div>
+            ) : (
+              <div className="w-10 h-10" aria-hidden="true" />
+            )}
           </div>
         </div>
         <button
