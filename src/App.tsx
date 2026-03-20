@@ -3807,6 +3807,7 @@ function AdminPackagesPanel() {
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
   const [savingPlanId, setSavingPlanId] = useState<string>('')
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const FIXED_PLAN_IDS = ['trial', 'basic', 'pro', 'enterprise']
 
   const load = async () => {
@@ -3900,7 +3901,9 @@ function AdminPackagesPanel() {
       {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
       {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
       <div className="grid md:grid-cols-2 gap-4">
-        {rows.map((r, idx) => (
+        {rows.map((r, idx) => {
+          const isEditing = editingPlanId === r.plan_id
+          return (
           <div key={r.plan_id} className="border rounded-xl p-5 space-y-3 bg-white">
             <div className="font-semibold flex items-center justify-between gap-3">
               <span>{r.plan_id}</span>
@@ -3908,60 +3911,134 @@ function AdminPackagesPanel() {
                 {r.enabled === false ? '已禁用' : '可用'}
               </span>
             </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">套餐名称（展示给用户）</div>
-              <input value={r.name || ''} onChange={(e) => void updateOne(r.plan_id, { name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="套餐名称" />
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">套餐名称（展示给用户）</div>
+                <input
+                  value={r.name || ''}
+                  disabled={!isEditing}
+                  onChange={(e) => void updateOne(r.plan_id, { name: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                  placeholder="套餐名称"
+                />
+              </div>
+              <div>
+                {!isEditing ? (
+                  <button onClick={() => setEditingPlanId(r.plan_id)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">
+                    编辑
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={savingPlanId === r.plan_id}
+                      onClick={() => void saveOne(r)}
+                      className={`px-3 py-2 rounded-lg text-white text-sm ${savingPlanId === r.plan_id ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600'}`}
+                    >
+                      {savingPlanId === r.plan_id ? '保存中...' : '保存'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPlanId(null)
+                        setSavingPlanId('')
+                        void load()
+                      }}
+                      className="px-3 py-2 rounded-lg border text-gray-700 text-sm bg-white"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <div className="text-xs text-gray-500 mb-1">价格（分）</div>
-                <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(r.plan_id, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
+                <input
+                  value={r.price_cents ?? 0}
+                  disabled={!isEditing}
+                  onChange={(e) => void updateOne(r.plan_id, { price_cents: Number(e.target.value || 0) })}
+                  className={`px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                  placeholder="价格(分)"
+                />
               </div>
               <div>
                 <div className="text-xs text-gray-500 mb-1">日额度</div>
-                <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(r.plan_id, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
+                <input
+                  value={r.daily_quota ?? 0}
+                  disabled={!isEditing}
+                  onChange={(e) => void updateOne(r.plan_id, { daily_quota: Number(e.target.value || 0) })}
+                  className={`px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                  placeholder="日额度"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <div className="text-xs text-gray-500 mb-1">排序权重（越小越靠前）</div>
-                <input value={r.display_order ?? 100} onChange={(e) => void updateOne(r.plan_id, { display_order: Number(e.target.value || 100) })} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
+                <input
+                  value={r.display_order ?? 100}
+                  disabled={!isEditing}
+                  onChange={(e) => void updateOne(r.plan_id, { display_order: Number(e.target.value || 100) })}
+                  className={`px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                  placeholder="排序权重"
+                />
               </div>
               <div>
                 <div className="text-xs text-gray-500 mb-1">老用户宽限天数</div>
-                <input value={r.grace_days ?? 0} onChange={(e) => void updateOne(r.plan_id, { grace_days: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
+                <input
+                  value={r.grace_days ?? 0}
+                  disabled={!isEditing}
+                  onChange={(e) => void updateOne(r.plan_id, { grace_days: Number(e.target.value || 0) })}
+                  className={`px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                  placeholder="老用户宽限天数"
+                />
               </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">生效范围</div>
-              <select value={r.apply_mode || 'new_only'} onChange={(e) => void updateOne(r.plan_id, { apply_mode: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
+              <select
+                value={r.apply_mode || 'new_only'}
+                disabled={!isEditing}
+                onChange={(e) => void updateOne(r.plan_id, { apply_mode: e.target.value })}
+                className={`w-full px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+              >
                 <option value="new_only">仅新用户生效（默认）</option>
                 <option value="all_users">新老用户都生效</option>
               </select>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">生效时间（ISO，可空；空=立刻）</div>
-              <input value={r.effective_from || ''} onChange={(e) => void updateOne(r.plan_id, { effective_from: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
+              <input
+                value={r.effective_from || ''}
+                disabled={!isEditing}
+                onChange={(e) => void updateOne(r.plan_id, { effective_from: e.target.value })}
+                className={`w-full px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                placeholder="生效时间(ISO，可空)"
+              />
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">特性文案（每行一个，展示给用户）</div>
-              <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(r.plan_id, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
+              <textarea
+                value={r.featuresText || ''}
+                disabled={!isEditing}
+                onChange={(e) => void updateOne(r.plan_id, { featuresText: e.target.value })}
+                rows={4}
+                className={`w-full px-3 py-2 border rounded-lg ${!isEditing ? 'bg-gray-50 text-gray-500' : ''}`}
+                placeholder="每行一个特性"
+              />
             </div>
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void updateOne(r.plan_id, { enabled: e.target.checked })} />
+              <input
+                type="checkbox"
+                checked={r.enabled !== false}
+                disabled={!isEditing}
+                onChange={(e) => void updateOne(r.plan_id, { enabled: e.target.checked })}
+              />
               启用
             </label>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={savingPlanId === r.plan_id}
-                onClick={() => void saveOne(r)}
-                className={`px-3 py-2 rounded-lg text-white text-sm ${savingPlanId === r.plan_id ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600'}`}
-              >
-                {savingPlanId === r.plan_id ? '保存中...' : '保存'}
-              </button>
-            </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -4272,7 +4349,12 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {packages
           .filter((x) => x.enabled !== false)
-          .sort((a, b) => Number(a.display_order || 100) - Number(b.display_order || 100))
+          .sort((a, b) => {
+            const pa = Number(a.price_cents || 0)
+            const pb = Number(b.price_cents || 0)
+            if (pa !== pb) return pa - pb
+            return Number(a.display_order || 100) - Number(b.display_order || 100)
+          })
           .map((pkg) => {
             const isCurrent = String(user?.package || '') === String(pkg.plan_id)
             const priceYuan = Number(pkg.price_cents || 0) / 100
