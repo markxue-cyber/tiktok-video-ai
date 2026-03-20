@@ -3292,30 +3292,32 @@ function ImageGenerator({
                     </div>
                   ))}
                   {refImages.length < MAX_REF_IMAGES ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        refUploadInputRef.current?.click()
-                      }}
-                      className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span className="text-[11px]">上传</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          refUploadInputRef.current?.click()
+                        }}
+                        className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span className="text-[11px]">上传</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setAssetSelectedIds(new Set())
+                          setShowAssetPicker(true)
+                        }}
+                        className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
+                      >
+                        <Folder className="w-4 h-4" />
+                        <span className="text-[11px]">从资产库选择</span>
+                      </button>
+                    </>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setAssetSelectedIds(new Set())
-                      setShowAssetPicker(true)
-                    }}
-                    className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
-                  >
-                    <Folder className="w-4 h-4" />
-                    <span className="text-[11px]">从资产库选择</span>
-                  </button>
                 </div>
               </div>
             ) : (
