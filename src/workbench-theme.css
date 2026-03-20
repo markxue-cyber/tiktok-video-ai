@@ -256,13 +256,13 @@
 }
 
 .workbench-root .workbench-user-btn {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: transparent !important;
+  border: none !important;
 }
 
 .workbench-root .workbench-user-btn:hover {
   background: rgba(124, 58, 237, 0.16) !important;
-  border-color: rgba(167, 139, 250, 0.34) !important;
+  border: none !important;
 }
 
 .workbench-root .workbench-user-name {

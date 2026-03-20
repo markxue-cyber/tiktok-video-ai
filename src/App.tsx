@@ -1017,7 +1017,32 @@ function App() {
           {navCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
         </button>
         <nav className={`p-3 space-y-2 ${navCollapsed ? 'items-center' : ''}`}>
-          <NavPrimary collapsed={navCollapsed} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} clickable={false} />
+          {navCollapsed ? (
+            <>
+              <NavPrimary
+                collapsed
+                icon={<Video className="w-5 h-5" />}
+                label="视频生成"
+                active={mainNav === 'create' && createNav === 'video'}
+                onClick={() => {
+                  setMainNav('create')
+                  setCreateNav('video')
+                }}
+              />
+              <NavPrimary
+                collapsed
+                icon={<Image className="w-5 h-5" />}
+                label="图片生成"
+                active={mainNav === 'create' && createNav === 'image'}
+                onClick={() => {
+                  setMainNav('create')
+                  setCreateNav('image')
+                }}
+              />
+            </>
+          ) : (
+            <NavPrimary collapsed={false} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} clickable={false} />
+          )}
           {!navCollapsed && (
             <div className="pl-3 space-y-1">
               <NavSecondary
