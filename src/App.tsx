@@ -3503,6 +3503,7 @@ function Assets() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [searchKeyword, setSearchKeyword] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
+  const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null)
   const initializedRef = useRef(false)
 
   const saveCache = (next: {
@@ -3733,6 +3734,15 @@ function Assets() {
     }
   }
 
+  useEffect(() => {
+    if (!previewAsset) return
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewAsset(null)
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [previewAsset])
+
   const renderAssetCard = (a: AssetItem) => {
     const isImage = a.type === 'image'
     const checked = selectedIds.has(a.id)
@@ -3745,17 +3755,22 @@ function Assets() {
           </label>
           <span className="text-[11px] text-gray-400">{a.type === 'image' ? '图片' : '视频'}</span>
         </div>
-        <div className="h-28 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setPreviewAsset(a)}
+          className="w-full h-28 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden"
+          title="点击放大预览"
+        >
           {isImage ? (
             <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <video src={a.url} className="w-full h-full object-cover" preload="metadata" />
           )}
-        </div>
+        </button>
         <div className="mt-2 text-xs text-gray-600 truncate">{a.name || `${a.type} 资产`}</div>
         <div className="mt-1 text-[11px] text-gray-400">{new Date(a.created_at).toLocaleString()}</div>
         <div className="mt-2 flex gap-2">
-          <a href={a.url} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 rounded border">预览</a>
+          <button onClick={() => setPreviewAsset(a)} className="text-xs px-2 py-1 rounded border">预览</button>
           <a href={a.url} download className="text-xs px-2 py-1 rounded border">下载</a>
           <button disabled={busyId === a.id} onClick={() => handleRename(a)} className="text-xs px-2 py-1 rounded border disabled:opacity-50">重命名</button>
           <button disabled={busyId === a.id} onClick={() => handleDelete(a)} className="text-xs px-2 py-1 rounded border text-red-600 border-red-200 disabled:opacity-50">删除</button>
@@ -3894,6 +3909,25 @@ function Assets() {
           </div>
         </div>
       </div>
+      {previewAsset && (
+        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreviewAsset(null)}>
+          <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewAsset(null)}
+              className="absolute -top-10 right-0 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+            >
+              关闭
+            </button>
+            <div className="rounded-2xl border border-white/20 bg-white/5 p-2">
+              {previewAsset.type === 'image' ? (
+                <img src={previewAsset.url} alt={previewAsset.name || 'asset'} className="w-full max-h-[78vh] object-contain rounded-xl" />
+              ) : (
+                <video src={previewAsset.url} className="w-full max-h-[78vh] rounded-xl bg-black" controls autoPlay />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
