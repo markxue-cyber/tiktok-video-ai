@@ -1431,6 +1431,7 @@ function VideoGenerator({
   const [assetList, setAssetList] = useState<AssetItem[]>([])
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
+  const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
   const [size, setSize] = useState<VideoAspect>('9:16')
@@ -2206,6 +2207,7 @@ function ImageGenerator({
   const [assetList, setAssetList] = useState<AssetItem[]>([])
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
+  const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
@@ -2273,10 +2275,17 @@ function ImageGenerator({
   }
 
   const loadAssetPicker = async (source: 'user_upload' | 'ai_generated') => {
+    const cached = assetCacheRef.current[source]
+    if (cached && cached.length) {
+      setAssetList(cached)
+      return
+    }
     setAssetBusy(true)
     try {
       const r = await listAssetsAPI({ source, type: 'image', limit: 60, offset: 0 })
-      setAssetList((r.assets || []).filter((x) => x.type === 'image'))
+      const rows = (r.assets || []).filter((x) => x.type === 'image')
+      setAssetList(rows)
+      assetCacheRef.current[source] = rows
     } finally {
       setAssetBusy(false)
     }
@@ -3080,7 +3089,7 @@ function ImageGenerator({
             <label className="block text-sm font-medium">参考图（可上传 1-5 张，至少 1 张）</label>
             <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-4">
+          <div className="border-2 border-dashed border-gray-300 rounded-xl p-3">
             {refImages.length ? (
               <div className="grid grid-cols-5 gap-2">
                 {refImages.map((img, i) => (
@@ -3092,12 +3101,12 @@ function ImageGenerator({
                 ))}
               </div>
             ) : (
-              <div className="py-8 text-center">
-                <Upload className="w-14 h-14 mx-auto text-gray-300 mb-4" />
-                <div className="text-3xl font-semibold mb-2">点击或拖拽上传图片</div>
-                <div className="text-sm text-gray-500 mb-6">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
+              <div className="py-5 text-center">
+                <Upload className="w-10 h-10 mx-auto text-gray-300 mb-3" />
+                <div className="text-2xl font-semibold mb-1.5">点击或拖拽上传图片</div>
+                <div className="text-xs text-gray-500 mb-4">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
                 <div className="flex items-center justify-center gap-3">
-                  <label className="px-5 py-2.5 rounded-xl border text-base cursor-pointer hover:bg-gray-50">
+                  <label className="px-4 py-2 rounded-xl border text-sm cursor-pointer hover:bg-gray-50">
                     选择文件
                     <input
                       type="file"
@@ -3115,7 +3124,7 @@ function ImageGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-5 py-2.5 rounded-xl border text-base hover:bg-gray-50"
+                    className="px-4 py-2 rounded-xl border text-sm hover:bg-gray-50"
                   >
                     从资产库选择
                   </button>
@@ -3295,7 +3304,7 @@ function ImageGenerator({
           </div>
           <div className="px-5 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <button onClick={() => setAssetTab('user_upload')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'user_upload' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>上传资产</button>
+              <button onClick={() => setAssetTab('user_upload')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'user_upload' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>本地上传</button>
               <button onClick={() => setAssetTab('ai_generated')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>AI 生成</button>
             </div>
             <div className="text-sm text-gray-500">已选 {assetSelectedIds.size}/{Math.max(0, MAX_REF_IMAGES - refImages.length)}</div>
@@ -3313,9 +3322,14 @@ function ImageGenerator({
                     <button
                       key={a.id}
                       onClick={() => toggleAssetPick(a.id)}
-                      className={`relative rounded-xl overflow-hidden border ${checked ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200'}`}
+                      className={`relative rounded-xl overflow-hidden border transition-all ${checked ? 'border-purple-500 ring-2 ring-purple-300 shadow-[0_0_0_2px_rgba(168,85,247,.35)]' : 'border-gray-200 hover:border-gray-300'}`}
                     >
                       <img src={a.url} alt={a.name || 'asset'} className="w-full h-24 object-cover" />
+                      {checked && (
+                        <div className="absolute right-1.5 top-1.5 w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center">
+                          ✓
+                        </div>
+                      )}
                     </button>
                   )
                 })}
