@@ -10,6 +10,16 @@ function sendJson(res: any, status: number, payload: any) {
   }
 }
 
+async function fetchWithTimeout(input: string, init: any, timeoutMs = 12000) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(input, { ...init, signal: ctrl.signal })
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return sendJson(res, 405, { success: false, error: 'Method not allowed' })
@@ -25,7 +35,7 @@ export default async function handler(req, res) {
     const base = String(supabaseUrl).replace(/\/$/, '')
 
     // 1) Password grant token
-    const tokenResp = await fetch(`${base}/auth/v1/token?grant_type=password`, {
+    const tokenResp = await fetchWithTimeout(`${base}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: {
         apikey: anonKey,
@@ -52,7 +62,7 @@ export default async function handler(req, res) {
     const refreshToken = tokenJson?.refresh_token
 
     // 2) Fetch user profile from auth endpoint
-    const userResp = await fetch(`${base}/auth/v1/user`, {
+    const userResp = await fetchWithTimeout(`${base}/auth/v1/user`, {
       method: 'GET',
       headers: {
         apikey: anonKey,
@@ -82,13 +92,13 @@ export default async function handler(req, res) {
     }
 
     const display = user.email || String(email)
-    await fetch(`${base}/rest/v1/users`, {
+    await fetchWithTimeout(`${base}/rest/v1/users`, {
       method: 'POST',
       headers: restHeaders,
       body: JSON.stringify([{ id: user.id, email: user.email || String(email), display_name: display }]),
     })
 
-    const freezeResp = await fetch(`${base}/rest/v1/users?id=eq.${user.id}&select=is_frozen,freeze_reason`, {
+    const freezeResp = await fetchWithTimeout(`${base}/rest/v1/users?id=eq.${user.id}&select=is_frozen,freeze_reason`, {
       method: 'GET',
       headers: {
         apikey: serviceKey,
@@ -108,7 +118,7 @@ export default async function handler(req, res) {
     }
 
     // check existing subscription
-    const subResp = await fetch(`${base}/rest/v1/subscriptions?user_id=eq.${user.id}&select=*`, {
+    const subResp = await fetchWithTimeout(`${base}/rest/v1/subscriptions?user_id=eq.${user.id}&select=*`, {
       method: 'GET',
       headers: {
         apikey: serviceKey,
@@ -127,7 +137,7 @@ export default async function handler(req, res) {
     if (!existing) {
       const now = new Date()
       const end = new Date(now.getTime() + 7 * 24 * 3600 * 1000)
-      await fetch(`${base}/rest/v1/subscriptions`, {
+      await fetchWithTimeout(`${base}/rest/v1/subscriptions`, {
         method: 'POST',
         headers: restHeaders,
         body: JSON.stringify([
@@ -154,7 +164,8 @@ export default async function handler(req, res) {
       user,
     })
   } catch (e: any) {
-    return sendJson(res, 500, { success: false, error: e?.message || '服务器错误' })
+    const isAbort = e?.name === 'AbortError' || String(e?.message || '').toLowerCase().includes('aborted')
+    return sendJson(res, 500, { success: false, error: isAbort ? '登录服务超时，请稍后重试' : e?.message || '服务器错误' })
   }
 }
 

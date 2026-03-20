@@ -39,7 +39,10 @@ export async function generateImageAPI(params: {
 
   if (!resp.ok || !data?.success) {
     const raw = data?.raw ? `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}` : ''
-    throw new Error((data?.error || `生成失败(${resp.status})`) + raw)
+    const message = (data?.error || `生成失败(${resp.status})`) + raw
+    const err: any = new Error(message)
+    err.code = data?.code || 'UNKNOWN'
+    throw err
   }
   if (!data?.imageUrl) throw new Error('生成成功但未返回图片地址')
   return { imageUrl: data.imageUrl, size: data.size }

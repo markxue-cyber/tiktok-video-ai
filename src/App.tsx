@@ -510,7 +510,7 @@ function App() {
           <div className="flex items-center justify-center gap-4">
             <button
               onClick={() => {
-                setAuthMode('register')
+                setAuthMode('login')
                 setPage('auth')
               }}
               className="px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl font-bold text-lg"
