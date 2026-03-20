@@ -3262,7 +3262,7 @@ function ImageGenerator({
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">参考图 <span className="text-[11px] text-gray-500 font-normal">支持上传1-5张图片</span></label>
-            <div className="text-xs text-gray-500">{refUploadBusy ? '上传中...' : `${refImages.length}/${MAX_REF_IMAGES}`}</div>
+            <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
           <div
             className="border-2 border-dashed border-gray-300 rounded-xl p-2.5 relative"
