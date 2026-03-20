@@ -3058,7 +3058,6 @@ function ImageGenerator({
     <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-6">创建图片</h2>
         <div className="mb-6">
           <label className="block text-sm font-medium mb-1">模型选择</label>
           <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
@@ -3069,9 +3068,6 @@ function ImageGenerator({
               </option>
             ))}
           </select>
-          {imageModelOptions.some((m) => m.unavailableReason) && (
-            <div className="mt-1 text-xs text-amber-600">已标记“暂不可用”的模型不可选，系统会自动使用可用模型。</div>
-          )}
         </div>
 
         <div className="mb-6">
