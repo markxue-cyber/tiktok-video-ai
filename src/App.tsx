@@ -1344,6 +1344,7 @@ function VideoGenerator({
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [unavailableVideoMap, setUnavailableVideoMap] = useState<Record<string, string>>({})
   const stopPollingRef = useRef(false)
+  const aiJobRef = useRef(0)
 
   useEffect(() => {
     ;(async () => {
@@ -1509,13 +1510,17 @@ function VideoGenerator({
     setShowModal(true)
     setModalStep(1)
     setAiError('')
+    const jobId = ++aiJobRef.current
     setIsAiBusy(true)
     try {
       const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'video' })
+      if (jobId !== aiJobRef.current) return
       setProductInfo(parsed)
     } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '解析失败')
     } finally {
+      if (jobId !== aiJobRef.current) return
       setIsAiBusy(false)
     }
   }
@@ -1524,6 +1529,7 @@ function VideoGenerator({
     setAiError('')
     if (modalStep === 1) {
       setModalStep(2)
+      const jobId = ++aiJobRef.current
       setIsAiBusy(true)
       try {
         const r = await generateVideoScripts({
@@ -1534,14 +1540,17 @@ function VideoGenerator({
           aspectRatio: size,
           resolution,
         })
+        if (jobId !== aiJobRef.current) return
         setScripts(r.scripts)
         setScriptBatches([r.scripts])
         setScriptBatchIdx(0)
         setScriptRefreshCount(0)
         setSelectedScript(r.scripts[0] || '')
       } catch (e: any) {
+        if (jobId !== aiJobRef.current) return
         setAiError(e?.message || '脚本生成失败')
       } finally {
+        if (jobId !== aiJobRef.current) return
         setIsAiBusy(false)
       }
       return
@@ -1574,6 +1583,7 @@ function VideoGenerator({
     }
 
     setIsAiBusy(true)
+    const jobId = ++aiJobRef.current
     try {
       const r = await generateVideoScripts({
         product: productInfo,
@@ -1583,14 +1593,17 @@ function VideoGenerator({
         aspectRatio: size,
         resolution,
       })
+      if (jobId !== aiJobRef.current) return
       setScriptBatches((prev) => [...prev, r.scripts])
       setScriptBatchIdx(scriptBatches.length)
       setScriptRefreshCount((c) => Math.min(2, c + 1))
       setScripts(r.scripts)
       setSelectedScript(r.scripts[0] || '')
     } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '脚本生成失败')
     } finally {
+      if (jobId !== aiJobRef.current) return
       setIsAiBusy(false)
     }
   }
@@ -1599,15 +1612,34 @@ function VideoGenerator({
     const newTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag]
     setTags(newTags)
     setAiError('')
+    const jobId = ++aiJobRef.current
     setIsAiBusy(true)
     try {
       const r = await beautifyScript({ script: selectedScript, tags: newTags, language: productInfo.language })
+      if (jobId !== aiJobRef.current) return
       setOptimizedPrompt(r.optimized)
     } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '优化失败')
     } finally {
+      if (jobId !== aiJobRef.current) return
       setIsAiBusy(false)
     }
+  }
+
+  const handleCloseAiBusy = () => {
+    aiJobRef.current += 1 // invalidate in-flight AI responses
+    setIsAiBusy(false)
+    setAiError('')
+    if (modalStep === 1) {
+      setShowModal(false)
+      return
+    }
+    if (modalStep === 2) {
+      setModalStep(1)
+      return
+    }
+    setModalStep(2)
   }
 
   const finalVideoPrompt = useMemo(() => {
@@ -1865,14 +1897,17 @@ function VideoGenerator({
           </div>
           {isAiBusy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-              <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center">
-                <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
-                <div>
-              <div className="font-medium">
-                {modalStep === 3 ? '视频脚本优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
-              </div>
-                  <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
+              <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center justify-between gap-4 min-w-[360px]">
+                <div className="flex items-center">
+                  <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
+                  <div>
+                    <div className="font-medium">
+                      {modalStep === 3 ? '视频脚本优化中' : modalStep === 2 ? '视频脚本创作中' : '商品信息AI解析中'}
+                    </div>
+                    <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
+                  </div>
                 </div>
+                <button onClick={handleCloseAiBusy} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100">关闭</button>
               </div>
             </div>
           )}
