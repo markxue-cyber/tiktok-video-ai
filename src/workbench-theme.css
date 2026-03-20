@@ -255,3 +255,14 @@
   color: rgba(230, 224, 255, 0.96) !important;
 }
 
+/* Announcement popover should be readable (less transparent). */
+.workbench-root .workbench-ann-panel {
+  background: rgba(14, 17, 38, 0.96) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  backdrop-filter: blur(10px);
+}
+.workbench-root .workbench-ann-item {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+

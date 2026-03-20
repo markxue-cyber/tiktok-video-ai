@@ -940,7 +940,7 @@ function App() {
                   {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-pink-500 text-white text-[10px] leading-4 text-center">{Math.min(unreadCount, 9)}</span>}
                 </button>
                 {showAnnouncements && (
-                  <div className="absolute right-0 mt-2 w-96 max-h-96 overflow-auto bg-white border rounded-xl shadow-xl z-30 p-3">
+                  <div className="workbench-ann-panel absolute right-0 mt-2 w-96 max-h-96 overflow-auto bg-white border rounded-xl shadow-xl z-30 p-3">
                     <div className="text-sm font-semibold mb-2">公告中心</div>
                     {annBusy ? (
                       <div className="text-xs text-gray-500 py-2">加载中...</div>
@@ -949,7 +949,7 @@ function App() {
                     ) : (
                       <div className="space-y-2">
                         {announcements.slice(0, 20).map((a) => (
-                          <div key={a.id} className="border rounded-lg p-2.5">
+                          <div key={a.id} className="workbench-ann-item border rounded-lg p-2.5">
                             <div className="text-sm font-medium">{a.title || '公告'}</div>
                             <div className="text-xs text-gray-500 mt-1">{String(a.published_at || a.created_at || '').slice(0, 10)}</div>
                             <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap line-clamp-3">{a.content}</div>
