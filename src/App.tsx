@@ -318,6 +318,7 @@ function App() {
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [annBusy, setAnnBusy] = useState(false)
+  const [readAnnouncementIds, setReadAnnouncementIds] = useState<string[]>([])
 
   const readSession = () => {
     try {
@@ -438,6 +439,13 @@ function App() {
   }, [user?.email])
 
   useEffect(() => {
+    if (!isDevAdmin && mainNav === 'developer') {
+      setMainNav('create')
+      setCreateNav('video')
+    }
+  }, [isDevAdmin, mainNav])
+
+  useEffect(() => {
     if (!accessToken || page !== 'home') return
     if (assetsWarmupDoneForToken === accessToken) return
     assetsWarmupDoneForToken = accessToken
@@ -482,23 +490,32 @@ function App() {
     if (mainNav === 'tools') return toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升'
     if (mainNav === 'assets') return '资产库'
     if (mainNav === 'benefits') return '个人权益'
-    return '开发者后台'
-  }, [mainNav, createNav, toolNav])
+    if (mainNav === 'developer' && isDevAdmin) return '开发者后台'
+    return '视频生成'
+  }, [mainNav, createNav, toolNav, isDevAdmin])
 
   const ANN_READ_KEY = user?.id ? `tikgen.ann.read.${user.id}` : 'tikgen.ann.read.guest'
-  const unreadCount = useMemo(() => {
+
+  useEffect(() => {
     try {
-      const readIds = JSON.parse(localStorage.getItem(ANN_READ_KEY) || '[]')
-      const readSet = new Set(Array.isArray(readIds) ? readIds.map(String) : [])
-      return announcements.filter((a) => !readSet.has(String(a.id))).length
+      const raw = localStorage.getItem(ANN_READ_KEY) || '[]'
+      const ids = JSON.parse(raw)
+      setReadAnnouncementIds(Array.isArray(ids) ? ids.map(String) : [])
     } catch {
-      return announcements.length
+      setReadAnnouncementIds([])
     }
-  }, [announcements, ANN_READ_KEY])
+  }, [ANN_READ_KEY])
+
+  const unreadCount = useMemo(() => {
+    const readSet = new Set(readAnnouncementIds.map(String))
+    return announcements.filter((a) => !readSet.has(String(a.id))).length
+  }, [announcements, readAnnouncementIds])
 
   const markAnnouncementsRead = () => {
+    const ids = announcements.map((a) => String(a.id))
+    setReadAnnouncementIds(ids)
     try {
-      localStorage.setItem(ANN_READ_KEY, JSON.stringify(announcements.map((a) => String(a.id))))
+      localStorage.setItem(ANN_READ_KEY, JSON.stringify(ids))
     } catch {
       // ignore
     }
@@ -894,7 +911,9 @@ function App() {
         <header className="bg-white shadow-sm sticky top-0 z-20">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <button className="p-2 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5" /></button>
+              <div className="p-2 rounded-lg opacity-80 cursor-default select-none" aria-hidden="true">
+                <Menu className="w-5 h-5" />
+              </div>
               <h1 className="text-xl font-bold">
                 {mainNav === 'create' && createNav === 'video' && '视频生成'}
                 {mainNav === 'create' && createNav === 'image' && '图片生成'}
@@ -903,7 +922,7 @@ function App() {
                 {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
-                {mainNav === 'developer' && '开发者后台'}
+                {mainNav === 'developer' && isDevAdmin && '开发者后台'}
               </h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -4435,13 +4454,20 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
     }
   }
 
+  const currentPlanName = useMemo(() => {
+    const planId = String(user?.package || 'trial')
+    const byConfig = (packages || []).find((p) => String(p.plan_id) === planId)?.name
+    if (byConfig) return byConfig
+    return { trial: '试用版', basic: '基础版', pro: '专业版', enterprise: '旗舰版' }[planId as 'trial' | 'basic' | 'pro' | 'enterprise'] || planId
+  }, [packages, user?.package])
+
   return (
     <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-8 text-center">选择您的套餐</h2>
       <div className="mb-6 bg-white rounded-2xl p-4 shadow border flex items-center justify-between">
         <div className="text-sm text-gray-600">
           当前套餐：
-          <span className="font-semibold text-gray-900 ml-1">{user?.package || 'trial'}</span>
+          <span className="font-semibold text-gray-900 ml-1">{currentPlanName}</span>
           {user?.packageExpiresAt ? <span className="ml-3">到期：{user.packageExpiresAt}</span> : null}
         </div>
         <div className="flex items-center gap-2">
