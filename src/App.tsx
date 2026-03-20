@@ -868,10 +868,10 @@ function App() {
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button onClick={() => setShowFeedback(true)} className="p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="工单/客服">
+              <button onClick={() => setShowFeedback(true)} className="workbench-topicon-btn p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700" title="工单/客服">
                 <MessageSquare className="w-5 h-5" />
               </button>
-              <button onClick={() => setShowHelp(true)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
+              <button onClick={() => setShowHelp(true)} className="workbench-topicon-btn p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
                 <Library className="w-5 h-5" />
               </button>
               <div className="flex items-center space-x-2 bg-gradient-to-r from-pink-50 to-purple-50 px-4 py-2 rounded-full"><Zap className="w-5 h-5 text-pink-500" /><span className="font-bold text-pink-600">{user?.credits}</span><span className="text-sm text-pink-500">积分</span></div>
@@ -885,7 +885,7 @@ function App() {
                   onClick={() => setShowUserMenu((v) => !v)}
                   className="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-100"
                 >
-                  <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
+                  <div className="workbench-user-avatar w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
                     <User className="w-4 h-4 text-white" />
                   </div>
                   <span className="text-sm font-medium">{user?.name}</span>
@@ -1897,7 +1897,14 @@ function VideoGenerator({
           </div>
           {isAiBusy && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-              <div className="bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center justify-between gap-4 min-w-[360px]">
+              <div className="relative bg-white shadow-lg border rounded-2xl px-6 py-5 flex items-center min-w-[360px]">
+                <button
+                  onClick={handleCloseAiBusy}
+                  className="absolute right-3 top-3 p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/10"
+                  aria-label="关闭"
+                >
+                  <X className="w-4 h-4" />
+                </button>
                 <div className="flex items-center">
                   <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mr-3" />
                   <div>
@@ -1907,7 +1914,6 @@ function VideoGenerator({
                     <div className="text-sm text-gray-500">请稍等，预计几秒钟...</div>
                   </div>
                 </div>
-                <button onClick={handleCloseAiBusy} className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100">关闭</button>
               </div>
             </div>
           )}

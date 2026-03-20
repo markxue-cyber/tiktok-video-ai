@@ -229,3 +229,23 @@
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35) !important;
 }
 
+/* Header utility icons: deeper, coordinated tone. */
+.workbench-root .workbench-topicon-btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(167, 139, 250, 0.22) !important;
+  color: rgba(190, 175, 255, 0.9) !important;
+}
+.workbench-root .workbench-topicon-btn:hover {
+  background: rgba(124, 58, 237, 0.18) !important;
+  border-color: rgba(167, 139, 250, 0.38) !important;
+  color: rgba(218, 206, 255, 0.96) !important;
+}
+
+.workbench-root .workbench-user-avatar {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.75), rgba(59, 130, 246, 0.7)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.workbench-root .workbench-user-avatar svg {
+  color: rgba(230, 224, 255, 0.96) !important;
+}
+
