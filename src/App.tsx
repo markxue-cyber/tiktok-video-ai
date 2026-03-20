@@ -3101,12 +3101,12 @@ function ImageGenerator({
                 ))}
               </div>
             ) : (
-              <div className="py-5 text-center">
-                <Upload className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                <div className="text-2xl font-semibold mb-1.5">点击或拖拽上传图片</div>
-                <div className="text-xs text-gray-500 mb-4">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
-                <div className="flex items-center justify-center gap-3">
-                  <label className="px-4 py-2 rounded-xl border text-sm cursor-pointer hover:bg-gray-50">
+              <div className="py-3 text-center min-h-[180px] flex flex-col items-center justify-center">
+                <Upload className="w-7 h-7 mx-auto text-gray-300 mb-2" />
+                <div className="text-lg font-semibold mb-1">点击或拖拽上传图片</div>
+                <div className="text-[11px] text-gray-500 mb-3">支持 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
+                <div className="flex items-center justify-center gap-2">
+                  <label className="px-3.5 py-1.5 rounded-lg border text-sm cursor-pointer hover:bg-gray-50">
                     选择文件
                     <input
                       type="file"
@@ -3124,7 +3124,7 @@ function ImageGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-4 py-2 rounded-xl border text-sm hover:bg-gray-50"
+                    className="px-3.5 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
                   >
                     从资产库选择
                   </button>
