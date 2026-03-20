@@ -392,6 +392,7 @@ function App() {
   const [annBusy, setAnnBusy] = useState(false)
   const [readAnnouncementIds, setReadAnnouncementIds] = useState<string[]>([])
   const announcementsRef = useRef<HTMLDivElement | null>(null)
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
 
   const readSession = () => {
     try {
@@ -642,6 +643,22 @@ function App() {
       document.removeEventListener('touchstart', onPointerDown)
     }
   }, [showAnnouncements])
+
+  useEffect(() => {
+    if (!showUserMenu) return
+    const onPointerDown = (ev: MouseEvent | TouchEvent) => {
+      const target = ev.target as Node | null
+      if (!target) return
+      if (userMenuRef.current?.contains(target)) return
+      setShowUserMenu(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [showUserMenu])
 
   if (page === 'landing')
     return (
@@ -1121,18 +1138,18 @@ function App() {
                 <span className="text-sm leading-none font-medium text-amber-700/90">{currentPackage?.name}</span>
                 <span className="text-sm leading-none text-amber-600/75">至 {user?.packageExpiresAt}</span>
               </div>
-              <div className="relative">
+              <div ref={userMenuRef} className="relative">
                 <button
                   onClick={() => setShowUserMenu((v) => !v)}
-                  className="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-100"
+                  className="workbench-user-btn flex items-center space-x-2 px-2 py-1 rounded-lg"
                 >
                   <div className="workbench-user-avatar w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
                     <User className="w-4 h-4 text-white" />
                   </div>
-                  <span className="text-sm font-medium">{user?.name}</span>
+                  <span className="text-sm font-medium workbench-user-name">{user?.name}</span>
                 </button>
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-36 bg-white border rounded-lg shadow-lg z-30 p-1">
+                  <div className="workbench-user-menu-pop absolute right-0 mt-2 w-36 bg-white border rounded-lg shadow-lg z-30 p-1">
                     <button
                       onClick={() => {
                         setShowUserMenu(false)
