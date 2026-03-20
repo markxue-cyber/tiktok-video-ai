@@ -3806,18 +3806,7 @@ function AdminPackagesPanel() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
-  const [newPlan, setNewPlan] = useState({
-    plan_id: '',
-    name: '',
-    price_cents: 0,
-    daily_quota: 0,
-    featuresText: '',
-    display_order: 100,
-    apply_mode: 'new_only',
-    grace_days: 0,
-    effective_from: '',
-    enabled: true,
-  })
+  const FIXED_PLAN_IDS = ['trial', 'basic', 'pro', 'enterprise']
 
   const load = async () => {
     setBusy(true)
@@ -3835,10 +3824,17 @@ function AdminPackagesPanel() {
     void load()
   }, [])
 
-  const updateOne = async (idx: number, patch: any) => {
-    const next = [...configs]
-    next[idx] = { ...next[idx], ...patch }
-    setConfigs(next)
+  const updateOne = async (planId: string, patch: any) => {
+    setConfigs((prev) => {
+      const idx = prev.findIndex((x) => String(x?.plan_id || '') === String(planId))
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = { ...next[idx], ...patch }
+        return next
+      }
+      const base = DEFAULT_PACKAGES.find((p) => p.plan_id === planId) || {}
+      return [...prev, { ...base, plan_id: planId, ...patch }]
+    })
   }
 
   const saveOne = async (row: any) => {
@@ -3869,67 +3865,20 @@ function AdminPackagesPanel() {
     }
   }
 
-  const removeOne = async (planId: string) => {
-    if (!confirm(`确定删除套餐 ${planId} 吗？（有激活用户会被拒绝）`)) return
-    setNotice('')
-    try {
-      await adminDeletePackageConfig(planId)
-      setNotice(`套餐 ${planId} 已删除`)
-      await load()
-    } catch (e: any) {
-      setErr(e?.message || '删除套餐失败')
+  const rows = FIXED_PLAN_IDS.map((pid) => {
+    const base = DEFAULT_PACKAGES.find((p) => p.plan_id === pid) || ({} as any)
+    const r = configs.find((x) => String(x?.plan_id || '') === String(pid)) || {}
+    const merged = { ...base, ...r, plan_id: pid }
+    const feats = Array.isArray(merged.features) ? merged.features : []
+    return {
+      ...merged,
+      featuresText: feats.join('\n'),
+      apply_mode: merged.apply_mode || 'new_only',
+      grace_days: Number(merged.grace_days ?? 0),
+      display_order: Number(merged.display_order ?? 100),
+      effective_from: merged.effective_from || '',
     }
-  }
-
-  const createOne = async () => {
-    const pid = String(newPlan.plan_id || '').trim()
-    if (!pid) return setErr('新套餐需要 plan_id')
-    setNotice('')
-    try {
-      await adminUpsertPackageConfig({
-        planId: pid,
-        name: newPlan.name || pid,
-        priceCents: Number(newPlan.price_cents || 0),
-        currency: 'CNY',
-        dailyQuota: Number(newPlan.daily_quota || 0),
-        features: String(newPlan.featuresText || '')
-          .split('\n')
-          .map((x) => x.trim())
-          .filter(Boolean),
-        modelWhitelist: [],
-        enabled: newPlan.enabled,
-        displayOrder: Number(newPlan.display_order || 100),
-        applyMode: newPlan.apply_mode,
-        graceDays: Number(newPlan.grace_days || 0),
-        effectiveFrom: newPlan.effective_from || null,
-      })
-      setNotice(`套餐 ${pid} 已创建`)
-      setNewPlan({
-        plan_id: '',
-        name: '',
-        price_cents: 0,
-        daily_quota: 0,
-        featuresText: '',
-        display_order: 100,
-        apply_mode: 'new_only',
-        grace_days: 0,
-        effective_from: '',
-        enabled: true,
-      })
-      await load()
-    } catch (e: any) {
-      setErr(e?.message || '创建套餐失败')
-    }
-  }
-
-  const rows = configs.map((r) => ({
-    ...r,
-    featuresText: Array.isArray(r.features) ? r.features.join('\n') : '',
-    apply_mode: r.apply_mode || 'new_only',
-    grace_days: Number(r.grace_days || 0),
-    display_order: Number(r.display_order || 100),
-    effective_from: r.effective_from || '',
-  }))
+  })
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-lg border space-y-4">
@@ -3942,52 +3891,36 @@ function AdminPackagesPanel() {
       </div>
       {!!err && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{err}</div>}
       {!!notice && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-2">{notice}</div>}
-      <div className="border rounded-xl p-4 bg-indigo-50/40 space-y-3">
-        <div className="font-semibold text-sm">新增套餐</div>
-        <div className="grid md:grid-cols-4 gap-2">
-          <input value={newPlan.plan_id} onChange={(e) => setNewPlan((x) => ({ ...x, plan_id: e.target.value.trim() }))} className="px-3 py-2 border rounded-lg" placeholder="plan_id (如 growth_plus)" />
-          <input value={newPlan.name} onChange={(e) => setNewPlan((x) => ({ ...x, name: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="套餐名称" />
-          <input value={newPlan.price_cents} onChange={(e) => setNewPlan((x) => ({ ...x, price_cents: Number(e.target.value || 0) }))} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
-          <input value={newPlan.daily_quota} onChange={(e) => setNewPlan((x) => ({ ...x, daily_quota: Number(e.target.value || 0) }))} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
-        </div>
-        <textarea value={newPlan.featuresText} onChange={(e) => setNewPlan((x) => ({ ...x, featuresText: e.target.value }))} rows={2} className="w-full px-3 py-2 border rounded-lg" placeholder="特性，每行一个" />
-        <div className="grid md:grid-cols-4 gap-2">
-          <input value={newPlan.display_order} onChange={(e) => setNewPlan((x) => ({ ...x, display_order: Number(e.target.value || 100) }))} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
-          <select value={newPlan.apply_mode} onChange={(e) => setNewPlan((x) => ({ ...x, apply_mode: e.target.value as any }))} className="px-3 py-2 border rounded-lg">
-            <option value="new_only">仅新用户生效</option>
-            <option value="all_users">新老用户都生效</option>
-          </select>
-          <input value={newPlan.grace_days} onChange={(e) => setNewPlan((x) => ({ ...x, grace_days: Number(e.target.value || 0) }))} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
-          <input value={newPlan.effective_from} onChange={(e) => setNewPlan((x) => ({ ...x, effective_from: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
-        </div>
-        <button onClick={() => void createOne()} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">新增套餐</button>
-      </div>
       <div className="grid md:grid-cols-2 gap-4">
         {rows.map((r, idx) => (
-          <div key={r.plan_id} className="border rounded-xl p-4 space-y-3">
-            <div className="font-semibold">{r.plan_id}</div>
-            <input value={r.name || ''} onChange={(e) => void updateOne(idx, { name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="套餐名称" />
+          <div key={r.plan_id} className="border rounded-xl p-5 space-y-3 bg-white">
+            <div className="font-semibold flex items-center justify-between gap-3">
+              <span>{r.plan_id}</span>
+              <span className={`text-xs px-2 py-1 rounded-full ${r.enabled === false ? 'bg-gray-100 text-gray-600' : 'bg-emerald-100 text-emerald-700'}`}>
+                {r.enabled === false ? '已禁用' : '可用'}
+              </span>
+            </div>
+            <input value={r.name || ''} onChange={(e) => void updateOne(r.plan_id, { name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="套餐名称" />
             <div className="grid grid-cols-2 gap-2">
-              <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(idx, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
-              <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(idx, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
+              <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(r.plan_id, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
+              <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(r.plan_id, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <input value={r.display_order ?? 100} onChange={(e) => void updateOne(idx, { display_order: Number(e.target.value || 100) })} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
-              <input value={r.grace_days ?? 0} onChange={(e) => void updateOne(idx, { grace_days: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
+              <input value={r.display_order ?? 100} onChange={(e) => void updateOne(r.plan_id, { display_order: Number(e.target.value || 100) })} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
+              <input value={r.grace_days ?? 0} onChange={(e) => void updateOne(r.plan_id, { grace_days: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
             </div>
-            <select value={r.apply_mode || 'new_only'} onChange={(e) => void updateOne(idx, { apply_mode: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
+            <select value={r.apply_mode || 'new_only'} onChange={(e) => void updateOne(r.plan_id, { apply_mode: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
               <option value="new_only">仅新用户生效（默认）</option>
               <option value="all_users">新老用户都生效</option>
             </select>
-            <input value={r.effective_from || ''} onChange={(e) => void updateOne(idx, { effective_from: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
-            <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(idx, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
+            <input value={r.effective_from || ''} onChange={(e) => void updateOne(r.plan_id, { effective_from: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
+            <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(r.plan_id, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void updateOne(idx, { enabled: e.target.checked })} />
+              <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void updateOne(r.plan_id, { enabled: e.target.checked })} />
               启用
             </label>
             <div className="flex items-center gap-2">
               <button onClick={() => void saveOne(r)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存</button>
-              <button onClick={() => void removeOne(r.plan_id)} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 text-sm">删除</button>
             </div>
           </div>
         ))}
