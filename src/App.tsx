@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -974,27 +974,23 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex workbench-root">
-      <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all`}>
+      <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all relative`}>
         <div className="p-4 border-b">
           <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'justify-between'}`}>
             <div className={`flex items-center ${navCollapsed ? '' : 'space-x-3'}`}>
               <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div>
               {!navCollapsed && <span className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">TikGen AI</span>}
             </div>
-            {!navCollapsed && (
-              <button onClick={() => setNavCollapsed(true)} className="p-1.5 rounded-lg hover:bg-gray-100" title="收起导航">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
           </div>
-          {navCollapsed && (
-            <div className="mt-2 flex justify-center">
-              <button onClick={() => setNavCollapsed(false)} className="p-1.5 rounded-md hover:bg-gray-100" title="展开导航">
-                <ChevronRight className="w-4 h-4 rotate-180" />
-              </button>
-            </div>
-          )}
         </div>
+        <button
+          onClick={() => setNavCollapsed((v) => !v)}
+          className={`absolute top-5 ${navCollapsed ? 'right-2' : 'right-3'} w-7 h-7 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/80`}
+          title={navCollapsed ? '展开导航' : '收起导航'}
+          aria-label={navCollapsed ? '展开导航' : '收起导航'}
+        >
+          {navCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
+        </button>
         <nav className={`p-3 space-y-2 ${navCollapsed ? 'items-center' : ''}`}>
           <NavPrimary collapsed={navCollapsed} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} onClick={() => setMainNav('create')} />
           {!navCollapsed && mainNav === 'create' && (
