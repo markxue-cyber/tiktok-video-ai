@@ -62,3 +62,33 @@
   background: rgba(0,0,0,.35) !important;
 }
 
+/* Form controls: force dark glass inputs to match curtain theme. */
+.workbench-root input,
+.workbench-root textarea,
+.workbench-root select {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.workbench-root input::placeholder,
+.workbench-root textarea::placeholder {
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
+.workbench-root input:focus,
+.workbench-root textarea:focus,
+.workbench-root select:focus {
+  outline: none !important;
+  border-color: rgba(124, 58, 237, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18) !important;
+}
+
+/* Side nav: selected button text should look more "tech / premium". */
+.workbench-root aside button.text-white {
+  color: transparent !important;
+  background-image: linear-gradient(90deg, rgba(34, 211, 238, 0.98), rgba(167, 139, 250, 0.98), rgba(236, 72, 153, 0.95));
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
