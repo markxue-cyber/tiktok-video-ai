@@ -94,6 +94,7 @@ const VIDEO_MODEL_CAPS: Record<string, VideoModelCaps> = {
 }
 // 图片模型列表：先覆盖聚合端常见可用项（可按账号权限增减）
 const IMAGE_MODELS = [
+  { id: 'nano-banana-2', name: 'Nano Banana 2' },
   { id: 'seedream', name: 'Seedream 4.5' },
   { id: 'seedream-4.5', name: 'Seedream 4.5 (Alt)' },
   { id: 'flux', name: 'FLUX' },
@@ -127,6 +128,7 @@ type ImageModelCaps = {
 }
 
 const IMAGE_MODEL_CAPS: Record<string, ImageModelCaps> = {
+  'nano-banana-2': { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['2048', '4096'], defaults: { aspectRatio: '1:1', resolution: '2048' } },
   seedream: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['2048', '4096'], defaults: { aspectRatio: '1:1', resolution: '2048' } },
   'seedream-4.5': { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['2048', '4096'], defaults: { aspectRatio: '1:1', resolution: '2048' } },
   flux: { aspectRatios: [...IMAGE_ASPECT_OPTIONS], resolutions: ['1024', '1536', '2048'], defaults: { aspectRatio: '1:1', resolution: '1024' } },
@@ -2205,7 +2207,7 @@ function ImageGenerator({
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
   const [prompt, setPrompt] = useState('')
-  const [model, setModel] = useState('seedream')
+  const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
   const [isGenerating, setIsGenerating] = useState(false)
