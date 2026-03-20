@@ -3806,6 +3806,7 @@ function AdminPackagesPanel() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
+  const [savingPlanId, setSavingPlanId] = useState<string>('')
   const FIXED_PLAN_IDS = ['trial', 'basic', 'pro', 'enterprise']
 
   const load = async () => {
@@ -3839,6 +3840,8 @@ function AdminPackagesPanel() {
 
   const saveOne = async (row: any) => {
     setNotice('')
+    setErr('')
+    setSavingPlanId(String(row.plan_id || ''))
     try {
       const features = String(row.featuresText || '')
         .split('\n')
@@ -3862,6 +3865,8 @@ function AdminPackagesPanel() {
       await load()
     } catch (e: any) {
       setErr(e?.message || '保存套餐失败')
+    } finally {
+      setSavingPlanId('')
     }
   }
 
@@ -3870,9 +3875,12 @@ function AdminPackagesPanel() {
     const r = configs.find((x) => String(x?.plan_id || '') === String(pid)) || {}
     const merged = { ...base, ...r, plan_id: pid }
     const feats = Array.isArray(merged.features) ? merged.features : []
+    // textarea 的输入值会写到 merged.featuresText（非 features 数组），这里要优先取用户编辑内容。
+    const featuresText =
+      typeof merged.featuresText === 'string' ? merged.featuresText : Array.isArray(merged.features) ? merged.features.join('\n') : ''
     return {
       ...merged,
-      featuresText: feats.join('\n'),
+      featuresText,
       apply_mode: merged.apply_mode || 'new_only',
       grace_days: Number(merged.grace_days ?? 0),
       display_order: Number(merged.display_order ?? 100),
@@ -3900,27 +3908,57 @@ function AdminPackagesPanel() {
                 {r.enabled === false ? '已禁用' : '可用'}
               </span>
             </div>
-            <input value={r.name || ''} onChange={(e) => void updateOne(r.plan_id, { name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="套餐名称" />
-            <div className="grid grid-cols-2 gap-2">
-              <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(r.plan_id, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
-              <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(r.plan_id, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
+            <div>
+              <div className="text-xs text-gray-500 mb-1">套餐名称（展示给用户）</div>
+              <input value={r.name || ''} onChange={(e) => void updateOne(r.plan_id, { name: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="套餐名称" />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <input value={r.display_order ?? 100} onChange={(e) => void updateOne(r.plan_id, { display_order: Number(e.target.value || 100) })} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
-              <input value={r.grace_days ?? 0} onChange={(e) => void updateOne(r.plan_id, { grace_days: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
+              <div>
+                <div className="text-xs text-gray-500 mb-1">价格（分）</div>
+                <input value={r.price_cents ?? 0} onChange={(e) => void updateOne(r.plan_id, { price_cents: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="价格(分)" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">日额度</div>
+                <input value={r.daily_quota ?? 0} onChange={(e) => void updateOne(r.plan_id, { daily_quota: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="日额度" />
+              </div>
             </div>
-            <select value={r.apply_mode || 'new_only'} onChange={(e) => void updateOne(r.plan_id, { apply_mode: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
-              <option value="new_only">仅新用户生效（默认）</option>
-              <option value="all_users">新老用户都生效</option>
-            </select>
-            <input value={r.effective_from || ''} onChange={(e) => void updateOne(r.plan_id, { effective_from: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
-            <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(r.plan_id, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">排序权重（越小越靠前）</div>
+                <input value={r.display_order ?? 100} onChange={(e) => void updateOne(r.plan_id, { display_order: Number(e.target.value || 100) })} className="px-3 py-2 border rounded-lg" placeholder="排序权重" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">老用户宽限天数</div>
+                <input value={r.grace_days ?? 0} onChange={(e) => void updateOne(r.plan_id, { grace_days: Number(e.target.value || 0) })} className="px-3 py-2 border rounded-lg" placeholder="老用户宽限天数" />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">生效范围</div>
+              <select value={r.apply_mode || 'new_only'} onChange={(e) => void updateOne(r.plan_id, { apply_mode: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
+                <option value="new_only">仅新用户生效（默认）</option>
+                <option value="all_users">新老用户都生效</option>
+              </select>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">生效时间（ISO，可空；空=立刻）</div>
+              <input value={r.effective_from || ''} onChange={(e) => void updateOne(r.plan_id, { effective_from: e.target.value })} className="w-full px-3 py-2 border rounded-lg" placeholder="生效时间(ISO，可空)" />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">特性文案（每行一个，展示给用户）</div>
+              <textarea value={r.featuresText || ''} onChange={(e) => void updateOne(r.plan_id, { featuresText: e.target.value })} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="每行一个特性" />
+            </div>
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void updateOne(r.plan_id, { enabled: e.target.checked })} />
               启用
             </label>
             <div className="flex items-center gap-2">
-              <button onClick={() => void saveOne(r)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">保存</button>
+              <button
+                disabled={savingPlanId === r.plan_id}
+                onClick={() => void saveOne(r)}
+                className={`px-3 py-2 rounded-lg text-white text-sm ${savingPlanId === r.plan_id ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600'}`}
+              >
+                {savingPlanId === r.plan_id ? '保存中...' : '保存'}
+              </button>
             </div>
           </div>
         ))}
