@@ -3576,8 +3576,18 @@ function ImageGenerator({
           </div>
           <div className="px-5 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <button onClick={() => setAssetTab('user_upload')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'user_upload' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>本地上传</button>
-              <button onClick={() => setAssetTab('ai_generated')} className={`px-3 py-1.5 rounded-lg text-sm ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>AI 生成</button>
+              <button
+                onClick={() => setAssetTab('user_upload')}
+                className={`px-3 py-1.5 rounded-lg text-sm border ${assetTab === 'user_upload' ? 'bg-gray-900 text-white border-purple-400/70 shadow-[0_0_0_1px_rgba(167,139,250,0.45)]' : 'bg-gray-100 text-gray-700 border-white/15'}`}
+              >
+                本地上传
+              </button>
+              <button
+                onClick={() => setAssetTab('ai_generated')}
+                className={`px-3 py-1.5 rounded-lg text-sm border ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white border-purple-400/70 shadow-[0_0_0_1px_rgba(167,139,250,0.45)]' : 'bg-gray-100 text-gray-700 border-white/15'}`}
+              >
+                AI 生成
+              </button>
             </div>
             <div className="text-sm text-gray-500">已选 {assetSelectedIds.size}/{Math.max(0, MAX_REF_IMAGES - refImages.length)}</div>
           </div>
