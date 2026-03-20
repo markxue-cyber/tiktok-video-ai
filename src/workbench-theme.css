@@ -13,21 +13,49 @@
   color: rgba(255,255,255,.92);
 }
 
-/* Make gray/slate text visible on the dark glass theme. */
+/* Make gray/slate text more "premium dark" (avoid pure white). */
 .workbench-root [class*="text-gray-"],
 .workbench-root [class*="text-slate-"],
 .workbench-root [class*="text-black-"] {
-  color: rgba(255,255,255,.90) !important;
+  color: rgba(255,255,255,.75) !important;
 }
 
 /* Tailwind often uses text-white/*; tone them down to avoid pure-white突兀感. */
 .workbench-root [class*="text-white"]:not(aside button.text-white) {
-  color: rgba(255,255,255,.78) !important;
+  color: rgba(255,255,255,.72) !important;
+}
+
+/* More specific opacity variants used by Tailwind. */
+.workbench-root [class*="text-white/60"]:not(aside button.text-white) {
+  color: rgba(255,255,255,.56) !important;
+}
+.workbench-root [class*="text-white/70"]:not(aside button.text-white) {
+  color: rgba(255,255,255,.62) !important;
+}
+.workbench-root [class*="text-white/80"]:not(aside button.text-white) {
+  color: rgba(255,255,255,.68) !important;
 }
 
 /* Reduce border-white/* brightness. */
 .workbench-root [class*="border-white"] {
   border-color: rgba(255,255,255,.18) !important;
+}
+
+/* Reduce white panel backgrounds so they don't look like "paper". */
+.workbench-root .bg-white,
+.workbench-root .bg-gray-50,
+.workbench-root .bg-gray-100 {
+  background-color: rgba(255,255,255,.025) !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+/* Reduce backgrounds for classes like bg-white/xx. */
+.workbench-root [class*="bg-white/"] {
+  background-color: rgba(255,255,255,.05) !important;
+}
+
+.workbench-root [class*="bg-gray-100/"] {
+  background-color: rgba(255,255,255,.04) !important;
 }
 
 /* Convert common light panels into glass panels. */
