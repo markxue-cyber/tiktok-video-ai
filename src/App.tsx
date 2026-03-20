@@ -3255,7 +3255,7 @@ function ImageGenerator({
             />
             {refImages.length ? (
               <div className="space-y-2">
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
                   {refImages.map((img, i) => (
                     <div key={img.id} className="relative rounded-lg overflow-hidden border bg-gray-50">
                       <button
@@ -3291,18 +3291,19 @@ function ImageGenerator({
                       </button>
                     </div>
                   ))}
-                </div>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      refUploadInputRef.current?.click()
-                    }}
-                    className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
-                  >
-                    继续上传
-                  </button>
+                  {refImages.length < MAX_REF_IMAGES ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        refUploadInputRef.current?.click()
+                      }}
+                      className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span className="text-[11px]">上传</span>
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -3310,9 +3311,10 @@ function ImageGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+                    className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
                   >
-                    从资产库选择
+                    <Folder className="w-4 h-4" />
+                    <span className="text-[11px]">从资产库选择</span>
                   </button>
                 </div>
               </div>
