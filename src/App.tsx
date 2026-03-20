@@ -317,6 +317,7 @@ function App() {
   const [showFeedback, setShowFeedback] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [navCollapsed, setNavCollapsed] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [annBusy, setAnnBusy] = useState(false)
@@ -539,6 +540,23 @@ function App() {
       }
     })()
   }, [accessToken, user?.package])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tikgen.nav.collapsed.v1')
+      setNavCollapsed(raw === '1')
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tikgen.nav.collapsed.v1', navCollapsed ? '1' : '0')
+    } catch {
+      // ignore
+    }
+  }, [navCollapsed])
 
   useEffect(() => {
     if (!showAnnouncements) return
@@ -891,29 +909,47 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex workbench-root">
-      <aside className="w-64 bg-white shadow-xl fixed h-full z-30">
-        <div className="p-4 border-b"><div className="flex items-center space-x-3"><div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div><span className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">TikGen AI</span></div></div>
-        <nav className="p-4 space-y-2">
-          <NavPrimary icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} onClick={() => setMainNav('create')} />
-          {mainNav === 'create' && (
+      <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all`}>
+        <div className="p-4 border-b">
+          <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'justify-between'}`}>
+            <div className={`flex items-center ${navCollapsed ? '' : 'space-x-3'}`}>
+              <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div>
+              {!navCollapsed && <span className="text-xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">TikGen AI</span>}
+            </div>
+            {!navCollapsed && (
+              <button onClick={() => setNavCollapsed(true)} className="p-1.5 rounded-lg hover:bg-gray-100" title="收起导航">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+            {navCollapsed && (
+              <button onClick={() => setNavCollapsed(false)} className="absolute top-4 right-2 p-1 rounded-md hover:bg-gray-100" title="展开导航">
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
+            )}
+          </div>
+        </div>
+        <nav className={`p-3 space-y-2 ${navCollapsed ? 'items-center' : ''}`}>
+          <NavPrimary collapsed={navCollapsed} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} onClick={() => setMainNav('create')} />
+          {!navCollapsed && mainNav === 'create' && (
             <div className="pl-3 space-y-1">
-              <NavSecondary icon={<Video className="w-4 h-4" />} label="视频生成" active={createNav === 'video'} onClick={() => setCreateNav('video')} />
-              <NavSecondary icon={<Image className="w-4 h-4" />} label="图片生成" active={createNav === 'image'} onClick={() => setCreateNav('image')} />
+              <NavSecondary collapsed={false} icon={<Video className="w-4 h-4" />} label="视频生成" active={createNav === 'video'} onClick={() => setCreateNav('video')} />
+              <NavSecondary collapsed={false} icon={<Image className="w-4 h-4" />} label="图片生成" active={createNav === 'image'} onClick={() => setCreateNav('image')} />
             </div>
           )}
 
-          <NavPrimary icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
-          <NavPrimary icon={<Library className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
-          <NavPrimary icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} onClick={() => setMainNav('tools')} />
-          {mainNav === 'tools' && (
+          <NavPrimary collapsed={navCollapsed} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+          <NavPrimary collapsed={navCollapsed} icon={<Library className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
+          <NavPrimary collapsed={navCollapsed} icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} onClick={() => setMainNav('tools')} />
+          {!navCollapsed && mainNav === 'tools' && (
             <div className="pl-3 space-y-1">
-              <NavSecondary icon={<Scissors className="w-4 h-4" />} label="去字幕" active={toolNav === 'subtitle'} onClick={() => setToolNav('subtitle')} />
-              <NavSecondary icon={<Eraser className="w-4 h-4" />} label="去水印" active={toolNav === 'watermark'} onClick={() => setToolNav('watermark')} />
-              <NavSecondary icon={<WandSparkles className="w-4 h-4" />} label="画质提升" active={toolNav === 'upscale'} onClick={() => setToolNav('upscale')} />
+              <NavSecondary collapsed={false} icon={<Scissors className="w-4 h-4" />} label="去字幕" active={toolNav === 'subtitle'} onClick={() => setToolNav('subtitle')} />
+              <NavSecondary collapsed={false} icon={<Eraser className="w-4 h-4" />} label="去水印" active={toolNav === 'watermark'} onClick={() => setToolNav('watermark')} />
+              <NavSecondary collapsed={false} icon={<WandSparkles className="w-4 h-4" />} label="画质提升" active={toolNav === 'upscale'} onClick={() => setToolNav('upscale')} />
             </div>
           )}
 
           <NavPrimary
+            collapsed={navCollapsed}
             icon={<Folder className="w-5 h-5" />}
             label="资产库"
             active={mainNav === 'assets'}
@@ -922,11 +958,11 @@ function App() {
             }}
             onClick={() => setMainNav('assets')}
           />
-          <NavPrimary icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
-          {isDevAdmin && <NavPrimary icon={<ShieldCheck className="w-5 h-5" />} label="开发者后台" active={mainNav === 'developer'} onClick={() => setMainNav('developer')} />}
+          <NavPrimary collapsed={navCollapsed} icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
+          {isDevAdmin && <NavPrimary collapsed={navCollapsed} icon={<ShieldCheck className="w-5 h-5" />} label="开发者后台" active={mainNav === 'developer'} onClick={() => setMainNav('developer')} />}
         </nav>
       </aside>
-      <main className="flex-1 ml-64">
+      <main className={`flex-1 ${navCollapsed ? 'ml-20' : 'ml-64'} transition-all`}>
         <header className="bg-white shadow-sm sticky top-0 z-20">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -1061,31 +1097,33 @@ function App() {
   )
 }
 
-function NavPrimary({ icon, label, active, onClick, onMouseEnter }: any) {
+function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed }: any) {
   return (
     <button
       onMouseEnter={onMouseEnter}
       onClick={onClick}
-      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
+      title={collapsed ? label : undefined}
+      className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'space-x-3 px-4'} py-3 rounded-xl transition-all ${
         active ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white' : 'text-gray-700 hover:bg-gray-100'
       }`}
     >
       {icon}
-      <span className="font-medium">{label}</span>
+      {!collapsed && <span className="font-medium">{label}</span>}
     </button>
   )
 }
 
-function NavSecondary({ icon, label, active, onClick }: any) {
+function NavSecondary({ icon, label, active, onClick, collapsed }: any) {
   return (
     <button
       onClick={onClick}
+      title={collapsed ? label : undefined}
       className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-all text-sm ${
         active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
     >
       {icon}
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
     </button>
   )
 }
