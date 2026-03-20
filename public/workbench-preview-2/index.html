@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TikGen AI 工作台预览 2</title>
+    <link rel="stylesheet" href="/workbench-preview/style.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo" aria-hidden="true"></div>
+          <div class="title">TikGen AI</div>
+        </div>
+
+        <nav class="sideNav">
+          <div class="navItem">
+            <div class="navIcon">创</div>
+            <div class="navText">创作实验室</div>
+          </div>
+          <div class="navItem">
+            <div class="navIcon">历</div>
+            <div class="navText">历史传</div>
+          </div>
+          <div class="navItem active">
+            <div class="navIcon">生</div>
+            <div class="navText">生成</div>
+          </div>
+          <div class="navItem">
+            <div class="navIcon">资</div>
+            <div class="navText">本地资产</div>
+          </div>
+          <div class="navItem">
+            <div class="navIcon">预</div>
+            <div class="navText">预设</div>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="topLeft">
+            <div class="crumb">生成控制台</div>
+            <div class="pill">Glass Panels</div>
+          </div>
+          <div class="search">
+            <span style="opacity:.75;font-weight:900">⌕</span>
+            <input value="搜索" />
+          </div>
+        </header>
+
+        <section class="curtainRow">
+          <div class="curtainBanner">
+            <div class="bannerBadge">队列控制</div>
+            <div class="bannerTitle">异步任务可视化</div>
+            <div class="bannerSub">静态示意：任务状态、错误码、进度条与重试入口的幕布风格布局。</div>
+          </div>
+          <div class="curtainBanner">
+            <div class="bannerBadge">稳定性</div>
+            <div class="bannerTitle">错误码与降级</div>
+            <div class="bannerSub">展示：`MODEL_UNAVAILABLE` / `UPSTREAM_TIMEOUT` / `QUOTA_EXHAUSTED` 等结构化信息。</div>
+          </div>
+        </section>
+
+        <section class="toolGrid">
+          <div class="toolCard">
+            <div class="toolTop">
+              <div class="toolIcon">△</div>
+              <div class="toolArrow">→</div>
+            </div>
+            <div class="toolLabel">模型选择</div>
+          </div>
+          <div class="toolCard">
+            <div class="toolTop">
+              <div class="toolIcon">⟲</div>
+              <div class="toolArrow">→</div>
+            </div>
+            <div class="toolLabel">失败重试</div>
+          </div>
+          <div class="toolCard">
+            <div class="toolTop">
+              <div class="toolIcon">⛶</div>
+              <div class="toolArrow">→</div>
+            </div>
+            <div class="toolLabel">尺寸/时长</div>
+          </div>
+          <div class="toolCard">
+            <div class="toolTop">
+              <div class="toolIcon">QC</div>
+              <div class="toolArrow">→</div>
+            </div>
+            <div class="toolLabel">电商质检</div>
+          </div>
+          <div class="toolCard">
+            <div class="toolTop">
+              <div class="toolIcon">⇅</div>
+              <div class="toolArrow">→</div>
+            </div>
+            <div class="toolLabel">自动换模型</div>
+          </div>
+          <div class="toolCard">
+            <div class="toolTop">
+              <div class="toolIcon">⬇</div>
+              <div class="toolArrow">→</div>
+            </div>
+            <div class="toolLabel">下载归档</div>
+          </div>
+        </section>
+
+        <section class="bottomRow">
+          <div class="panel">
+            <div class="panelTitle">任务面板（视觉）</div>
+            <div class="filters" style="margin-top:4px">
+              <div class="filterBtn active">全部</div>
+              <div class="filterBtn">排队</div>
+              <div class="filterBtn">成功</div>
+              <div class="filterBtn">失败</div>
+            </div>
+            <div style="height:210px;border-radius:16px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);margin-top:12px"></div>
+          </div>
+          <div class="panel">
+            <div class="panelTitle">结果预览（静态）</div>
+            <div class="thumbRow" style="margin-top:10px">
+              <div class="thumb"><div class="thumbBadge">5s</div></div>
+              <div class="thumb"><div class="thumbBadge">8s</div></div>
+              <div class="thumb"><div class="thumbBadge">10s</div></div>
+              <div class="thumb"><div class="thumbBadge">12s</div></div>
+              <div class="thumb"><div class="thumbBadge">15s</div></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
+
