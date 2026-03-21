@@ -1856,6 +1856,39 @@ function WorkbenchComingSoon({ title }: { title: string }) {
 
 type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
 
+/** 单层底边线 + 下划线指示当前项，避免多层圆角框嵌套 */
+function WorkbenchSubTabNav<T extends string>({
+  ariaLabel,
+  items,
+  tab,
+  onTabChange,
+}: {
+  ariaLabel: string
+  items: { id: T; label: string; icon: ReactNode }[]
+  tab: T
+  onTabChange: (id: T) => void
+}) {
+  return (
+    <nav className="workbench-subtab-nav flex flex-wrap gap-x-0.5 border-b border-white/15" aria-label={ariaLabel}>
+      {items.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onTabChange(t.id)}
+          className={`-mb-px inline-flex min-h-[2.5rem] items-center justify-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+            tab === t.id
+              ? 'border-pink-400 text-white'
+              : 'border-transparent text-white/55 hover:border-white/25 hover:text-white/90'
+          }`}
+        >
+          {t.icon}
+          {t.label}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 function ImageToolsWorkbench({
   tab,
   onTabChange,
@@ -1872,25 +1905,7 @@ function ImageToolsWorkbench({
   ]
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
-        <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1">
-          {items.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onTabChange(t.id)}
-              className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-5 ${
-                tab === t.id
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-white/90 hover:text-gray-900'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <WorkbenchSubTabNav ariaLabel="图片工具" items={items} tab={tab} onTabChange={onTabChange} />
       {tab === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
       {tab === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
       {tab === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
@@ -1917,25 +1932,7 @@ function VideoToolsWorkbench({
   ]
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
-        <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1">
-          {items.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onTabChange(t.id)}
-              className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-5 ${
-                tab === t.id
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-white/90 hover:text-gray-900'
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <WorkbenchSubTabNav ariaLabel="视频工具" items={items} tab={tab} onTabChange={onTabChange} />
       {tab === 'upscale' ? <WorkbenchComingSoon title="画质提升" /> : null}
       {tab === 'watermark' ? <WorkbenchComingSoon title="去水印" /> : null}
       {tab === 'subtitle' ? <WorkbenchComingSoon title="去字幕" /> : null}
