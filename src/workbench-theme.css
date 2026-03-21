@@ -357,26 +357,6 @@
     0 12px 40px rgba(3, 6, 18, 0.35);
 }
 
-/* 生成历史：瀑布流（多列，卡片不拦腰折断） */
-.workbench-root .image-history-masonry {
-  column-count: 1;
-  column-gap: 1rem;
-}
-@media (min-width: 640px) {
-  .workbench-root .image-history-masonry {
-    column-count: 2;
-  }
-}
-@media (min-width: 1100px) {
-  .workbench-root .image-history-masonry.image-history-masonry--3 {
-    column-count: 3;
-  }
-}
-.workbench-root .image-history-masonry > .image-history-masonry-item {
-  break-inside: avoid;
-  margin-bottom: 1rem;
-}
-
 /* Image generator: ℹ️ trigger — no “button tile”, icon only */
 .workbench-root .image-form-tip-trigger {
   background: transparent !important;

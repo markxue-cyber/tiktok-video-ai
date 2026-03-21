@@ -6118,11 +6118,11 @@ function ImageGenerator({
             {historyGrouped.map(({ day, tasks }) => (
               <div key={day}>
                 <div className="text-sm font-semibold text-white/90 mb-3">{day}</div>
-                <div className="image-history-masonry image-history-masonry--3">
+                <div className="flex flex-col gap-4">
                   {tasks.map((task) => (
                     <div
                       key={task.id}
-                      className="image-history-masonry-item image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                      className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                     >
                       <div className="mb-2.5 flex items-start justify-between gap-2">
                         <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-white/95 sm:text-xl pr-1">

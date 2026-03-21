@@ -1570,11 +1570,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
           ) : null}
 
           {sortedHistory.length > 0 ? (
-            <div className="image-history-masonry image-history-masonry--3 pb-2">
+            <div className="flex flex-col gap-4 pb-2">
               {sortedHistory.map((task) => (
                 <div
                   key={task.id}
-                  className="image-history-masonry-item image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                  className="image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                 >
                   <div className="mb-3 flex items-start gap-2">
                     {/* 瀑布流多列时卡片很窄，flex-wrap 会把标签竖排；单行横滑保持与去背景预期一致 */}
