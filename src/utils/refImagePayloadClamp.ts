@@ -1,9 +1,24 @@
 /**
  * Vercel Serverless 请求体约 4.5MB 上限；大图 data URL 会触发 FUNCTION_PAYLOAD_TOO_LARGE。
- * 在发往 /api/* 前对参考图做降采样，避免整段 JSON 超限。
+ * 部分区域/网关更严，需预留更大余量。
  */
-/** 留出 JSON 字段与编码余量，避免贴 Vercel ~4.5MB 上限 */
-const DEFAULT_MAX_REF_CHARS = 2_200_000
+/** 去除背景等：相对宽松的默认上限 */
+const DEFAULT_MAX_REF_CHARS = 1_600_000
+
+export type RefImageClampOptions = {
+  maxChars?: number
+  /** 首次缩放的最长边 */
+  maxInitialSide?: number
+  /** 循环缩放停止的最短最长边 */
+  minSide?: number
+}
+
+/** 高清放大 / 压缩 / 翻译（JSON + 其它字段）：更严，避免 hkg1 等区域仍 413 */
+export const REF_IMAGE_CLAMP_NANO_API: RefImageClampOptions = {
+  maxChars: 880_000,
+  maxInitialSide: 1280,
+  minSide: 360,
+}
 
 function isDataUrl(s: string): boolean {
   return typeof s === 'string' && s.startsWith('data:image/') && s.includes('base64,')
@@ -51,38 +66,48 @@ function resizeDataUrlToJpeg(dataUrl: string, maxSide: number, quality: number):
  */
 export async function clampRefImageForVercel(
   refImage: string,
-  maxChars: number = DEFAULT_MAX_REF_CHARS,
+  opts?: RefImageClampOptions,
 ): Promise<string> {
+  const maxChars = opts?.maxChars ?? DEFAULT_MAX_REF_CHARS
   const ref = String(refImage || '').trim()
   if (!ref || !isDataUrl(ref)) return ref
   if (ref.length <= maxChars) return ref
 
   let current = ref
-  let maxSide = 2048
+  let maxSide = opts?.maxInitialSide ?? 2048
   let quality = 0.88
-  const minSide = 640
+  const minSide = opts?.minSide ?? 640
 
   while (current.length > maxChars && maxSide >= minSide) {
     const next = await resizeDataUrlToJpeg(current, maxSide, quality)
     if (next.length >= current.length * 0.98) {
       maxSide = Math.floor(maxSide * 0.72)
-      quality = Math.max(0.55, quality - 0.08)
+      quality = Math.max(0.5, quality - 0.08)
       continue
     }
     current = next
     if (current.length <= maxChars) break
     maxSide = Math.floor(maxSide * 0.85)
-    quality = Math.max(0.55, quality - 0.05)
+    quality = Math.max(0.5, quality - 0.05)
   }
 
   const desperate: Array<{ side: number; q: number }> = [
     { side: 512, q: 0.52 },
     { side: 420, q: 0.45 },
     { side: 360, q: 0.4 },
+    { side: 320, q: 0.36 },
+    { side: 280, q: 0.33 },
+    { side: 240, q: 0.3 },
   ]
   for (const { side, q } of desperate) {
     if (current.length <= maxChars) break
     current = await resizeDataUrlToJpeg(current, side, q)
+  }
+
+  let lastResort = 220
+  while (current.length > maxChars && lastResort >= 160) {
+    current = await resizeDataUrlToJpeg(current, lastResort, 0.28)
+    lastResort -= 30
   }
 
   return current

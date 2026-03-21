@@ -1,5 +1,5 @@
 import { apiRefresh } from './auth'
-import { clampRefImageForVercel } from '../utils/refImagePayloadClamp'
+import { clampRefImageForVercel, REF_IMAGE_CLAMP_NANO_API } from '../utils/refImagePayloadClamp'
 
 async function refreshAccessTokenIfPossible(): Promise<string> {
   try {
@@ -75,7 +75,7 @@ export type ImageToolNanoBody = ImageToolNanoUpscaleBody | ImageToolNanoCompress
 export async function imageToolNanoAPI(
   body: ImageToolNanoBody,
 ): Promise<{ imageUrl: string; size?: string; outputFormat?: string }> {
-  const refImage = await clampRefImageForVercel(body.refImage)
+  const refImage = await clampRefImageForVercel(body.refImage, REF_IMAGE_CLAMP_NANO_API)
   const payload: ImageToolNanoBody = { ...body, refImage }
 
   const callOnce = async (token: string) => {

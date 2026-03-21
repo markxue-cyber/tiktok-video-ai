@@ -222,6 +222,91 @@ function lockedSettingsFromJob(job: AnyJobV1, t: ImageToolMode): LockedPipelineS
   return undefined
 }
 
+/** IndexedDB 已有进行中的 job，但 localStorage 历史尚未写入或不同步时，从 job 复原一条历史，避免误删 job 导致任务「消失」 */
+function buildRecoveryTaskFromJob(job: AnyJobV1, tool: ImageToolMode): ImageToolHistoryTask | null {
+  if (job.v !== 1 || !job.taskId || !Array.isArray(job.refUrls) || !job.refUrls.length) return null
+  const refThumb = job.refUrls[0] || ''
+  const n = job.refUrls.length
+  const outs = Array.isArray(job.outputs) ? [...job.outputs] : []
+  const done = outs.length >= n && n > 0
+  const progress = done ? 100 : Math.max(1, Math.min(99, Math.round((outs.length / Math.max(n, 1)) * 100)))
+
+  if (tool === 'removeBg') {
+    const j = job as RemoveBgJobV1
+    if ('tool' in j && j.tool != null && j.tool !== 'removeBg') return null
+    const res = j.resolution === '2048' ? '2048' : '1024'
+    const fmt = j.outputFormat === 'webp' ? 'webp' : 'png'
+    return {
+      id: j.taskId,
+      ts: Date.now(),
+      refThumb,
+      prompt: `共 ${n} 张`,
+      modelLabel: 'Nano Banana 2',
+      resolutionLabel: `${res}px`,
+      formatLabel: fmt.toUpperCase(),
+      requestedCount: n,
+      status: done ? 'completed' : 'active',
+      progress,
+      outputUrls: outs,
+    }
+  }
+  if (tool === 'upscale' && 'tool' in job && job.tool === 'upscale') {
+    const j = job as UpscaleJobV1
+    const fmt = j.outputFormat === 'jpeg' ? 'JPEG' : 'PNG'
+    return {
+      id: j.taskId,
+      ts: Date.now(),
+      refThumb,
+      prompt: `共 ${n} 张`,
+      modelLabel: 'Nano Banana 2',
+      resolutionLabel: `${j.scale === '4' ? '4' : '2'}x`,
+      formatLabel: fmt,
+      requestedCount: n,
+      status: done ? 'completed' : 'active',
+      progress,
+      outputUrls: outs,
+    }
+  }
+  if (tool === 'compress' && 'tool' in job && job.tool === 'compress') {
+    const j = job as CompressJobV1
+    const fmt = j.outputFormat === 'jpeg' ? 'JPEG' : 'PNG'
+    const pct = Math.max(1, Math.min(100, Math.round(Number(j.compressPercent) || 80)))
+    return {
+      id: j.taskId,
+      ts: Date.now(),
+      refThumb,
+      prompt: `共 ${n} 张`,
+      modelLabel: 'Nano Banana 2',
+      resolutionLabel: `${pct}%`,
+      formatLabel: fmt,
+      requestedCount: n,
+      status: done ? 'completed' : 'active',
+      progress,
+      outputUrls: outs,
+    }
+  }
+  if (tool === 'translate' && 'tool' in job && job.tool === 'translate') {
+    const j = job as TranslateJobV1
+    const fmt = j.outputFormat === 'jpeg' ? 'JPEG' : 'PNG'
+    const code = targetLangByCode(j.targetLang) ? j.targetLang : DEFAULT_TARGET_LANG
+    const label = targetLangByCode(code)?.labelZh || code
+    return {
+      id: j.taskId,
+      ts: Date.now(),
+      refThumb,
+      prompt: `共 ${n} 张`,
+      modelLabel: 'Nano Banana 2',
+      resolutionLabel: label,
+      formatLabel: fmt,
+      requestedCount: n,
+      status: done ? 'completed' : 'active',
+      progress,
+      outputUrls: outs,
+    }
+  }
+  return null
+}
+
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader()
@@ -703,6 +788,8 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
     let cancelled = false
     void (async () => {
       const h0 = loadHistory(rt.historyKey)
+      const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
+
       if (tool === 'removeBg') {
         const ws = await tikgenIgIdbGet<RemoveBgWorkspaceV1>(rt.workspaceKey)
         if (!cancelled && ws?.v === 1) {
@@ -735,55 +822,65 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       }
 
       if (cancelled) return
-      setHistory(h0)
+
+      let nextHistory = h0
+
+      if (job && job.v === 1 && Array.isArray(job.refUrls) && job.refUrls.length) {
+        const isOurJob =
+          tool === 'removeBg'
+            ? !('tool' in job && job.tool != null && job.tool !== 'removeBg')
+            : 'tool' in job && job.tool === tool
+
+        if (isOurJob) {
+          const locked = lockedSettingsFromJob(job, tool)
+          if (!locked) {
+            await tikgenIgIdbDelete(rt.jobKey)
+          } else {
+            let task = h0.find((t) => t.id === job.taskId && t.status === 'active')
+            if (!task) {
+              const stub = buildRecoveryTaskFromJob(job, tool)
+              if (stub) {
+                nextHistory = [stub, ...h0.filter((t) => t.id !== job.taskId)]
+              } else {
+                await tikgenIgIdbDelete(rt.jobKey)
+              }
+            }
+
+            const taskRow = nextHistory.find((t) => t.id === job.taskId && t.status === 'active')
+            if (taskRow && locked) {
+              const jobOut = Array.isArray(job.outputs) ? job.outputs : []
+              const taskOut = Array.isArray(taskRow.outputUrls) ? taskRow.outputUrls : []
+              const merged = taskOut.length >= jobOut.length ? [...taskOut] : [...jobOut]
+              const startIndex = merged.length
+              if (startIndex >= job.refUrls.length) {
+                await tikgenIgIdbDelete(rt.jobKey)
+                nextHistory = nextHistory.map((x) =>
+                  x.id === job.taskId
+                    ? { ...x, status: 'completed' as const, progress: 100, outputUrls: merged }
+                    : x,
+                )
+              } else if (!cancelled && mountedRef.current) {
+                setHistory(nextHistory)
+                setPersistenceReady(true)
+                await runPipelineRef.current({
+                  taskId: job.taskId,
+                  refUrls: job.refUrls,
+                  startIndex,
+                  initialOutputs: merged.slice(),
+                  clearImagesOnComplete: false,
+                  isCancelled: () => cancelled || !mountedRef.current,
+                  locked,
+                })
+                return
+              }
+            }
+          }
+        }
+      }
+
+      if (cancelled) return
+      setHistory(nextHistory)
       setPersistenceReady(true)
-
-      const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
-      if (cancelled || !job || job.v !== 1 || !Array.isArray(job.refUrls) || !job.refUrls.length) return
-
-      const isOurJob =
-        tool === 'removeBg'
-          ? !('tool' in job && job.tool != null && job.tool !== 'removeBg')
-          : 'tool' in job && job.tool === tool
-      if (!isOurJob) return
-
-      const locked = lockedSettingsFromJob(job, tool)
-      if (!locked) {
-        await tikgenIgIdbDelete(rt.jobKey)
-        return
-      }
-
-      const task = h0.find((t) => t.id === job.taskId && t.status === 'active')
-      if (!task) {
-        await tikgenIgIdbDelete(rt.jobKey)
-        return
-      }
-      const jobOut = Array.isArray(job.outputs) ? job.outputs : []
-      const taskOut = Array.isArray(task.outputUrls) ? task.outputUrls : []
-      const merged = taskOut.length >= jobOut.length ? [...taskOut] : [...jobOut]
-      const startIndex = merged.length
-      if (startIndex >= job.refUrls.length) {
-        await tikgenIgIdbDelete(rt.jobKey)
-        if (cancelled) return
-        setHistory((prev) =>
-          prev.map((x) =>
-            x.id === job.taskId ? { ...x, status: 'completed' as const, progress: 100, outputUrls: merged } : x,
-          ),
-        )
-        return
-      }
-
-      if (cancelled || !mountedRef.current) return
-
-      await runPipelineRef.current({
-        taskId: job.taskId,
-        refUrls: job.refUrls,
-        startIndex,
-        initialOutputs: merged.slice(),
-        clearImagesOnComplete: false,
-        isCancelled: () => cancelled || !mountedRef.current,
-        locked,
-      })
     })()
     return () => {
       cancelled = true
@@ -949,7 +1046,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       })
     }
 
-    setHistory((prev) => [task, ...prev])
+    setHistory((prev) => {
+      const next = [task, ...prev]
+      saveHistory(rt.historyKey, next)
+      return next
+    })
 
     await runPipeline({
       taskId,
@@ -1475,30 +1576,33 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
                   key={task.id}
                   className="image-history-masonry-item image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                 >
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                        <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                        {relativeZh(task.ts)}
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                        <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                        {task.resolutionLabel}
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
-                        {task.formatLabel}
-                      </span>
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
-                          task.status === 'completed'
-                            ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
-                            : task.status === 'active'
-                              ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
-                              : 'bg-red-500/15 text-red-100 border-red-400/25'
-                        }`}
-                      >
-                        {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
-                      </span>
+                  <div className="mb-3 flex items-start gap-2">
+                    {/* 瀑布流多列时卡片很窄，flex-wrap 会把标签竖排；单行横滑保持与去背景预期一致 */}
+                    <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0.5 [scrollbar-width:thin]">
+                      <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                          <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                          {relativeZh(task.ts)}
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                          <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                          {task.resolutionLabel}
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
+                          {task.formatLabel}
+                        </span>
+                        <span
+                          className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium border ${
+                            task.status === 'completed'
+                              ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
+                              : task.status === 'active'
+                                ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
+                                : 'bg-red-500/15 text-red-100 border-red-400/25'
+                          }`}
+                        >
+                          {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
+                        </span>
+                      </div>
                     </div>
                     <button
                       type="button"

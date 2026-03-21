@@ -6138,33 +6138,35 @@ function ImageGenerator({
                           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </button>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mb-3">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                          <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                          {imageHistoryRelativeZh(task.ts)}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                          <Box className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                          {task.modelLabel}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                          <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                          {task.aspect}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
-                          {task.resolutionLabel}
-                        </span>
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
-                            task.status === 'completed'
-                              ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
-                              : task.status === 'active'
-                                ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
-                                : 'bg-red-500/15 text-red-100 border-red-400/25'
-                          }`}
-                        >
-                          {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
-                        </span>
+                      <div className="mb-3 overflow-x-auto overflow-y-hidden pb-0.5 [scrollbar-width:thin]">
+                        <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                            <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                            {imageHistoryRelativeZh(task.ts)}
+                          </span>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                            <Box className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                            {task.modelLabel}
+                          </span>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                            <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                            {task.aspect}
+                          </span>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
+                            {task.resolutionLabel}
+                          </span>
+                          <span
+                            className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium border ${
+                              task.status === 'completed'
+                                ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
+                                : task.status === 'active'
+                                  ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
+                                  : 'bg-red-500/15 text-red-100 border-red-400/25'
+                            }`}
+                          >
+                            {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex gap-3 items-start mb-3">
                         <button
