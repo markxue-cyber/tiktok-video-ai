@@ -146,6 +146,8 @@ type ImageGenHistoryTask = {
   id: string
   ts: number
   refThumb: string
+  /** 商品名称（大字展示）；旧存档可能为空 */
+  productName?: string
   prompt: string
   modelId: string
   modelLabel: string
@@ -465,6 +467,7 @@ function buildHistoryTaskFromSceneBoard(
   modelLabel: string,
   aspect: ImageAspect,
   resolutionLabel: string,
+  productName?: string,
 ): ImageGenHistoryTask {
   const slots = board.slots
   const selected = slots.filter((s) => s.selected)
@@ -502,10 +505,12 @@ function buildHistoryTaskFromSceneBoard(
     errors.length && status === 'completed' ? `部分失败：${errors.join('；')}` : undefined
   const failMsg = status === 'failed' ? errors.join('\n') || '生成失败' : errMsg
 
+  const pn = String(productName || '').trim()
   return {
     id: board.id,
     ts: board.ts,
     refThumb: board.refThumb,
+    ...(pn ? { productName: pn } : {}),
     prompt: `多场景：${titlesLine}\n────────\n${basePromptStored}`,
     modelId,
     modelLabel,
@@ -3177,12 +3182,23 @@ function ImageGenerator({
     const resLb =
       resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
     const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
-    const built = buildHistoryTaskFromSceneBoard(sceneRunBoard, model, modelLabel, size, resLb)
+    const built = buildHistoryTaskFromSceneBoard(
+      sceneRunBoard,
+      model,
+      modelLabel,
+      size,
+      resLb,
+      productInfo.name?.trim(),
+    )
     setImageGenHistory((prev) => {
       const i = prev.findIndex((t) => t.id === built.id)
       if (i < 0) return [built, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)
       const old = prev[i]
-      return [{ ...built, ts: old.ts }, ...prev.filter((_, j) => j !== i)].slice(0, IMAGE_GEN_HISTORY_MAX)
+      const mergedName = (built.productName || '').trim() || old.productName
+      return [
+        { ...built, ts: old.ts, ...(mergedName ? { productName: mergedName } : {}) },
+        ...prev.filter((_, j) => j !== i),
+      ].slice(0, IMAGE_GEN_HISTORY_MAX)
     })
 
     if (built.status === 'failed') {
@@ -3211,7 +3227,7 @@ function ImageGenerator({
       setGenErrorText('')
       setGenErrorCode('UNKNOWN')
     }
-  }, [sceneRunBoard, model, size, resolution, imageModelOptions])
+  }, [sceneRunBoard, model, size, resolution, imageModelOptions, productInfo.name])
 
   useEffect(() => {
     const first = refImages[0]?.url || ''
@@ -3241,12 +3257,13 @@ function ImageGenerator({
   /** 删除主参考图后清空与本次分析/场景相关的编辑态（不删生成历史归档） */
   const clearImageGenPageAfterMainRefRemoved = () => {
     const snap = sceneRunBoardRef.current
+    const productNameSnap = productInfo.name?.trim() || ''
     if (snap?.slots.some((s) => s.status === 'done' && s.imageUrl)) {
       const resLb =
         resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
       const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
       const normalized = sceneBoardForgetInflightSlots(snap)
-      const built = buildHistoryTaskFromSceneBoard(normalized, model, modelLabel, size, resLb)
+      const built = buildHistoryTaskFromSceneBoard(normalized, model, modelLabel, size, resLb, productNameSnap)
       setImageGenHistory((prev) => {
         const i = prev.findIndex((t) => t.id === built.id)
         const keepTs = i >= 0 ? prev[i].ts : built.ts
@@ -5369,7 +5386,7 @@ function ImageGenerator({
           </div>
         ) : null}
         {sceneRunBoard ? (
-          <div className="mb-8 rounded-xl bg-black/20 p-4 ring-1 ring-inset ring-white/[0.07]">
+          <div className="mb-8 overflow-visible rounded-xl bg-black/20 p-4 ring-1 ring-inset ring-white/[0.07]">
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -5419,7 +5436,7 @@ function ImageGenerator({
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch overflow-visible">
               {sceneRunBoard.slots.map((slot, sidx) => {
                 const rawDesc = (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim()
                 const hoverFull = styleCardSummary(rawDesc, 400)
@@ -5509,14 +5526,14 @@ function ImageGenerator({
                         toggleSceneSlotSelected(sceneRunBoard.id, sidx)
                       }
                     }}
-                    className={`flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border text-center transition-[opacity,box-shadow] ${
+                    className={`flex h-full min-h-0 flex-col overflow-visible rounded-2xl border text-center transition-[opacity,box-shadow] ${
                       slot.selected
                         ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
                         : 'border-white/[0.07] bg-black/12 opacity-55'
                     } ${isSlotGenerating ? 'cursor-wait pointer-events-none' : 'cursor-pointer'}`}
                   >
-                    {/* 固定顶栏高度：标题最多 2 行 + 描述 1 行，避免 6 张卡片的占位图上下错位 */}
-                    <div className="flex h-[5.25rem] shrink-0 flex-col px-2.5 pb-1.5 pt-2">
+                    {/* 固定顶栏高度：标题最多 2 行 + 描述 1 行；顶栏 overflow-visible 避免描述 hover 浮层被卡片裁切 */}
+                    <div className="relative z-10 flex h-[5.25rem] shrink-0 flex-col overflow-visible px-2.5 pb-1.5 pt-2">
                       <div className="flex min-h-0 flex-1 items-center justify-center">
                         <span
                           className={`${SCENE_TAG_CLASS} line-clamp-2 max-h-[2.6rem] min-w-0 w-full justify-center overflow-hidden text-center text-[10px] leading-snug`}
@@ -5524,13 +5541,13 @@ function ImageGenerator({
                           {slot.title}
                         </span>
                       </div>
-                      <div className="relative group/desc mt-1 h-5 shrink-0">
+                      <div className="relative group/desc z-20 mt-1 h-5 shrink-0">
                         <p className="text-[10px] leading-5 text-white/48 truncate cursor-default select-none">
                           {rawDesc || '\u00a0'}
                         </p>
                         {rawDesc ? (
                           <div
-                            className="pointer-events-none absolute left-1/2 z-[60] -translate-x-1/2 bottom-full mb-1 max-w-[min(100%,18rem)] rounded-lg border border-white/15 bg-[#111116]/95 px-2.5 py-1.5 text-[10px] leading-snug text-white/90 shadow-xl whitespace-normal opacity-0 translate-y-0.5 transition-[opacity,transform] duration-75 ease-out group-hover/desc:opacity-100 group-hover/desc:translate-y-0"
+                            className="pointer-events-none absolute left-1/2 z-[100] min-w-[13rem] max-w-[min(26rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full mb-1.5 rounded-xl border border-white/18 bg-[#14141c]/98 px-3 py-2 text-[11px] leading-relaxed text-white/92 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md whitespace-normal opacity-0 translate-y-1 transition-[opacity,transform] duration-100 ease-out group-hover/desc:opacity-100 group-hover/desc:translate-y-0"
                             role="tooltip"
                           >
                             {hoverFull}
@@ -5538,7 +5555,7 @@ function ImageGenerator({
                         ) : null}
                       </div>
                     </div>
-                    <div className="group/sc relative aspect-square w-full overflow-hidden bg-zinc-900/30">
+                    <div className="group/sc relative aspect-square w-full overflow-hidden rounded-b-2xl bg-zinc-900/30">
                       {slot.status === 'done' && slot.imageUrl ? (
                         <img
                           src={slot.imageUrl}
@@ -5645,6 +5662,9 @@ function ImageGenerator({
                       key={task.id}
                       className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                     >
+                      <h3 className="text-lg sm:text-xl font-bold text-white/95 leading-snug mb-2.5 pr-1">
+                        {(task.productName || '').trim() || '商品场景'}
+                      </h3>
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
                           <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
