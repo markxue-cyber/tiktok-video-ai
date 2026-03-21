@@ -95,6 +95,7 @@ import {
   type TikgenWorkspaceSnapshotV1,
 } from './tikgenImageGenPersistence'
 import './workbench-theme.css'
+import { RemoveBackgroundWorkbench } from './RemoveBackgroundWorkbench'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -1919,7 +1920,7 @@ function ImageToolsWorkbench({
   return (
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="图片工具" items={items} tab={tab} onTabChange={onTabChange} />
-      {tab === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
+      {tab === 'removeBg' ? <RemoveBackgroundWorkbench /> : null}
       {tab === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
       {tab === 'compress' ? <WorkbenchComingSoon title="图片压缩" /> : null}
       {tab === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
