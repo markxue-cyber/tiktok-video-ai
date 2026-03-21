@@ -39,6 +39,9 @@ import {
   BarChart2,
   Clapperboard,
   Wrench,
+  Minimize2,
+  Droplets,
+  Scissors,
 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -878,8 +881,11 @@ function App() {
     'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
   >('image')
   const [imageSubNav, setImageSubNav] = useState<'generate' | 'tools'>('generate')
-  const [imageToolsTab, setImageToolsTab] = useState<'removeBg' | 'upscale' | 'translate'>('removeBg')
-  const [videoSubNav, setVideoSubNav] = useState<'generate' | 'analyze'>('generate')
+  const [imageToolsTab, setImageToolsTab] = useState<
+    'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
+  >('removeBg')
+  const [videoSubNav, setVideoSubNav] = useState<'tools' | 'analyze'>('tools')
+  const [videoToolsTab, setVideoToolsTab] = useState<'generate' | 'upscale' | 'watermark' | 'subtitle'>('generate')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
   const [packageCatalog, setPackageCatalog] = useState<PackageConfigItem[]>(DEFAULT_PACKAGES)
@@ -1063,11 +1069,18 @@ function App() {
       if (imageSubNav === 'tools') {
         if (imageToolsTab === 'removeBg') return '图片工具-去除背景'
         if (imageToolsTab === 'upscale') return '图片工具-高清放大'
-        return '图片工具-图片翻译'
+        if (imageToolsTab === 'translate') return '图片工具-图片翻译'
+        if (imageToolsTab === 'compress') return '图片工具-图片压缩'
+        return '图片工具-去水印'
       }
     }
     if (mainNav === 'video') {
-      if (videoSubNav === 'generate') return '视频生成'
+      if (videoSubNav === 'tools') {
+        if (videoToolsTab === 'generate') return '视频工具-视频生成'
+        if (videoToolsTab === 'upscale') return '视频工具-画质提升'
+        if (videoToolsTab === 'watermark') return '视频工具-去水印'
+        return '视频工具-去字幕'
+      }
       return '视频分析'
     }
     if (mainNav === 'templates') return '模板与案例库'
@@ -1076,7 +1089,7 @@ function App() {
     if (mainNav === 'benefits') return '个人权益'
     if (mainNav === 'developer' && isDevAdmin) return '开发者后台'
     return '图片生成'
-  }, [mainNav, imageSubNav, imageToolsTab, videoSubNav, isDevAdmin])
+  }, [mainNav, imageSubNav, imageToolsTab, videoSubNav, videoToolsTab, isDevAdmin])
 
   const ANN_READ_KEY = user?.id ? `tikgen.ann.read.${user.id}` : 'tikgen.ann.read.guest'
 
@@ -1552,11 +1565,11 @@ function App() {
               <NavPrimary
                 collapsed
                 icon={<Video className="w-5 h-5" />}
-                label="视频生成"
-                active={mainNav === 'video' && videoSubNav === 'generate'}
+                label="视频工具"
+                active={mainNav === 'video' && videoSubNav === 'tools'}
                 onClick={() => {
                   setMainNav('video')
-                  setVideoSubNav('generate')
+                  setVideoSubNav('tools')
                 }}
               />
               <NavPrimary collapsed icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
@@ -1625,11 +1638,11 @@ function App() {
                 <NavSecondary
                   collapsed={false}
                   icon={<Video className="w-4 h-4" />}
-                  label="视频生成"
-                  active={mainNav === 'video' && videoSubNav === 'generate'}
+                  label="视频工具"
+                  active={mainNav === 'video' && videoSubNav === 'tools'}
                   onClick={() => {
                     setMainNav('video')
-                    setVideoSubNav('generate')
+                    setVideoSubNav('tools')
                   }}
                 />
                 <NavSecondary
@@ -1679,7 +1692,12 @@ function App() {
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'upscale' && '图片工具 · 高清放大'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
-                {mainNav === 'video' && videoSubNav === 'generate' && '视频生成'}
+                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
+                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeWatermark' && '图片工具 · 去水印'}
+                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' && '视频工具 · 视频生成'}
+                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 画质提升'}
+                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'watermark' && '视频工具 · 去水印'}
+                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'subtitle' && '视频工具 · 去字幕'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
                 {mainNav === 'templates' && '模板与案例库'}
                 {mainNav === 'tasks' && '任务中心'}
@@ -1771,22 +1789,30 @@ function App() {
         </header>
         <div className="p-6">
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
-          <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
-            <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
-          </div>
           <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
             <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
           </div>
           {mainNav === 'image' && imageSubNav === 'tools' ? (
             <ImageToolsWorkbench tab={imageToolsTab} onTabChange={setImageToolsTab} />
           ) : null}
+          {mainNav === 'video' && videoSubNav === 'tools' ? (
+            <VideoToolsWorkbench tab={videoToolsTab} onTabChange={setVideoToolsTab} />
+          ) : null}
+          <div
+            className={
+              mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' ? '' : 'hidden'
+            }
+          >
+            <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
+          </div>
           {mainNav === 'video' && videoSubNav === 'analyze' ? <WorkbenchComingSoon title="视频分析" /> : null}
           {mainNav === 'templates' && (
             <TemplatesLibrary
               onApplyVideo={(preset) => {
                 setVideoTemplatePreset(preset)
                 setMainNav('video')
-                setVideoSubNav('generate')
+                setVideoSubNav('tools')
+                setVideoToolsTab('generate')
               }}
               onApplyImage={(preset) => {
                 setImageTemplatePreset(preset)
@@ -1828,7 +1854,7 @@ function WorkbenchComingSoon({ title }: { title: string }) {
   )
 }
 
-type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate'
+type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
 
 function ImageToolsWorkbench({
   tab,
@@ -1841,6 +1867,8 @@ function ImageToolsWorkbench({
     { id: 'removeBg', label: '去除背景', icon: <Eraser className="w-4 h-4 shrink-0" /> },
     { id: 'upscale', label: '高清放大', icon: <Maximize2 className="w-4 h-4 shrink-0" /> },
     { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
+    { id: 'compress', label: '图片压缩', icon: <Minimize2 className="w-4 h-4 shrink-0" /> },
+    { id: 'removeWatermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
   ]
   return (
     <div className="space-y-6">
@@ -1866,6 +1894,51 @@ function ImageToolsWorkbench({
       {tab === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
       {tab === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
       {tab === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
+      {tab === 'compress' ? <WorkbenchComingSoon title="图片压缩" /> : null}
+      {tab === 'removeWatermark' ? <WorkbenchComingSoon title="去水印" /> : null}
+    </div>
+  )
+}
+
+type VideoToolsTabId = 'generate' | 'upscale' | 'watermark' | 'subtitle'
+
+function VideoToolsWorkbench({
+  tab,
+  onTabChange,
+}: {
+  tab: VideoToolsTabId
+  onTabChange: (t: VideoToolsTabId) => void
+}) {
+  const items: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
+    { id: 'generate', label: '视频生成', icon: <Video className="w-4 h-4 shrink-0" /> },
+    { id: 'upscale', label: '画质提升', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
+    { id: 'watermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
+    { id: 'subtitle', label: '去字幕', icon: <Scissors className="w-4 h-4 shrink-0" /> },
+  ]
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+        <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1">
+          {items.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onTabChange(t.id)}
+              className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-5 ${
+                tab === t.id
+                  ? 'bg-gray-900 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-white/90 hover:text-gray-900'
+              }`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'upscale' ? <WorkbenchComingSoon title="画质提升" /> : null}
+      {tab === 'watermark' ? <WorkbenchComingSoon title="去水印" /> : null}
+      {tab === 'subtitle' ? <WorkbenchComingSoon title="去字幕" /> : null}
     </div>
   )
 }
