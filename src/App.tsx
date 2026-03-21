@@ -3411,8 +3411,8 @@ function ImageGenerator({
     <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">生成模型</div>
+        <div className="workbench-form-section p-4 mb-5">
+          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">生成模型</div>
           <label className="block text-sm font-medium mb-1">模型选择</label>
           <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
             {imageModelOptions.map((m) => (
@@ -3426,8 +3426,8 @@ function ImageGenerator({
           {modelChangeNotice ? <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-2">{modelChangeNotice}</div> : null}
         </div>
 
-        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">参考图</div>
+        <div className="workbench-form-section p-4 mb-5">
+          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">参考图</div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">参考图 <span className="text-[11px] text-gray-500 font-normal">支持上传1-5张图片</span></label>
             <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
@@ -3586,8 +3586,8 @@ function ImageGenerator({
           <p className="text-[11px] text-gray-500 mt-2">第一张为「主参考」，拖拽可调整顺序；主参考对构图与商品识别影响最大。</p>
         </div>
 
-        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">输出规格</div>
+        <div className="workbench-form-section p-4 mb-5">
+          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">输出规格</div>
           <p className="text-[11px] text-gray-500 mb-3">选项随当前模型能力变化。一键生成提示词会结合此处<strong className="text-gray-700">画幅</strong>与<strong className="text-gray-700">分辨率</strong>优化文案。</p>
           <label className="block text-sm font-medium mb-2">比例</label>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -3633,8 +3633,8 @@ function ImageGenerator({
         </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">提示词</div>
+        <div className="workbench-form-section p-4 mb-5">
+          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">提示词</div>
           <p className="text-[11px] text-gray-500 mb-2">生成图片以本页下方文本框中的完整 prompt 为准；结构化编辑请在一键生成弹窗内完成。</p>
           {outputSpecsMismatch ? (
             <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-xs text-amber-900">
