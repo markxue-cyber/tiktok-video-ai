@@ -252,6 +252,12 @@ function styleCardSummary(text: string, maxChars = 220): string {
   return s.slice(0, maxChars)
 }
 
+/** 卡片列表里展示的摘要：自定义方案以用户输入（出图主描述）为准，其余优先短说明 */
+function hotStyleCardPreviewText(st: { isCustom?: boolean; description?: string; imagePrompt?: string }): string {
+  if (st.isCustom) return String(st.imagePrompt || st.description || '').trim()
+  return String(st.description || '').trim() || String(st.imagePrompt || '').trim()
+}
+
 /** 生成历史等窄卡片用的一行级摘要 */
 function styleCardTeaser(text: string, maxChars = 40): string {
   const s = String(text || '')
@@ -4542,7 +4548,7 @@ function ImageGenerator({
             />
           </div>
 
-          <div>
+          <div className="overflow-visible">
             <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-sm font-medium text-white/88">画面方案</span>
@@ -4580,7 +4586,7 @@ function ImageGenerator({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 items-stretch gap-3">
+              <div className="grid grid-cols-2 items-stretch gap-3 overflow-visible">
                 {hotStyles.map((st, idx) => (
                   <div
                     key={`${st.title}_${idx}`}
@@ -4594,10 +4600,10 @@ function ImageGenerator({
                         selectHotStyleCard(idx)
                       }
                     }}
-                    className={`group/scard relative z-0 rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-[background-color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                    className={`group/scard relative z-0 overflow-visible rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-[background-color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-violet-400/50 group-hover/scard:z-[200] ${
                       selectedHotStyleIndex === idx
                         ? 'bg-gradient-to-b from-violet-500/[0.2] to-[#1a1528] ring-2 ring-violet-400/35'
-                        : 'bg-[#16161c] ring-1 ring-inset ring-white/[0.1] hover:z-20 hover:bg-[#1f1f28] hover:ring-white/16'
+                        : 'bg-[#16161c] ring-1 ring-inset ring-white/[0.1] hover:bg-[#1f1f28] hover:ring-white/16'
                     } ${promptRegenBusy ? 'pointer-events-none brightness-[0.85] saturate-75' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -4620,10 +4626,13 @@ function ImageGenerator({
                       </button>
                     </div>
                     <p className="mt-2 min-h-[4.5rem] text-[11px] leading-[1.45] text-white/55 line-clamp-4">
-                      {styleCardSummary(st.description) || '\u00a0'}
+                      {styleCardSummary(hotStyleCardPreviewText(st)) || '\u00a0'}
                     </p>
-                    <div className="pointer-events-none invisible absolute left-0 right-0 top-full z-[120] mt-2 opacity-0 transition-none group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100">
-                      <div className="max-h-72 overflow-y-auto rounded-xl border border-white/22 bg-[#121218] p-3.5 text-[11px] leading-relaxed text-white shadow-[0_24px_64px_rgba(0,0,0,0.92)] ring-2 ring-black/50">
+                    <div
+                      className="pointer-events-none invisible absolute right-2 top-11 z-[210] w-[45%] min-w-[11rem] max-w-[20rem] opacity-0 transition-none group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="max-h-[min(18rem,55vh)] overflow-y-auto rounded-xl border border-white/22 bg-[#121218] p-3 text-[11px] leading-relaxed text-white shadow-[0_20px_50px_rgba(0,0,0,0.9)] ring-2 ring-black/60">
                         <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-300">
                           出图主描述
                         </div>
@@ -4634,18 +4643,19 @@ function ImageGenerator({
                     </div>
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const i = hotStyles.findIndex((s) => s.isCustom)
-                    setCustomStylePromptOnly(i >= 0 ? hotStyles[i].imagePrompt || '' : '')
-                    setCustomStyleModalOpen(true)
-                  }}
-                  className="flex h-full min-h-0 flex-col items-center justify-center self-stretch rounded-2xl bg-[#16161c] px-3.5 py-3 text-center ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-[#1f1f28] hover:ring-violet-400/25"
-                >
-                  <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                  <span className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-white/45">一段话描述画面、风格与卖点</span>
-                </button>
+                {!hotStyles.some((s) => s.isCustom) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomStylePromptOnly('')
+                      setCustomStyleModalOpen(true)
+                    }}
+                    className="flex h-full min-h-0 flex-col items-center justify-center self-stretch rounded-2xl bg-[#16161c] px-3.5 py-3 text-center ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-[#1f1f28] hover:ring-violet-400/25"
+                  >
+                    <span className="text-sm font-semibold text-violet-200">自定义方案</span>
+                    <span className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-white/45">一段话描述画面、风格与卖点</span>
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -4710,36 +4720,39 @@ function ImageGenerator({
             </div>
           ) : null}
 
-          <div>
-            <button
-              type="button"
-              onClick={() => void handlePrepareSceneBoard()}
-              disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
-              className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
-                sceneBoardPreparing || (prompt.trim() && refImages.length > 0)
-                  ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
-                  : 'cursor-not-allowed bg-white/[0.06] text-white/35'
-              }`}
-            >
-              {!sceneBoardPreparing && prompt.trim() && refImages.length > 0 ? (
-                <span
-                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent to-white/[0.1] opacity-80"
-                  aria-hidden
-                />
-              ) : null}
-              {sceneBoardPreparing ? (
-                <>
-                  <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
-                  <span className="relative">正在规划场景…</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
-                  <span className="relative">一键生成图片</span>
-                </>
-              )}
-            </button>
-          </div>
+          {/* 已传图但未完成「一键分析」前只露出分析按钮；未传图或已展开模块后仍显示一键生成图片 */}
+          {productStylePanelOpen || refImages.length === 0 ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => void handlePrepareSceneBoard()}
+                disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
+                className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
+                  sceneBoardPreparing || (prompt.trim() && refImages.length > 0)
+                    ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
+                    : 'cursor-not-allowed bg-white/[0.06] text-white/35'
+                }`}
+              >
+                {!sceneBoardPreparing && prompt.trim() && refImages.length > 0 ? (
+                  <span
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent to-white/[0.1] opacity-80"
+                    aria-hidden
+                  />
+                ) : null}
+                {sceneBoardPreparing ? (
+                  <>
+                    <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
+                    <span className="relative">正在规划场景…</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
+                    <span className="relative">一键生成图片</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : null}
         </div>
         </div>
       </div>
@@ -5138,13 +5151,16 @@ function ImageGenerator({
                 if (!prompt) return
                 const row: ImageWorkbenchStyleRow = {
                   title: '自定义方案',
-                  description: '',
+                  description: prompt,
                   imagePrompt: prompt,
                   isCustom: true,
                 }
-                const i = hotStyles.findIndex((s) => s.isCustom)
+                const stripped = hotStyles.filter((s) => !s.isCustom)
+                const firstCustomIdx = hotStyles.findIndex((s) => s.isCustom)
                 const nextList =
-                  i >= 0 ? hotStyles.map((s, j) => (j === i ? row : s)) : [...hotStyles, row]
+                  firstCustomIdx >= 0
+                    ? [...stripped.slice(0, firstCustomIdx), row, ...stripped.slice(firstCustomIdx)]
+                    : [...hotStyles, row]
                 const sel = nextList.findIndex((s) => s.isCustom)
                 setHotStyles(nextList)
                 setSelectedHotStyleIndex(sel >= 0 ? sel : 0)
