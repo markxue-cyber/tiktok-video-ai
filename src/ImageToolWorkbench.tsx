@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { createAssetAPI } from './api/assets'
+import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 import { imageToolNanoAPI } from './api/imageToolNano'
 import { removeBackgroundAPI } from './api/removeBackground'
 import { DEFAULT_TARGET_LANG, TARGET_LANGUAGES, type TargetLanguageCode, targetLangByCode } from './imageTool/targetLanguages'
@@ -296,10 +297,9 @@ async function safeArchiveOutput(params: {
 }) {
   try {
     if (!params.url) return
-    await createAssetAPI({
-      source: 'ai_generated',
-      type: 'image',
+    await archiveAiMediaOnce({
       url: params.url,
+      type: 'image',
       name: `${params.nameSuffix}-${params.index + 1}-${params.taskId.slice(-10)}.${params.meta.ext || 'png'}`,
       metadata: {
         from: `image_tool_${params.tool}`,
@@ -386,6 +386,8 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   const [lightbox, setLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [persistenceReady, setPersistenceReady] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  /** 供 pagehide 再刷一次，避免刷新/关页时最后一次 IDB 异步写入未完成 */
+  const workspaceSnapRef = useRef<unknown>(null)
   const progressTimersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const mountedRef = useRef(true)
   const runPipelineRef = useRef<(opts: PipelineOpts) => Promise<void>>(async () => {})
@@ -792,9 +794,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
     if (!persistenceReady) return
     if (tool === 'removeBg') {
       const snap: RemoveBgWorkspaceV1 = { v: 1, images, resolution, outputFormat: outputFormatRemoveBg }
+      workspaceSnapRef.current = snap
       void tikgenIgIdbSet(rt.workspaceKey, snap)
     } else if (tool === 'upscale') {
       const snap: UpscaleWorkspaceV1 = { v: 1, images, scale, outputFormat: outputFormatNano }
+      workspaceSnapRef.current = snap
       void tikgenIgIdbSet(rt.workspaceKey, snap)
     } else if (tool === 'compress') {
       const snap: CompressWorkspaceV1 = {
@@ -803,9 +807,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
         compressPercent: Math.max(1, Math.min(100, Math.round(compressPercent))),
         outputFormat: outputFormatNano,
       }
+      workspaceSnapRef.current = snap
       void tikgenIgIdbSet(rt.workspaceKey, snap)
     } else {
       const snap: TranslateWorkspaceV1 = { v: 1, images, targetLang, outputFormat: outputFormatNano }
+      workspaceSnapRef.current = snap
       void tikgenIgIdbSet(rt.workspaceKey, snap)
     }
   }, [
@@ -820,6 +826,23 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
     rt.workspaceKey,
     tool,
   ])
+
+  useEffect(() => {
+    const wk = rt.workspaceKey
+    const flush = () => {
+      const snap = workspaceSnapRef.current
+      if (snap) void tikgenIgIdbSet(wk, snap)
+    }
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [rt.workspaceKey])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
@@ -956,6 +979,33 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       a.click()
     })
   }
+
+  /** 历史记录中的成片补同步到资产库（与生成时写入互补；指纹去重） */
+  useEffect(() => {
+    if (!persistenceReady) return
+    for (const task of history) {
+      if (task.status === 'failed') continue
+      const urls = task.outputUrls || []
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i]
+        if (!url) continue
+        const f = task.formatLabel.toLowerCase()
+        const ext = f === 'jpeg' || f === 'jpg' ? 'jpg' : f === 'webp' ? 'webp' : 'png'
+        void archiveAiMediaOnce({
+          url,
+          type: 'image',
+          name: `${rt.downloadBase}-${task.id}-${i + 1}.${ext}`,
+          metadata: {
+            from: `image_tool_${rt.archiveOutputTool}`,
+            tool: rt.archiveOutputTool,
+            task_id: task.id,
+            index: i,
+            sync: 'history',
+          },
+        })
+      }
+    }
+  }, [history, persistenceReady, rt.downloadBase, rt.archiveOutputTool])
 
   const SubmitIcon = rt.SubmitIcon
 
@@ -1419,11 +1469,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
           ) : null}
 
           {sortedHistory.length > 0 ? (
-            <div className="flex flex-col gap-4 pb-2">
+            <div className="image-history-masonry image-history-masonry--3 pb-2">
               {sortedHistory.map((task) => (
                 <div
                   key={task.id}
-                  className="image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                  className="image-history-masonry-item image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                 >
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">

@@ -59,6 +59,7 @@ import { applyImageStyleTags } from './api/imageStyle'
 import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
+import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
@@ -668,6 +669,15 @@ function guessAssetType(file: File): 'image' | 'video' {
 async function safeArchiveAsset(params: { source: 'user_upload' | 'ai_generated'; type: 'image' | 'video'; url: string; name?: string; metadata?: any }) {
   try {
     if (!params.url) return
+    if (params.source === 'ai_generated') {
+      await archiveAiMediaOnce({
+        url: params.url,
+        type: params.type,
+        name: params.name,
+        metadata: params.metadata,
+      })
+      return
+    }
     await createAssetAPI(params)
   } catch (e) {
     // Never block core generation/upload UX due to archive write failure.
@@ -885,10 +895,34 @@ function App() {
   const [mainNav, setMainNav] = useState<
     'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
   >('image')
-  const [imageSubNav, setImageSubNav] = useState<'generate' | 'tools'>('generate')
+  const [imageSubNav, setImageSubNav] = useState<'generate' | 'tools'>(() => {
+    try {
+      const v = sessionStorage.getItem('tikgen.sess.imageSubNav')
+      if (v === 'generate' || v === 'tools') return v
+    } catch {
+      // ignore
+    }
+    return 'generate'
+  })
   const [imageToolsTab, setImageToolsTab] = useState<
     'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
-  >('removeBg')
+  >(() => {
+    try {
+      const v = sessionStorage.getItem('tikgen.sess.imageToolsTab')
+      if (
+        v === 'removeBg' ||
+        v === 'upscale' ||
+        v === 'translate' ||
+        v === 'compress' ||
+        v === 'removeWatermark'
+      ) {
+        return v
+      }
+    } catch {
+      // ignore
+    }
+    return 'removeBg'
+  })
   const [videoSubNav, setVideoSubNav] = useState<'tools' | 'analyze'>('tools')
   const [videoToolsTab, setVideoToolsTab] = useState<'generate' | 'upscale' | 'watermark' | 'subtitle'>('generate')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
@@ -904,6 +938,22 @@ function App() {
   const [readAnnouncementIds, setReadAnnouncementIds] = useState<string[]>([])
   const announcementsRef = useRef<HTMLDivElement | null>(null)
   const userMenuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('tikgen.sess.imageSubNav', imageSubNav)
+    } catch {
+      // ignore
+    }
+  }, [imageSubNav])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('tikgen.sess.imageToolsTab', imageToolsTab)
+    } catch {
+      // ignore
+    }
+  }, [imageToolsTab])
 
   const readSession = () => {
     try {
@@ -1808,9 +1858,10 @@ function App() {
           <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
             <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
           </div>
-          {mainNav === 'image' && imageSubNav === 'tools' ? (
+          {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
+          <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
             <ImageToolsWorkbench tab={imageToolsTab} onTabChange={setImageToolsTab} />
-          ) : null}
+          </div>
           {mainNav === 'video' && videoSubNav === 'tools' ? (
             <VideoToolsWorkbench tab={videoToolsTab} onTabChange={setVideoToolsTab} />
           ) : null}
@@ -1922,10 +1973,19 @@ function ImageToolsWorkbench({
   return (
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="图片工具" items={items} tab={tab} onTabChange={onTabChange} />
-      {tab === 'removeBg' ? <RemoveBackgroundWorkbench /> : null}
-      {tab === 'upscale' ? <ImageToolWorkbench tool="upscale" /> : null}
-      {tab === 'compress' ? <ImageToolWorkbench tool="compress" /> : null}
-      {tab === 'translate' ? <ImageToolWorkbench tool="translate" /> : null}
+      {/* 保持挂载，避免切换 Tab 时 React 状态与未落盘的 IDB 写入丢失 */}
+      <div className={tab === 'removeBg' ? 'block' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
+        <RemoveBackgroundWorkbench />
+      </div>
+      <div className={tab === 'upscale' ? 'block' : 'hidden'} aria-hidden={tab !== 'upscale'}>
+        <ImageToolWorkbench tool="upscale" />
+      </div>
+      <div className={tab === 'compress' ? 'block' : 'hidden'} aria-hidden={tab !== 'compress'}>
+        <ImageToolWorkbench tool="compress" />
+      </div>
+      <div className={tab === 'translate' ? 'block' : 'hidden'} aria-hidden={tab !== 'translate'}>
+        <ImageToolWorkbench tool="translate" />
+      </div>
       {tab === 'removeWatermark' ? <WorkbenchComingSoon title="去水印" /> : null}
     </div>
   )
@@ -3368,6 +3428,32 @@ function ImageGenerator({
     const slice = imageGenHistory.slice(0, IMAGE_GEN_HISTORY_MAX)
     void tikgenIgIdbSet(TIKGEN_IG_IDB.history, slice)
     tryLocalStorageSetJson(TIKGEN_IG_LS_HISTORY, stripHistoryForLocalStorage(slice))
+  }, [imageGenHistory, imageGenPersistenceReady])
+
+  /** 图片生成历史中的成片同步到资产库（单张出图时已写入；此处覆盖刷新恢复/漏写，指纹去重） */
+  useEffect(() => {
+    if (!imageGenPersistenceReady) return
+    for (const task of imageGenHistory) {
+      if (task.status === 'failed') continue
+      const urls = task.outputUrls || []
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i]
+        if (!url) continue
+        void safeArchiveAsset({
+          source: 'ai_generated',
+          type: 'image',
+          url,
+          name: `tikgen-${task.id}-${i + 1}.png`,
+          metadata: {
+            from: 'image_generator',
+            task_id: task.id,
+            index: i,
+            modelLabel: task.modelLabel,
+            sync: 'history',
+          },
+        })
+      }
+    }
   }, [imageGenHistory, imageGenPersistenceReady])
 
   useEffect(() => {
@@ -6032,11 +6118,11 @@ function ImageGenerator({
             {historyGrouped.map(({ day, tasks }) => (
               <div key={day}>
                 <div className="text-sm font-semibold text-white/90 mb-3">{day}</div>
-                <div className="flex flex-col gap-4">
+                <div className="image-history-masonry image-history-masonry--3">
                   {tasks.map((task) => (
                     <div
                       key={task.id}
-                      className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                      className="image-history-masonry-item image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                     >
                       <div className="mb-2.5 flex items-start justify-between gap-2">
                         <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-white/95 sm:text-xl pr-1">
