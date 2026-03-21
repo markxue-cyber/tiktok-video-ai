@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Images } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
-import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
+import {
+  beautifyScript,
+  generateImagePrompt,
+  generateVideoScripts,
+  imageScenePlan,
+  imageWorkbenchAnalysis,
+  parseProductInfo,
+  type ProductInfo,
+} from './api/ai'
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
@@ -133,8 +141,27 @@ type ImageGenHistoryTask = {
   requestedCount: number
   status: 'completed' | 'failed'
   outputUrls: string[]
+  /** 多场景批量出图时各张对应的场景标题 */
+  sceneLabels?: string[]
   errorMessage?: string
 }
+
+type ImageSceneRow = {
+  key: string
+  title: string
+  description: string
+  imagePrompt: string
+  selected: boolean
+}
+
+const IMAGE_SCENE_BLUEPRINT = [
+  { key: 'commercial_white', title: '商业白底主图' },
+  { key: 'selling_focus', title: '卖点聚焦图' },
+  { key: 'lifestyle', title: '场景生活图' },
+  { key: 'comparison', title: '对比/效果图' },
+  { key: 'detail', title: '产品细节图' },
+  { key: 'atmosphere', title: '氛围创意图' },
+] as const
 
 function imageHistoryDayKey(ts: number) {
   const d = new Date(ts)
@@ -2478,7 +2505,6 @@ function ImageGenerator({
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
-  const [imageCount, setImageCount] = useState<1 | 2 | 3 | 4>(1)
   const [isGenerating, setIsGenerating] = useState(false)
   const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>([])
   const [historyLightbox, setHistoryLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
@@ -2501,6 +2527,20 @@ function ImageGenerator({
   const [promptRegenBusy, setPromptRegenBusy] = useState(false)
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
   const oneClickHintTimerRef = useRef(0)
+  const [productAnalysisText, setProductAnalysisText] = useState('')
+  const [hotStyles, setHotStyles] = useState<{ title: string; description: string }[]>([])
+  const [selectedHotStyleIndex, setSelectedHotStyleIndex] = useState(0)
+  const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
+    IMAGE_SCENE_BLUEPRINT.map((b) => ({
+      key: b.key,
+      title: b.title,
+      description: '',
+      imagePrompt: '',
+      selected: true,
+    })),
+  )
+  const [scenesPlanBusy, setScenesPlanBusy] = useState(false)
+  const scenePlanJobRef = useRef(0)
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
   const [unavailableImageMap, setUnavailableImageMap] = useState<Record<string, string>>({})
   const imageModelOptions = useMemo(
@@ -2789,36 +2829,212 @@ function ImageGenerator({
     onTemplateApplied()
   }, [templatePreset, onTemplateApplied])
 
-  const handlePromptGen = async () => {
+  const openAdvancedPromptModal = () => {
+    setAiError('')
+    setShowModal(true)
+    setModalStep(productAnalysisText.trim() || productInfo.name || productInfo.category ? 2 : 1)
+  }
+
+  const selectHotStyleAndRegeneratePrompt = async (idx: number) => {
+    if (!hotStyles[idx]) return
+    setSelectedHotStyleIndex(idx)
+    const jobId = ++aiJobRef.current
+    setPromptRegenBusy(true)
+    setAiError('')
+    try {
+      const aspectRatio = size
+      const res = resolution
+      const r = await generateImagePrompt({
+        product: productInfo,
+        language: productInfo.language || '简体中文',
+        aspectRatio,
+        resolution: res,
+        sceneMode,
+        hotSellingStyle: hotStyles[idx],
+        productAnalysisNotes: productAnalysisText.trim() || undefined,
+      })
+      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, hotStyles[idx])
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      alert(e?.message || '更新画面描述失败')
+    } finally {
+      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+    }
+  }
+
+  const handleOneClickFill = async () => {
     if (!refImages.length) {
       window.clearTimeout(oneClickHintTimerRef.current)
       setOneClickNeedRefHint(true)
       oneClickHintTimerRef.current = window.setTimeout(() => setOneClickNeedRefHint(false), 4500)
       return
     }
-    setOneClickNeedRefHint(false)
-    setPromptGenOutputSettings(null)
-    setShowModal(true)
-    setModalStep(1)
-    setAiError('')
-    setOptimizedPrompt('')
-    setOptimizedNegativePrompt('')
-    setPromptParts({})
-    setSceneMode('clean')
-    setCategoryHint('other')
-    setSelectedStyleTags([])
     const jobId = ++aiJobRef.current
+    setOneClickNeedRefHint(false)
+    setAiError('')
     setIsAiBusy(true)
+    let nextProduct: ProductInfo = productInfo
+    let analysisText = productAnalysisText
+    let styles: { title: string; description: string }[] = hotStyles
     try {
-      const parsed = await parseProductInfo({ refImage: refImageDataUrl, language: productInfo.language || '简体中文', kind: 'image' })
+      const w = await imageWorkbenchAnalysis({
+        refImage: refImageDataUrl,
+        language: productInfo.language || '简体中文',
+        mode: 'full',
+      })
       if (jobId !== aiJobRef.current) return
-      setProductInfo(parsed)
+      nextProduct = {
+        name: w.product?.name || '',
+        category: w.product?.category || '',
+        sellingPoints: w.product?.sellingPoints || '',
+        targetAudience: w.product?.targetAudience || '',
+        language: w.product?.language || productInfo.language || '简体中文',
+      }
+      analysisText = w.productAnalysisText || ''
+      styles = w.styles || []
+      setProductAnalysisText(analysisText)
+      setProductInfo(nextProduct)
+      setHotStyles(styles)
+      setSelectedHotStyleIndex(0)
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
-      setAiError(e?.message || '解析失败')
-    } finally {
-      if (jobId !== aiJobRef.current) return
+      setAiError(e?.message || '一键填充失败')
       setIsAiBusy(false)
+      return
+    }
+    setIsAiBusy(false)
+    setPromptRegenBusy(true)
+    try {
+      const aspectRatio = size
+      const res = resolution
+      const style0 = styles[0]
+      const r = await generateImagePrompt({
+        product: nextProduct,
+        language: nextProduct.language || '简体中文',
+        aspectRatio,
+        resolution: res,
+        sceneMode,
+        hotSellingStyle: style0?.description ? style0 : undefined,
+        productAnalysisNotes: analysisText.trim() || undefined,
+      })
+      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, style0?.description ? style0 : null, nextProduct)
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      setAiError(e?.message || '生成出图描述失败')
+    } finally {
+      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+    }
+  }
+
+  const handleProductAnalysisAiOnly = async () => {
+    if (!refImages.length) {
+      window.clearTimeout(oneClickHintTimerRef.current)
+      setOneClickNeedRefHint(true)
+      oneClickHintTimerRef.current = window.setTimeout(() => setOneClickNeedRefHint(false), 4500)
+      return
+    }
+    const stylePick = hotStyles[selectedHotStyleIndex]
+    const jobId = ++aiJobRef.current
+    setAiError('')
+    setIsAiBusy(true)
+    let nextProduct: ProductInfo = productInfo
+    let analysisText = productAnalysisText
+    try {
+      const w = await imageWorkbenchAnalysis({
+        refImage: refImageDataUrl,
+        language: productInfo.language || '简体中文',
+        mode: 'product',
+      })
+      if (jobId !== aiJobRef.current) return
+      nextProduct = {
+        name: w.product?.name || '',
+        category: w.product?.category || '',
+        sellingPoints: w.product?.sellingPoints || '',
+        targetAudience: w.product?.targetAudience || '',
+        language: w.product?.language || productInfo.language || '简体中文',
+      }
+      analysisText = w.productAnalysisText || ''
+      setProductAnalysisText(analysisText)
+      setProductInfo(nextProduct)
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      setAiError(e?.message || '商品分析失败')
+      setIsAiBusy(false)
+      return
+    }
+    setIsAiBusy(false)
+    setPromptRegenBusy(true)
+    try {
+      const aspectRatio = size
+      const res = resolution
+      const r = await generateImagePrompt({
+        product: nextProduct,
+        language: nextProduct.language || '简体中文',
+        aspectRatio,
+        resolution: res,
+        sceneMode,
+        hotSellingStyle: stylePick?.description ? stylePick : undefined,
+        productAnalysisNotes: analysisText.trim() || undefined,
+      })
+      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, stylePick?.description ? stylePick : null, nextProduct)
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      setAiError(e?.message || '生成出图描述失败')
+    } finally {
+      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+    }
+  }
+
+  const handleHotStylesReanalyze = async () => {
+    if (!refImages.length) {
+      window.clearTimeout(oneClickHintTimerRef.current)
+      setOneClickNeedRefHint(true)
+      oneClickHintTimerRef.current = window.setTimeout(() => setOneClickNeedRefHint(false), 4500)
+      return
+    }
+    const jobId = ++aiJobRef.current
+    setAiError('')
+    setIsAiBusy(true)
+    let styles: { title: string; description: string }[] = []
+    let nextIdx = 0
+    try {
+      const w = await imageWorkbenchAnalysis({
+        refImage: refImageDataUrl,
+        language: productInfo.language || '简体中文',
+        mode: 'styles',
+      })
+      if (jobId !== aiJobRef.current) return
+      styles = w.styles || []
+      nextIdx = Math.min(selectedHotStyleIndex, Math.max(0, styles.length - 1))
+      setHotStyles(styles)
+      setSelectedHotStyleIndex(nextIdx)
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      setAiError(e?.message || '爆款风格分析失败')
+      setIsAiBusy(false)
+      return
+    }
+    setIsAiBusy(false)
+    const pick = styles[nextIdx]
+    setPromptRegenBusy(true)
+    try {
+      const aspectRatio = size
+      const res = resolution
+      const r = await generateImagePrompt({
+        product: productInfo,
+        language: productInfo.language || '简体中文',
+        aspectRatio,
+        resolution: res,
+        sceneMode,
+        hotSellingStyle: pick?.description ? pick : undefined,
+        productAnalysisNotes: productAnalysisText.trim() || undefined,
+      })
+      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, pick?.description ? pick : null)
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      setAiError(e?.message || '生成出图描述失败')
+    } finally {
+      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
     }
   }
 
@@ -2841,18 +3057,11 @@ function ImageGenerator({
         aspectRatio,
         resolution: res,
         sceneMode,
+        hotSellingStyle: hotStyles[selectedHotStyleIndex]?.description ? hotStyles[selectedHotStyleIndex] : undefined,
+        productAnalysisNotes: productAnalysisText.trim() || undefined,
       })
       if (jobId !== aiJobRef.current) return
-      setOptimizedNegativePrompt(r.negativePrompt || '')
-      const hint = String((r as any)?.categoryHint || 'other')
-      setCategoryHint(hint)
-      const presetParts = applySceneModePreset(sceneMode, r.parts || {})
-      const initialParts = applyLearnedTweaks(hint, presetParts)
-      setPromptParts(initialParts)
-      const nextP = r.prompt || buildPromptFromParts(initialParts)
-      setOptimizedPrompt(nextP)
-      setPrompt(nextP)
-      setPromptGenOutputSettings({ aspect: aspectRatio, resolution: res })
+      applyGeneratedImagePrompt(jobId, r, aspectRatio, res)
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       alert(e?.message || '重新生成失败')
@@ -2876,17 +3085,11 @@ function ImageGenerator({
           aspectRatio,
           resolution: res,
           sceneMode,
+          hotSellingStyle: hotStyles[selectedHotStyleIndex]?.description ? hotStyles[selectedHotStyleIndex] : undefined,
+          productAnalysisNotes: productAnalysisText.trim() || undefined,
         })
         if (jobId !== aiJobRef.current) return
-        setOptimizedPrompt(r.prompt)
-        setOptimizedNegativePrompt(r.negativePrompt || '')
-        const hint = String((r as any)?.categoryHint || 'other')
-        setCategoryHint(hint)
-        const presetParts = applySceneModePreset(sceneMode, r.parts || {})
-        const initialParts = applyLearnedTweaks(hint, presetParts)
-        setPromptParts(initialParts)
-        setOptimizedPrompt(r.prompt || buildPromptFromParts(initialParts))
-        setPromptGenOutputSettings({ aspect: aspectRatio, resolution: res })
+        applyGeneratedImagePrompt(jobId, r, aspectRatio, res)
       } catch (e: any) {
         if (jobId !== aiJobRef.current) return
         setAiError(e?.message || '提示词生成失败')
@@ -3170,13 +3373,110 @@ function ImageGenerator({
     return next
   }
 
+  const refreshImageScenesPlanWithPrompt = async (
+    basePromptText: string,
+    hotStyleOverride?: { title: string; description: string } | null,
+    productOverride?: ProductInfo,
+  ) => {
+    const base = String(basePromptText || '').trim()
+    if (!base) {
+      setImageScenes(
+        IMAGE_SCENE_BLUEPRINT.map((b) => ({
+          key: b.key,
+          title: b.title,
+          description: '',
+          imagePrompt: '',
+          selected: true,
+        })),
+      )
+      return
+    }
+    const jid = ++scenePlanJobRef.current
+    setScenesPlanBusy(true)
+    try {
+      const stylePick =
+        hotStyleOverride === null
+          ? undefined
+          : hotStyleOverride !== undefined
+            ? hotStyleOverride
+            : hotStyles[selectedHotStyleIndex]?.description
+              ? hotStyles[selectedHotStyleIndex]
+              : undefined
+      const prod = productOverride || productInfo
+      const r = await imageScenePlan({
+        basePrompt: base,
+        negativePrompt: optimizedNegativePrompt || undefined,
+        product: prod,
+        productAnalysisNotes: productAnalysisText.trim() || undefined,
+        hotSellingStyle: stylePick,
+        language: prod.language || '简体中文',
+      })
+      if (jid !== scenePlanJobRef.current) return
+      setImageScenes((prev) => {
+        const list = r.scenes || []
+        return IMAGE_SCENE_BLUEPRINT.map((bp, i) => {
+          const ai = (list[i] || {}) as {
+            title?: string
+            description?: string
+            imagePrompt?: string
+            prompt?: string
+          }
+          const prevRow = prev.find((p) => p.key === bp.key)
+          return {
+            key: bp.key,
+            title: String(ai.title || bp.title).trim() || bp.title,
+            description: String(ai.description || '').trim(),
+            imagePrompt: String(ai.imagePrompt || ai.prompt || '').trim(),
+            selected: prevRow ? prevRow.selected : true,
+          }
+        })
+      })
+    } catch (e: any) {
+      if (jid !== scenePlanJobRef.current) return
+      setAiError(e?.message || '场景方案生成失败')
+    } finally {
+      if (jid === scenePlanJobRef.current) setScenesPlanBusy(false)
+    }
+  }
+
+  const applyGeneratedImagePrompt = (
+    jobId: number,
+    r: Awaited<ReturnType<typeof generateImagePrompt>>,
+    aspectRatio: ImageAspect,
+    res: ImageRes,
+    hotStyleForScenes?: { title: string; description: string } | null,
+    productForScenes?: ProductInfo,
+  ) => {
+    if (jobId !== aiJobRef.current) return
+    setOptimizedNegativePrompt(r.negativePrompt || '')
+    const hint = String((r as any)?.categoryHint || 'other')
+    setCategoryHint(hint)
+    const presetParts = applySceneModePreset(sceneMode, r.parts || {})
+    const initialParts = applyLearnedTweaks(hint, presetParts)
+    const nextP = r.prompt || buildPromptFromParts(initialParts)
+    setOptimizedPrompt(nextP)
+    setPrompt(nextP)
+    setPromptParts(initialParts)
+    setPromptGenOutputSettings({ aspect: aspectRatio, resolution: res })
+    void refreshImageScenesPlanWithPrompt(nextP, hotStyleForScenes, productForScenes)
+  }
+
+  const toggleImageScene = (key: string) => {
+    setImageScenes((prev) => prev.map((s) => (s.key === key ? { ...s, selected: !s.selected } : s)))
+  }
+
   const handleGenerate = async () => {
     if (!refImages.length) {
       alert('请至少上传1张参考图')
       return
     }
-    if (!prompt) {
-      alert('请输入图片描述')
+    if (!prompt.trim()) {
+      alert('请先完成「出图基础描述」（可点「一键填充」或手动编辑）')
+      return
+    }
+    const selectedScenes = imageScenes.filter((s) => s.selected)
+    if (!selectedScenes.length) {
+      alert('请至少勾选一个出图场景')
       return
     }
     setIsGenerating(true)
@@ -3189,59 +3489,96 @@ function ImageGenerator({
       resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
     const refThumb = refImageDataUrl || refImages[0]?.url || ''
     const taskId = `ig_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const outputUrls: string[] = []
+    const sceneLabels: string[] = []
+    const errors: string[] = []
+    const basePrompt = prompt.trim()
+    const ref = refImageDataUrl || undefined
+    const neg = optimizedNegativePrompt || undefined
+    const n = selectedScenes.length
+
     try {
-      const r = await generateImageAPI({
-        prompt,
-        negativePrompt: optimizedNegativePrompt || undefined,
-        model,
-        aspectRatio: size,
-        resolution,
-        refImage: refImageDataUrl || undefined,
-        imageCount,
-      })
+      for (let i = 0; i < n; i++) {
+        const sc = selectedScenes[i]
+        const extra = [sc.imagePrompt, sc.description].filter(Boolean).join('\n')
+        const mergedPrompt = `${basePrompt}\n\n【当前生成场景：${sc.title}】\n${extra}`.trim()
+        try {
+          const r = await generateImageAPI({
+            prompt: mergedPrompt,
+            negativePrompt: neg,
+            model,
+            aspectRatio: size,
+            resolution,
+            refImage: ref,
+            imageCount: 1,
+          })
+          outputUrls.push(r.imageUrl)
+          sceneLabels.push(sc.title)
+          await safeArchiveAsset({
+            source: 'ai_generated',
+            type: 'image',
+            url: r.imageUrl,
+            name: `image-${taskId}-${i + 1}.png`,
+            metadata: { from: 'image_generator', model, size, resolution, scene: sc.title },
+          })
+        } catch (e: any) {
+          errors.push(`${sc.title}：${e?.message || '失败'}`)
+          Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: sc.title } })
+        }
+        setGenProgress(2 + Math.floor(((i + 1) / n) * 93))
+      }
+
+      if (!outputUrls.length) {
+        setGenErrorText(errors.join('\n') || '全部场景生成失败')
+        setGenErrorCode('UNKNOWN')
+        const failTask: ImageGenHistoryTask = {
+          id: taskId,
+          ts: Date.now(),
+          refThumb,
+          prompt: `多场景：${selectedScenes.map((s) => s.title).join('、')}\n────────\n${basePrompt.slice(0, 800)}`,
+          modelId: model,
+          modelLabel,
+          aspect: size,
+          resolutionLabel: resLabel,
+          requestedCount: selectedScenes.length,
+          status: 'failed',
+          outputUrls: [],
+          errorMessage: errors.join('\n') || '生成失败',
+        }
+        setImageGenHistory((prev) => [failTask, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX))
+        stopProgress()
+        setGenProgress(0)
+        return
+      }
+
       const task: ImageGenHistoryTask = {
         id: taskId,
         ts: Date.now(),
         refThumb,
-        prompt,
+        prompt: `多场景：${sceneLabels.join('、')}\n────────\n${basePrompt}`,
         modelId: model,
         modelLabel,
         aspect: size,
         resolutionLabel: resLabel,
-        requestedCount: imageCount,
+        requestedCount: outputUrls.length,
         status: 'completed',
-        outputUrls: [r.imageUrl],
+        outputUrls,
+        sceneLabels,
+        errorMessage: errors.length ? `部分失败：${errors.join('；')}` : undefined,
       }
       setImageGenHistory((prev) => [task, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX))
-      Sentry.captureMessage('image_generation_success', { level: 'info', extra: { model, size, resolution } })
-      await safeArchiveAsset({
-        source: 'ai_generated',
-        type: 'image',
-        url: r.imageUrl,
-        name: `image-${Date.now()}.png`,
-        metadata: { from: 'image_generator', model, size, resolution },
-      })
+      if (errors.length) {
+        setGenErrorText(`部分场景未生成：${errors.join('；')}`)
+        setGenErrorCode('PARTIAL')
+      } else {
+        Sentry.captureMessage('image_generation_success', { level: 'info', extra: { model, size, resolution, scenes: outputUrls.length } })
+      }
       stopProgress()
       await completeGenProgress()
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution } })
       setGenErrorText(e?.message || '生成失败')
       setGenErrorCode(e?.code || 'UNKNOWN')
-      const failTask: ImageGenHistoryTask = {
-        id: taskId,
-        ts: Date.now(),
-        refThumb,
-        prompt,
-        modelId: model,
-        modelLabel,
-        aspect: size,
-        resolutionLabel: resLabel,
-        requestedCount: imageCount,
-        status: 'failed',
-        outputUrls: [],
-        errorMessage: e?.message || '生成失败',
-      }
-      setImageGenHistory((prev) => [failTask, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX))
       stopProgress()
       setGenProgress(0)
     } finally {
@@ -3272,7 +3609,7 @@ function ImageGenerator({
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
-          <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">一键生成提示词</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
+          <div className="p-6 border-b flex items-center justify-between"><h3 className="text-xl font-bold">结构化提示词 · 高级编辑</h3><button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button></div>
           <div className="px-6 py-4 border-b bg-gray-50">
             <div className="flex items-center justify-center gap-4">
               {[{ title: '商品信息解析', idx: 1 as const }, { title: '图片优化提示词', idx: 2 as const }].map((step, i) => {
@@ -3429,7 +3766,7 @@ function ImageGenerator({
                 </button>
                 <div className="flex flex-col items-center text-center pt-1">
                   <RefreshCw className="w-5 h-5 text-purple-600 animate-spin mb-3 shrink-0" />
-                  <div className="font-medium">{modalStep === 2 ? '图片优化提示词AI生成中' : '商品信息解析中'}</div>
+                  <div className="font-medium">{modalStep === 2 ? '出图描述与结构化提示词生成中' : '商品信息编辑'}</div>
                   <div className="text-sm text-gray-500 mt-1">请稍等，预计几秒钟...</div>
                 </div>
               </div>
@@ -3690,45 +4027,125 @@ function ImageGenerator({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">生成张数</label>
-            <select value={imageCount} onChange={(e) => setImageCount(Number(e.target.value) as 1 | 2 | 3 | 4)} className="w-full px-3 py-2 border rounded-lg text-sm">
-              {[1, 2, 3, 4].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+            <label className="block text-sm font-medium mb-1">出图张数</label>
+            <div className="w-full px-3 py-2 border rounded-lg text-sm text-white/65 bg-white/[0.02] border-white/10">
+              按所选场景各生成 1 张（多选即多次调用当前模型）
+            </div>
           </div>
         </div>
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">提示词</div>
-            <ImageFormTip
-              wide
-              label="提示词说明"
-              text={`最终出图以本页「画面描述」文本框里的完整 prompt 为准；结构化分块请在一键生成弹窗内编辑。
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">商品分析与爆款风格</div>
+              <ImageFormTip
+                wide
+                label="说明"
+                text={`「一键填充」会以第一张主参考图调用 GPT-4o，同时生成商品分析与 4 组爆款风格。
 
-一键生成会读取当前的模型、画幅与分辨率。若你改了画幅/分辨率，页面可能出现提醒条，可用「按当前设置重新生成」或重新走一键流程。`}
+也可分别点击「AI 生成」「重新分析」单独更新对应模块。出图基础描述会结合所选爆款风格与商品分析生成；之后 GPT-4o 再规划 6 组场景，您可勾选后由当前图片模型逐场景出图。`}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleOneClickFill()}
+              disabled={isAiBusy || promptRegenBusy}
+              title={refImages.length ? '一键填充商品分析与爆款风格' : '需先上传参考图'}
+              className={`px-3 py-1.5 rounded-full text-sm flex items-center shrink-0 transition-colors ${
+                isAiBusy || promptRegenBusy
+                  ? 'opacity-45 cursor-not-allowed bg-white/[0.06] text-white/40 border border-white/10'
+                  : refImages.length
+                    ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-transparent'
+                    : 'cursor-pointer bg-white/[0.05] text-white/38 border border-white/[0.10] hover:bg-white/[0.08] hover:text-white/50'
+              }`}
+            >
+              <Wand2 className="w-4 h-4 mr-1 shrink-0 opacity-90" /> 一键填充
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-white/12 bg-white/[0.03] p-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-medium text-white/88">商品分析</span>
+              <button
+                type="button"
+                onClick={() => void handleProductAnalysisAiOnly()}
+                disabled={isAiBusy || promptRegenBusy}
+                className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> AI 生成
+              </button>
+            </div>
+            <textarea
+              value={productAnalysisText}
+              onChange={(e) => setProductAnalysisText(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl min-h-[160px] text-sm leading-relaxed bg-black/25 border border-white/10 text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+              placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
           </div>
+
+          <div className="rounded-xl border border-white/12 bg-white/[0.03] p-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+              <div>
+                <div className="text-sm font-medium text-white/88">爆款风格选择</div>
+                <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
+                  基于您选择的 Amazon 平台，为您推荐以下爆款图片风格
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleHotStylesReanalyze()}
+                disabled={isAiBusy || promptRegenBusy}
+                className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 shrink-0 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> 重新分析
+              </button>
+            </div>
+            {hotStyles.length === 0 ? (
+              <div className="text-center text-xs text-white/40 py-8 border border-dashed border-white/12 rounded-xl">
+                上传主参考图后，使用「一键填充」或「重新分析」生成 4 组风格（标题建议 4 字）
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {hotStyles.map((st, idx) => (
+                  <button
+                    key={`${st.title}_${idx}`}
+                    type="button"
+                    onClick={() => void selectHotStyleAndRegeneratePrompt(idx)}
+                    disabled={promptRegenBusy}
+                    className={`text-left rounded-xl border p-3 transition-all disabled:opacity-50 ${
+                      selectedHotStyleIndex === idx
+                        ? 'ring-2 ring-white/85 border-white/45 bg-white/[0.08]'
+                        : 'border-white/12 bg-white/[0.02] hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-white/92 tracking-wide">{st.title}</div>
+                    <p className="text-[11px] text-white/52 mt-1.5 leading-relaxed line-clamp-4">{st.description}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {outputSpecsMismatch ? (
-            <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-xs text-amber-900">
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100/95">
               <span>
-                输出规格已变更（当前 {size} / {formatImageResLabel(resolution)}，生成提示词时为 {promptGenOutputSettings!.aspect} /{' '}
-                {formatImageResLabel(promptGenOutputSettings!.resolution)}）。建议按新规格重新生成提示词。
+                输出规格已变更（当前 {size} / {formatImageResLabel(resolution)}，生成描述时为 {promptGenOutputSettings!.aspect} /{' '}
+                {formatImageResLabel(promptGenOutputSettings!.resolution)}）。建议按新规格重新生成。
               </span>
               <button
                 type="button"
                 disabled={promptRegenBusy || isAiBusy}
                 onClick={() => void handleRegeneratePromptWithCurrentOutput()}
-                className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 disabled:opacity-50"
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/90 text-amber-950 text-xs font-medium hover:bg-amber-400 disabled:opacity-50"
               >
                 {promptRegenBusy ? '生成中...' : '按当前设置重新生成'}
               </button>
             </div>
           ) : null}
-          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-            <label className="block text-sm font-medium">画面描述</label>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <label className="block text-sm font-medium text-white/88">出图基础描述</label>
             <div className="flex items-center gap-2 flex-wrap justify-end min-w-0">
               {oneClickNeedRefHint ? (
                 <span className="text-xs text-amber-400/95 whitespace-nowrap shrink-0" role="status">
@@ -3737,33 +4154,101 @@ function ImageGenerator({
               ) : null}
               <button
                 type="button"
-                onClick={() => void handlePromptGen()}
-                disabled={isAiBusy || promptRegenBusy}
-                title={refImages.length ? '一键生成提示词' : '需先上传参考图'}
-                className={`px-3 py-1.5 rounded-full text-sm flex items-center shrink-0 transition-colors ${
-                  isAiBusy || promptRegenBusy
-                    ? 'opacity-45 cursor-not-allowed bg-white/[0.06] text-white/40 border border-white/10'
-                    : refImages.length
-                      ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-transparent'
-                      : 'cursor-pointer bg-white/[0.05] text-white/38 border border-white/[0.10] hover:bg-white/[0.08] hover:text-white/50'
-                }`}
+                onClick={() => openAdvancedPromptModal()}
+                disabled={isAiBusy}
+                className="text-xs px-2.5 py-1 rounded-lg border border-white/15 text-white/55 hover:text-white/80 hover:bg-white/[0.06] disabled:opacity-45"
               >
-                <Sparkles className="w-4 h-4 mr-1 shrink-0 opacity-90" /> 一键生成
+                结构化编辑（高级）
               </button>
             </div>
           </div>
-          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="描述画面与风格，或点「一键生成」…" />
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="w-full px-4 py-3 border border-white/12 rounded-xl min-h-[120px] text-sm bg-black/20 text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+            placeholder="由 AI 根据商品分析与爆款风格生成，也可直接手写…"
+          />
+
+          <div className="mt-5 pt-4 border-t border-white/10">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+              <div>
+                <div className="text-sm font-medium text-white/88">场景出图</div>
+                <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
+                  GPT-4o 规划 6 组场景，默认全选；取消勾选可跳过。点击下方按钮将用当前模型对所选场景逐张出图。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshImageScenesPlanWithPrompt(prompt)}
+                disabled={scenesPlanBusy || !prompt.trim() || isAiBusy}
+                className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 shrink-0 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
+              >
+                {scenesPlanBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                刷新场景方案
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {imageScenes.map((sc) => (
+                <button
+                  key={sc.key}
+                  type="button"
+                  onClick={() => toggleImageScene(sc.key)}
+                  className={`text-left rounded-xl border p-3 transition-all relative ${
+                    sc.selected ? 'ring-2 ring-white/75 border-white/35 bg-white/[0.06]' : 'border-white/10 bg-white/[0.02] hover:border-white/18'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-white/90 rounded-full border border-white/18 px-2 py-0.5 leading-tight">
+                      {sc.title}
+                    </span>
+                    <span
+                      className={`w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${
+                        sc.selected ? 'bg-violet-500 border-violet-300 text-white' : 'border-white/25 bg-transparent'
+                      }`}
+                    >
+                      {sc.selected ? <Check className="w-3 h-3" strokeWidth={2.5} /> : null}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-white/48 mt-2 leading-relaxed line-clamp-3">
+                    {sc.description || '（尚未生成方案，请点击「刷新场景方案」）'}
+                  </p>
+                </button>
+              ))}
+            </div>
+            {aiError ? (
+              <div className="mt-3 text-xs text-red-200/95 bg-red-500/12 border border-red-400/25 rounded-lg px-3 py-2">{aiError}</div>
+            ) : null}
+          </div>
         </div>
-        <div className="text-xs text-gray-500 mb-2 text-center sm:text-left">
-          本次生成：<span className="text-gray-700 font-medium">{currentModelLabel}</span>
-          <span className="mx-1.5 text-gray-300">·</span>
+        <div className="text-xs text-white/50 mb-2 text-center sm:text-left">
+          已选 <span className="text-white/80 font-medium tabular-nums">{imageScenes.filter((s) => s.selected).length}</span> 个场景 ·{' '}
+          <span className="text-white/75 font-medium">{currentModelLabel}</span>
+          <span className="mx-1.5 text-white/20">·</span>
           {size}
-          <span className="mx-1.5 text-gray-300">·</span>
+          <span className="mx-1.5 text-white/20">·</span>
           {formatImageResLabel(resolution)}
-          <span className="mx-1.5 text-gray-300">·</span>
-          {imageCount} 张
         </div>
-        <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成图片'}</button>
+        <button
+          onClick={() => void handleGenerate()}
+          disabled={
+            isGenerating ||
+            !prompt.trim() ||
+            !imageScenes.some((s) => s.selected)
+          }
+          className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
+        >
+          {isGenerating ? (
+            <>
+              <RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />
+              生成中...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5 mr-2 inline opacity-95" />
+              一键生成图片（{imageScenes.filter((s) => s.selected).length}）
+            </>
+          )}
+        </button>
       </div>
       <div className="bg-white rounded-2xl p-6 shadow-lg lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
         <h2 className="text-xl font-bold mb-4 text-white/95">生成历史</h2>
@@ -3828,10 +4313,6 @@ function ImageGenerator({
                         <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
                           {task.resolutionLabel}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                          <Images className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                          {task.status === 'completed' ? `${task.outputUrls.length}/${task.requestedCount}` : `0/${task.requestedCount}`}
-                        </span>
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
                             task.status === 'completed'
@@ -3857,12 +4338,16 @@ function ImageGenerator({
                             <div className="w-full h-full flex items-center justify-center text-[10px] text-white/30">无</div>
                           )}
                         </button>
-                        <p
-                          title={task.prompt}
-                          className="image-history-prompt-clamp text-xs text-white/78 leading-relaxed flex-1 min-w-0 text-left cursor-default"
-                        >
-                          {task.prompt || '（无提示词）'}
-                        </p>
+                        <div className="group/prompt relative flex-1 min-w-0">
+                          <p className="image-history-prompt-clamp text-xs text-white/78 leading-relaxed text-left cursor-help break-words">
+                            {task.prompt || '（无提示词）'}
+                          </p>
+                          <div className="pointer-events-none absolute left-0 top-full z-40 -mt-1 w-full max-w-[min(100%,22rem)] pt-1 opacity-0 transition-opacity duration-75 ease-out group-hover/prompt:pointer-events-auto group-hover/prompt:opacity-100">
+                            <div className="image-form-tip-pop rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed text-white/92 shadow-2xl max-h-52 overflow-y-auto whitespace-pre-wrap break-words">
+                              {task.prompt || '（无提示词）'}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       {task.status === 'failed' && task.errorMessage ? (
                         <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
@@ -3883,6 +4368,11 @@ function ImageGenerator({
                                 title="点击放大"
                               >
                                 <img src={url} alt="" className="w-full h-full object-cover" />
+                                {task.sceneLabels?.[idx] ? (
+                                  <span className="absolute left-1 bottom-1 right-8 px-1.5 py-0.5 rounded-md bg-black/70 text-[9px] text-white/90 leading-tight line-clamp-2 text-left pointer-events-none">
+                                    {task.sceneLabels[idx]}
+                                  </span>
+                                ) : null}
                               </button>
                               <a
                                 href={url}

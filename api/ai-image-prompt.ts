@@ -36,13 +36,15 @@ export default async function handler(req, res) {
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
 
-    const { product, language, aspectRatio, resolution, sceneMode } = req.body || {}
+    const { product, language, aspectRatio, resolution, sceneMode, hotSellingStyle, productAnalysisNotes } = req.body || {}
     if (!product) return res.status(400).json({ success: false, error: '缺少product' })
 
     if (!apiKey) {
       return res.status(200).json({
         success: true,
-        prompt: `${product.name || '产品'}，${product.category || ''}，突出：${product.sellingPoints || ''}，面向：${product.targetAudience || ''}`,
+        prompt: `${product.name || '产品'}，${product.category || ''}，突出：${product.sellingPoints || ''}，面向：${product.targetAudience || ''}${
+          hotSellingStyle?.description ? `，风格：${hotSellingStyle.title || ''} ${hotSellingStyle.description}` : ''
+        }`,
         _mock: true,
       })
     }
@@ -132,6 +134,12 @@ export default async function handler(req, res) {
               `输出语言：${language || product.language || '简体中文'}`,
               `模式：${String(sceneMode || 'clean')}（clean=主图干净；lite=轻场景）`,
               aspectRatio || resolution ? `画幅约束：比例=${aspectRatio || '未指定'}，目标分辨率档位=${resolution || '未指定'}` : '',
+              hotSellingStyle?.description || hotSellingStyle?.title
+                ? `用户选择的爆款风格（必须融入画面与光影构图，但不编造商品事实）：${String(hotSellingStyle.title || '').trim()} —— ${String(hotSellingStyle.description || '').trim()}`
+                : '',
+              productAnalysisNotes
+                ? `商品分析全文（用户可编辑，优先参考其中的场景与人群细节；仍须遵守禁止编造规则）：\n${String(productAnalysisNotes).slice(0, 12000)}`
+                : '',
               `商品信息：${JSON.stringify(product)}`,
               [
                 '请生成适用于“电商主图/投放素材”的图片生成提示词。构图必须适配画幅约束：主体清晰占比高、留白合理（便于后期贴标/标题）、背景干净不抢戏。',
