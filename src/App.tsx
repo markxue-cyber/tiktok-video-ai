@@ -219,14 +219,29 @@ type SceneRunBoard = {
   slots: SceneRunSlot[]
 }
 
-/** 是否允许点「一键生成图片」：仅已选中且仍为 pending / failed 的槽（已生成 done 不可再出） */
-function sceneBoardAllowsBatchGenerate(board: SceneRunBoard | null, batchBusy: boolean): boolean {
-  if (!board || batchBusy) return false
-  if (board.slots.some((s) => s.selected && s.status === 'generating')) return false
+/** 是否允许点「一键生成图片」：已选中里仍有 pending / failed 即可（可与其它槽并发生成中） */
+function sceneBoardAllowsBatchGenerate(board: SceneRunBoard | null): boolean {
+  if (!board) return false
   const sel = board.slots.filter((s) => s.selected)
   if (!sel.length) return false
   return sel.some((s) => s.status === 'pending' || s.status === 'failed')
 }
+
+/** 删除主参考/放弃看板时：把进行中的槽视为未出图，便于历史记为「已完成」且只展示已出好的图 */
+function sceneBoardForgetInflightSlots(board: SceneRunBoard): SceneRunBoard {
+  return {
+    ...board,
+    slots: board.slots.map((s) =>
+      s.status === 'generating'
+        ? { ...s, status: 'pending' as const, error: undefined, imageUrl: undefined }
+        : s,
+    ),
+  }
+}
+
+type SceneSlotGenResult =
+  | { slotIndex: number; ok: true; imageUrl: string }
+  | { slotIndex: number; ok: false; error: string }
 
 const IMAGE_SCENE_BLUEPRINT = [
   { key: 'commercial_white', title: '商业白底主图' },
@@ -2829,6 +2844,16 @@ function ImageGenerator({
   const aiJobRef = useRef(0)
   const [promptGenOutputSettings, setPromptGenOutputSettings] = useState<{ aspect: ImageAspect; resolution: ImageRes } | null>(null)
   const [promptRegenBusy, setPromptRegenBusy] = useState(false)
+  /** 与 promptRegenBusy 同步：各按钮独立「生成描述中」文案 */
+  const [promptRegenSource, setPromptRegenSource] = useState<
+    'oneClick' | 'product' | 'styles' | 'styleCard' | 'spec' | null
+  >(null)
+  /** 仅顶部「重新分析」整条 full 分析 */
+  const [workbenchFullAnalysisBusy, setWorkbenchFullAnalysisBusy] = useState(false)
+  /** 仅商品区「AI 生成」第一步 */
+  const [productAnalysisOnlyBusy, setProductAnalysisOnlyBusy] = useState(false)
+  /** 仅画面方案行「重新分析」第一步 */
+  const [hotStylesReanalyzeBusy, setHotStylesReanalyzeBusy] = useState(false)
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
   const oneClickHintTimerRef = useRef(0)
   /** 商品分析 + 画面方案：默认折叠，上传参考图并点击「一键分析」后展开 */
@@ -2840,6 +2865,8 @@ function ImageGenerator({
   /** IndexedDB / localStorage 恢复完成前禁止写入，避免用空状态覆盖已保存数据 */
   const [imageGenPersistenceReady, setImageGenPersistenceReady] = useState(false)
   const sceneRunBoardRef = useRef<SceneRunBoard | null>(null)
+  /** 并行多波「一键生成」计数，避免互斥导致第二批无法点击 */
+  const sceneBatchDepthRef = useRef(0)
   const [sceneBoardPreparing, setSceneBoardPreparing] = useState(false)
   const [customStyleModalOpen, setCustomStyleModalOpen] = useState(false)
   const [customStylePromptOnly, setCustomStylePromptOnly] = useState('')
@@ -2851,6 +2878,9 @@ function ImageGenerator({
   const stylePromptAnchorRef = useRef<HTMLDivElement | null>(null)
   const stylePromptLeaveTimerRef = useRef<number | null>(null)
   const [sceneBatchGenerating, setSceneBatchGenerating] = useState(false)
+  /** 各场景槽出图进度（API 无真实进度，按耗时指数趋近 ~94%） */
+  const [sceneSlotGenProgress, setSceneSlotGenProgress] = useState<Record<number, number>>({})
+  const sceneGenProgressTimersRef = useRef<Record<number, number>>({})
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
     IMAGE_SCENE_BLUEPRINT.map((b) => ({
       key: b.key,
@@ -3010,6 +3040,57 @@ function ImageGenerator({
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
 
+  const sceneBoardSlotGenSignature = useMemo(() => {
+    if (!sceneRunBoard) return ''
+    return `${sceneRunBoard.id}|${sceneRunBoard.slots.map((s) => s.status).join(',')}`
+  }, [sceneRunBoard])
+
+  useEffect(() => {
+    if (!sceneRunBoard) {
+      Object.values(sceneGenProgressTimersRef.current).forEach((t) => window.clearInterval(t))
+      sceneGenProgressTimersRef.current = {}
+      setSceneSlotGenProgress({})
+      return
+    }
+    const genIdx = sceneRunBoard.slots
+      .map((s, i) => (s.status === 'generating' ? i : -1))
+      .filter((i) => i >= 0)
+    Object.keys(sceneGenProgressTimersRef.current).forEach((ks) => {
+      const idx = Number(ks)
+      if (!genIdx.includes(idx)) {
+        window.clearInterval(sceneGenProgressTimersRef.current[idx])
+        delete sceneGenProgressTimersRef.current[idx]
+      }
+    })
+    setSceneSlotGenProgress((prev) => {
+      const next = { ...prev }
+      for (const k of Object.keys(next)) {
+        if (!genIdx.includes(Number(k))) delete next[Number(k)]
+      }
+      return next
+    })
+    const cap = 94
+    const tauMs = 44000
+    for (const idx of genIdx) {
+      if (sceneGenProgressTimersRef.current[idx] != null) continue
+      setSceneSlotGenProgress((p) => ({ ...p, [idx]: Math.max(p[idx] ?? 0, 2) }))
+      const startedAt = Date.now()
+      sceneGenProgressTimersRef.current[idx] = window.setInterval(() => {
+        const elapsed = Date.now() - startedAt
+        const eased = 1 - Math.exp(-elapsed / tauMs)
+        const v = Math.min(cap, Math.round(2 + (cap - 2) * eased))
+        setSceneSlotGenProgress((p) => ({ ...p, [idx]: v }))
+      }, 320)
+    }
+  }, [sceneBoardSlotGenSignature])
+
+  useEffect(() => {
+    return () => {
+      Object.values(sceneGenProgressTimersRef.current).forEach((t) => window.clearInterval(t))
+      sceneGenProgressTimersRef.current = {}
+    }
+  }, [])
+
   useEffect(() => {
     if (!imageGenPersistenceReady) return
     void (async () => {
@@ -3159,10 +3240,24 @@ function ImageGenerator({
 
   /** 删除主参考图后清空与本次分析/场景相关的编辑态（不删生成历史归档） */
   const clearImageGenPageAfterMainRefRemoved = () => {
-    const boardId = sceneRunBoardRef.current?.id
-    if (boardId) {
-      setImageGenHistory((prev) => prev.filter((t) => t.id !== boardId))
+    const snap = sceneRunBoardRef.current
+    if (snap?.slots.some((s) => s.status === 'done' && s.imageUrl)) {
+      const resLb =
+        resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
+      const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
+      const normalized = sceneBoardForgetInflightSlots(snap)
+      const built = buildHistoryTaskFromSceneBoard(normalized, model, modelLabel, size, resLb)
+      setImageGenHistory((prev) => {
+        const i = prev.findIndex((t) => t.id === built.id)
+        const keepTs = i >= 0 ? prev[i].ts : built.ts
+        const rest = prev.filter((t) => t.id !== built.id)
+        return [{ ...built, ts: keepTs }, ...rest].slice(0, IMAGE_GEN_HISTORY_MAX)
+      })
+    } else if (snap) {
+      setImageGenHistory((prev) => prev.filter((t) => t.id !== snap.id))
     }
+    sceneBatchDepthRef.current = 0
+    setSceneBatchGenerating(false)
     setHotStyles([])
     setSelectedHotStyleIndex(0)
     setProductAnalysisText('')
@@ -3437,6 +3532,7 @@ function ImageGenerator({
   const regeneratePromptFromStyleApi = async (idx: number) => {
     if (!hotStyles[idx]) return
     const jobId = ++aiJobRef.current
+    setPromptRegenSource('styleCard')
     setPromptRegenBusy(true)
     setAiError('')
     try {
@@ -3461,7 +3557,10 @@ function ImageGenerator({
       if (jobId !== aiJobRef.current) return
       alert(e?.message || '更新画面描述失败')
     } finally {
-      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+      if (jobId === aiJobRef.current) {
+        setPromptRegenBusy(false)
+        setPromptRegenSource(null)
+      }
     }
   }
 
@@ -3487,7 +3586,7 @@ function ImageGenerator({
     const jobId = ++aiJobRef.current
     setOneClickNeedRefHint(false)
     setAiError('')
-    setIsAiBusy(true)
+    setWorkbenchFullAnalysisBusy(true)
     let nextProduct: ProductInfo = productInfo
     let analysisText = productAnalysisText
     let styles: { title: string; description: string; imagePrompt?: string }[] = hotStyles
@@ -3514,10 +3613,11 @@ function ImageGenerator({
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '分析失败')
-      setIsAiBusy(false)
       return
+    } finally {
+      if (aiJobRef.current === jobId) setWorkbenchFullAnalysisBusy(false)
     }
-    setIsAiBusy(false)
+    if (jobId !== aiJobRef.current) return
     const style0 = styles[0]
     const ip0 = String(style0?.imagePrompt || '').trim()
     if (ip0 && jobId === aiJobRef.current) {
@@ -3525,6 +3625,7 @@ function ImageGenerator({
       setProductStylePanelOpen(true)
       return
     }
+    setPromptRegenSource('oneClick')
     setPromptRegenBusy(true)
     try {
       const aspectRatio = size
@@ -3556,7 +3657,10 @@ function ImageGenerator({
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
     } finally {
-      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+      if (jobId === aiJobRef.current) {
+        setPromptRegenBusy(false)
+        setPromptRegenSource(null)
+      }
     }
   }
 
@@ -3571,7 +3675,7 @@ function ImageGenerator({
     const stylePick = hotStyles[selStyleIdx]
     const jobId = ++aiJobRef.current
     setAiError('')
-    setIsAiBusy(true)
+    setProductAnalysisOnlyBusy(true)
     let nextProduct: ProductInfo = productInfo
     let analysisText = productAnalysisText
     try {
@@ -3595,10 +3699,12 @@ function ImageGenerator({
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '商品分析失败')
-      setIsAiBusy(false)
       return
+    } finally {
+      if (aiJobRef.current === jobId) setProductAnalysisOnlyBusy(false)
     }
-    setIsAiBusy(false)
+    if (jobId !== aiJobRef.current) return
+    setPromptRegenSource('product')
     setPromptRegenBusy(true)
     try {
       const aspectRatio = size
@@ -3630,7 +3736,10 @@ function ImageGenerator({
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
     } finally {
-      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+      if (jobId === aiJobRef.current) {
+        setPromptRegenBusy(false)
+        setPromptRegenSource(null)
+      }
     }
   }
 
@@ -3643,7 +3752,7 @@ function ImageGenerator({
     }
     const jobId = ++aiJobRef.current
     setAiError('')
-    setIsAiBusy(true)
+    setHotStylesReanalyzeBusy(true)
     let styles: { title: string; description: string; imagePrompt?: string }[] = []
     let nextIdx = 0
     try {
@@ -3660,16 +3769,18 @@ function ImageGenerator({
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '爆款风格分析失败')
-      setIsAiBusy(false)
       return
+    } finally {
+      if (aiJobRef.current === jobId) setHotStylesReanalyzeBusy(false)
     }
-    setIsAiBusy(false)
+    if (jobId !== aiJobRef.current) return
     const pick = styles[nextIdx]
     const ip = String(pick?.imagePrompt || '').trim()
     if (ip && jobId === aiJobRef.current) {
       applyStyleCardAsMainPrompt(jobId, pick)
       return
     }
+    setPromptRegenSource('styles')
     setPromptRegenBusy(true)
     try {
       const aspectRatio = size
@@ -3698,7 +3809,10 @@ function ImageGenerator({
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
     } finally {
-      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+      if (jobId === aiJobRef.current) {
+        setPromptRegenBusy(false)
+        setPromptRegenSource(null)
+      }
     }
   }
 
@@ -3710,6 +3824,7 @@ function ImageGenerator({
       return
     }
     const jobId = ++aiJobRef.current
+    setPromptRegenSource('spec')
     setPromptRegenBusy(true)
     setAiError('')
     try {
@@ -3743,7 +3858,10 @@ function ImageGenerator({
       if (jobId !== aiJobRef.current) return
       alert(e?.message || '重新生成失败')
     } finally {
-      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+      if (jobId === aiJobRef.current) {
+        setPromptRegenBusy(false)
+        setPromptRegenSource(null)
+      }
     }
   }
 
@@ -3962,6 +4080,11 @@ function ImageGenerator({
   const handleCloseAiBusy = () => {
     aiJobRef.current += 1
     setIsAiBusy(false)
+    setWorkbenchFullAnalysisBusy(false)
+    setProductAnalysisOnlyBusy(false)
+    setHotStylesReanalyzeBusy(false)
+    setPromptRegenBusy(false)
+    setPromptRegenSource(null)
     setAiError('')
     if (modalStep === 1) {
       setShowModal(false)
@@ -4202,6 +4325,57 @@ function ImageGenerator({
     return `${basePrompt}\n\n【当前生成场景：${slot.title}】\n${extra}`.trim()
   }
 
+  const applySceneSlotResultsToBoard = (boardId: string, results: SceneSlotGenResult[]) => {
+    if (!results.length) return
+    setSceneRunBoard((b) => {
+      if (!b || b.id !== boardId) return b
+      const byI = new Map(results.map((r) => [r.slotIndex, r]))
+      return {
+        ...b,
+        slots: b.slots.map((s, i) => {
+          const row = byI.get(i)
+          if (!row) return s
+          if (row.ok === true) return { ...s, status: 'done' as const, imageUrl: row.imageUrl, error: undefined }
+          return { ...s, status: 'failed' as const, error: row.error, imageUrl: undefined }
+        }),
+      }
+    })
+  }
+
+  const executeSceneSlotGenerationOnce = async (
+    boardId: string,
+    slotIndex: number,
+    basePrompt: string,
+    slot: SceneRunSlot,
+    refUrl: string | undefined,
+    neg: string | undefined,
+  ): Promise<SceneSlotGenResult> => {
+    if (!slot.selected) return { slotIndex, ok: false, error: '未选中' }
+    const mergedPrompt = mergeScenePromptForSlot(basePrompt, slot)
+    try {
+      const r = await generateImageAPI({
+        prompt: mergedPrompt,
+        negativePrompt: neg,
+        model,
+        aspectRatio: size,
+        resolution,
+        refImage: refUrl,
+        imageCount: 1,
+      })
+      await safeArchiveAsset({
+        source: 'ai_generated',
+        type: 'image',
+        url: r.imageUrl,
+        name: `image-${boardId}-${slotIndex + 1}.png`,
+        metadata: { from: 'image_generator', model, size, resolution, scene: slot.title },
+      })
+      return { slotIndex, ok: true, imageUrl: r.imageUrl }
+    } catch (e: any) {
+      Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: slot.title } })
+      return { slotIndex, ok: false, error: e?.message || '失败' }
+    }
+  }
+
   const handlePrepareSceneBoard = async () => {
     if (!refImages.length) {
       alert('请至少上传1张参考图')
@@ -4257,50 +4431,10 @@ function ImageGenerator({
     basePrompt: string,
     slot: SceneRunSlot,
   ) => {
-    if (!slot.selected) return
-    const mergedPrompt = mergeScenePromptForSlot(basePrompt, slot)
     const ref = refImageDataUrl || undefined
     const neg = optimizedNegativePrompt || undefined
-    try {
-      const r = await generateImageAPI({
-        prompt: mergedPrompt,
-        negativePrompt: neg,
-        model,
-        aspectRatio: size,
-        resolution,
-        refImage: ref,
-        imageCount: 1,
-      })
-      await safeArchiveAsset({
-        source: 'ai_generated',
-        type: 'image',
-        url: r.imageUrl,
-        name: `image-${boardId}-${slotIndex + 1}.png`,
-        metadata: { from: 'image_generator', model, size, resolution, scene: slot.title },
-      })
-      setSceneRunBoard((b) => {
-        if (!b || b.id !== boardId) return b
-        return {
-          ...b,
-          slots: b.slots.map((s, i) =>
-            i === slotIndex ? { ...s, status: 'done' as const, imageUrl: r.imageUrl, error: undefined } : s,
-          ),
-        }
-      })
-    } catch (e: any) {
-      Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: slot.title } })
-      setSceneRunBoard((b) => {
-        if (!b || b.id !== boardId) return b
-        return {
-          ...b,
-          slots: b.slots.map((s, i) =>
-            i === slotIndex
-              ? { ...s, status: 'failed' as const, error: e?.message || '失败', imageUrl: undefined }
-              : s,
-          ),
-        }
-      })
-    }
+    const result = await executeSceneSlotGenerationOnce(boardId, slotIndex, basePrompt, slot, ref, neg)
+    applySceneSlotResultsToBoard(boardId, [result])
   }
 
   const handleGenerateSceneSlot = async (boardId: string, slotIndex: number) => {
@@ -4330,9 +4464,10 @@ function ImageGenerator({
   }
 
   const toggleSceneSlotSelected = (boardId: string, slotIndex: number) => {
-    if (sceneBatchGenerating) return
     setSceneRunBoard((b) => {
       if (!b || b.id !== boardId) return b
+      const cur = b.slots[slotIndex]
+      if (cur?.status === 'generating') return b
       return {
         ...b,
         slots: b.slots.map((s, i) => (i === slotIndex ? { ...s, selected: !s.selected } : s)),
@@ -4355,6 +4490,9 @@ function ImageGenerator({
     const snap = board
     const basePrompt = snap.basePrompt
     const slotSnap = indices.map((i) => ({ i, slot: { ...snap.slots[i] } }))
+    const refUrl = refImageDataUrl || undefined
+    const neg = optimizedNegativePrompt || undefined
+    sceneBatchDepthRef.current += 1
     setSceneBatchGenerating(true)
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
@@ -4371,11 +4509,15 @@ function ImageGenerator({
     })
     try {
       await new Promise<void>((r) => setTimeout(r, 0))
-      await Promise.all(
-        slotSnap.map(({ i, slot }) => runSceneSlotGeneration(snap.id, i, basePrompt, slot)),
+      const results = await Promise.all(
+        slotSnap.map(({ i, slot }) =>
+          executeSceneSlotGenerationOnce(snap.id, i, basePrompt, slot, refUrl, neg),
+        ),
       )
+      applySceneSlotResultsToBoard(snap.id, results)
     } finally {
-      setSceneBatchGenerating(false)
+      sceneBatchDepthRef.current = Math.max(0, sceneBatchDepthRef.current - 1)
+      setSceneBatchGenerating(sceneBatchDepthRef.current > 0)
     }
   }
 
@@ -4440,6 +4582,13 @@ function ImageGenerator({
   const outputSpecsMismatch =
     !!promptGenOutputSettings &&
     (promptGenOutputSettings.aspect !== size || promptGenOutputSettings.resolution !== resolution)
+
+  const workbenchOpsLocked =
+    workbenchFullAnalysisBusy ||
+    productAnalysisOnlyBusy ||
+    hotStylesReanalyzeBusy ||
+    promptRegenBusy ||
+    isAiBusy
 
   if (showModal) {
     return (
@@ -4902,18 +5051,26 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleOneClickFill()}
-                disabled={isAiBusy || promptRegenBusy}
+                disabled={workbenchOpsLocked}
                 title={refImages.length ? '重新分析商品与画面方案' : '需先上传参考图'}
                 className={`flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  isAiBusy || promptRegenBusy
+                  workbenchOpsLocked
                     ? 'cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 opacity-45'
                     : refImages.length
                       ? 'border border-transparent bg-purple-50 text-purple-700 hover:bg-purple-100'
                       : 'cursor-pointer border border-white/[0.10] bg-white/[0.05] text-white/38 hover:bg-white/[0.08] hover:text-white/50'
                 }`}
               >
-                {isAiBusy ? <RefreshCw className="mr-1 h-4 w-4 shrink-0 animate-spin opacity-90" /> : <Wand2 className="mr-1 h-4 w-4 shrink-0 opacity-90" />}
-                {isAiBusy ? '分析中…' : '重新分析'}
+                {workbenchFullAnalysisBusy || (promptRegenBusy && promptRegenSource === 'oneClick') ? (
+                  <RefreshCw className="mr-1 h-4 w-4 shrink-0 animate-spin opacity-90" />
+                ) : (
+                  <Wand2 className="mr-1 h-4 w-4 shrink-0 opacity-90" />
+                )}
+                {workbenchFullAnalysisBusy
+                  ? '分析中…'
+                  : promptRegenBusy && promptRegenSource === 'oneClick'
+                    ? '生成描述中…'
+                    : '重新分析'}
               </button>
             </div>
           </div>
@@ -4924,11 +5081,19 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleProductAnalysisAiOnly()}
-                disabled={isAiBusy || promptRegenBusy}
+                disabled={workbenchOpsLocked}
                 className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
               >
-                {isAiBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                {isAiBusy ? '分析中…' : 'AI 生成'}
+                {productAnalysisOnlyBusy || (promptRegenBusy && promptRegenSource === 'product') ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                {productAnalysisOnlyBusy
+                  ? '分析中…'
+                  : promptRegenBusy && promptRegenSource === 'product'
+                    ? '生成描述中…'
+                    : 'AI 生成'}
               </button>
             </div>
             <textarea
@@ -4952,11 +5117,19 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleHotStylesReanalyze()}
-                disabled={isAiBusy || promptRegenBusy}
+                disabled={workbenchOpsLocked}
                 className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 shrink-0 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
               >
-                {isAiBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                {isAiBusy ? '分析中…' : '重新分析'}
+                {hotStylesReanalyzeBusy || (promptRegenBusy && promptRegenSource === 'styles') ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                {hotStylesReanalyzeBusy
+                  ? '分析中…'
+                  : promptRegenBusy && promptRegenSource === 'styles'
+                    ? '生成描述中…'
+                    : '重新分析'}
               </button>
             </div>
             {hotStyles.length === 0 ? (
@@ -5073,7 +5246,7 @@ function ImageGenerator({
               </span>
               <button
                 type="button"
-                disabled={promptRegenBusy || isAiBusy}
+                disabled={workbenchOpsLocked}
                 onClick={() => void handleRegeneratePromptWithCurrentOutput()}
                 className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/90 text-amber-950 text-xs font-medium hover:bg-amber-400 disabled:opacity-50"
               >
@@ -5107,20 +5280,24 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleOneClickFill()}
-                disabled={isAiBusy || promptRegenBusy}
+                disabled={workbenchOpsLocked}
                 title="分析商品信息并生成 4 套画面方案"
                 className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold transition-colors ${
-                  isAiBusy || promptRegenBusy
+                  workbenchOpsLocked
                     ? 'cursor-not-allowed bg-white/[0.05] text-white/32'
                     : 'bg-violet-600/85 text-white hover:bg-violet-500/90'
                 }`}
               >
-                {isAiBusy || promptRegenBusy ? (
+                {workbenchFullAnalysisBusy || (promptRegenBusy && promptRegenSource === 'oneClick') ? (
                   <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
                 ) : (
                   <Wand2 className="h-4 w-4 shrink-0" strokeWidth={2} />
                 )}
-                {isAiBusy ? '分析中…' : promptRegenBusy ? '生成描述中…' : '一键分析商品及爆款风格'}
+                {workbenchFullAnalysisBusy
+                  ? '分析中…'
+                  : promptRegenBusy && promptRegenSource === 'oneClick'
+                    ? '生成描述中…'
+                    : '一键分析商品及爆款风格'}
               </button>
             </div>
           ) : null}
@@ -5217,7 +5394,7 @@ function ImageGenerator({
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    disabled={!sceneBoardAllowsBatchGenerate(sceneRunBoard, sceneBatchGenerating)}
+                    disabled={!sceneBoardAllowsBatchGenerate(sceneRunBoard)}
                     onClick={() => void handleBatchGenerateSelectedScenes()}
                     className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -5312,17 +5489,21 @@ function ImageGenerator({
                     )}
                   </div>
                 )
+                const isSlotGenerating = slot.status === 'generating'
+                const genPct = isSlotGenerating ? Math.max(1, Math.min(99, sceneSlotGenProgress[sidx] ?? 2)) : 0
                 return (
                   <div
                     key={slot.key}
                     role="button"
-                    tabIndex={0}
+                    tabIndex={isSlotGenerating ? -1 : 0}
+                    aria-busy={isSlotGenerating}
+                    aria-disabled={isSlotGenerating}
                     onClick={() => {
-                      if (sceneBatchGenerating) return
+                      if (isSlotGenerating) return
                       toggleSceneSlotSelected(sceneRunBoard.id, sidx)
                     }}
                     onKeyDown={(e) => {
-                      if (sceneBatchGenerating) return
+                      if (isSlotGenerating) return
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         toggleSceneSlotSelected(sceneRunBoard.id, sidx)
@@ -5332,7 +5513,7 @@ function ImageGenerator({
                       slot.selected
                         ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
                         : 'border-white/[0.07] bg-black/12 opacity-55'
-                    } ${sceneBatchGenerating ? 'cursor-default' : 'cursor-pointer'}`}
+                    } ${isSlotGenerating ? 'cursor-wait pointer-events-none' : 'cursor-pointer'}`}
                   >
                     {/* 固定顶栏高度：标题最多 2 行 + 描述 1 行，避免 6 张卡片的占位图上下错位 */}
                     <div className="flex h-[5.25rem] shrink-0 flex-col px-2.5 pb-1.5 pt-2">
@@ -5369,9 +5550,16 @@ function ImageGenerator({
                         <div className="absolute inset-0">
                           {mosaicBase}
                           {selectionMark}
-                          <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-black/30 text-white/90 text-[11px] backdrop-blur-[3px]">
-                            <RefreshCw className="w-7 h-7 animate-spin opacity-90" />
-                            <span>生成中…</span>
+                          <div className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2.5 bg-black/35 px-4 text-white/92 text-[11px] backdrop-blur-[3px]">
+                            <RefreshCw className="w-7 h-7 animate-spin opacity-90" aria-hidden />
+                            <span className="tabular-nums text-sm font-semibold tracking-tight">{genPct}%</span>
+                            <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
+                                style={{ width: `${genPct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-white/65">生成中…</span>
                           </div>
                         </div>
                       ) : slot.status === 'failed' && slot.selected ? (
@@ -5383,7 +5571,6 @@ function ImageGenerator({
                             <span className="text-[10px] text-white/50 line-clamp-2">{slot.error}</span>
                             <button
                               type="button"
-                              disabled={sceneBatchGenerating}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 void handleGenerateSceneSlot(sceneRunBoard.id, sidx)
