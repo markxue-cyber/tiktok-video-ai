@@ -5656,12 +5656,16 @@ function ImageGenerator({
                           <img
                             src={slot.imageUrl}
                             alt=""
-                            className="h-full w-full object-cover pointer-events-none select-none"
+                            className="absolute inset-0 h-full w-full object-cover pointer-events-none select-none"
                             draggable={false}
+                          />
+                          <div
+                            className="pointer-events-none absolute inset-0 z-[1] bg-black/0 opacity-0 transition-opacity group-hover/sc:bg-black/45 group-hover/sc:opacity-100"
+                            aria-hidden
                           />
                           <button
                             type="button"
-                            className="absolute inset-0 z-[1] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55 focus-visible:ring-inset"
+                            className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55 focus-visible:ring-inset"
                             title="点击放大预览"
                             aria-label="放大预览图片"
                             onClick={(e) => {
@@ -5672,6 +5676,33 @@ function ImageGenerator({
                               })
                             }}
                           />
+                          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center">
+                            <button
+                              type="button"
+                              className="pointer-events-none rounded-full border border-white/25 bg-white/15 p-2.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-white/25"
+                              title="预览"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setHistoryLightbox({
+                                  url: slot.imageUrl!,
+                                  downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
+                                })
+                              }}
+                            >
+                              <Eye className="h-6 w-6" />
+                            </button>
+                          </div>
+                          <a
+                            href={slot.imageUrl}
+                            download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="pointer-events-none absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-1.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-black/85"
+                            title="下载"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
                         </>
                       ) : slot.status === 'generating' ? (
                         <div className="absolute inset-0">
@@ -5714,43 +5745,6 @@ function ImageGenerator({
                           {selectionMark}
                         </div>
                       )}
-                      {slot.status === 'done' && slot.imageUrl ? (
-                        <>
-                          <div
-                            className="pointer-events-none absolute inset-0 z-[2] bg-black/0 opacity-0 transition-opacity group-hover/sc:bg-black/45 group-hover/sc:opacity-100"
-                            aria-hidden
-                          />
-                          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center">
-                            <button
-                              type="button"
-                              className="pointer-events-none rounded-full border border-white/25 bg-white/15 p-2.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-white/25"
-                              title="预览"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setHistoryLightbox({
-                                  url: slot.imageUrl!,
-                                  downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
-                                })
-                              }}
-                            >
-                              <Eye className="h-6 w-6" />
-                            </button>
-                          </div>
-                          <div className="pointer-events-none absolute right-2 top-2 z-[3] flex gap-1 group-hover/sc:pointer-events-auto">
-                            <a
-                              href={slot.imageUrl}
-                              download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="pointer-events-none rounded-full border border-white/20 bg-black/70 p-1.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-black/85"
-                              title="下载"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                            </a>
-                          </div>
-                        </>
-                      ) : null}
                     </div>
                   </div>
                 )
@@ -5891,30 +5885,34 @@ function ImageGenerator({
                                     </div>
                                   </div>
                                   <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35">
+                                    <img
+                                      src={url}
+                                      alt=""
+                                      className="absolute inset-0 h-full w-full object-cover pointer-events-none select-none"
+                                      draggable={false}
+                                    />
+                                    {/* 下载角标在点击层之上，且勿对整卡 inset-0 启用 pointer-events-auto，否则会挡住放大点击 */}
+                                    <a
+                                      href={url}
+                                      download={`tikgen-${task.id}-${idx + 1}.png`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
+                                      title="下载"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </a>
                                     <button
                                       type="button"
-                                      className="absolute inset-0 z-[1] block cursor-zoom-in touch-manipulation select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
-                                      onClick={() =>
+                                      className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
                                         setHistoryLightbox({ url, downloadName: `tikgen-${task.id}-${idx + 1}.png` })
-                                      }
+                                      }}
                                       title="点击放大预览"
                                       aria-label="放大预览图片"
-                                    >
-                                      <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" draggable={false} />
-                                    </button>
-                                    <div className="absolute inset-0 z-[2] flex items-start justify-end p-2 opacity-0 group-hover/out:opacity-100 transition-opacity pointer-events-none group-hover/out:pointer-events-auto">
-                                      <a
-                                        href={url}
-                                        download={`tikgen-${task.id}-${idx + 1}.png`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="p-2 rounded-full bg-black/70 text-white border border-white/20 hover:bg-black/85 pointer-events-auto"
-                                        title="下载"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <Download className="w-4 h-4" />
-                                      </a>
-                                    </div>
+                                    />
                                   </div>
                                 </div>
                               )
