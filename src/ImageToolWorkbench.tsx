@@ -1635,16 +1635,17 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      disabled={task.status === 'active'}
-                      onClick={() => removeHistoryTask(task.id)}
-                      className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20 disabled:pointer-events-none disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-white/28"
-                      title={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
-                      aria-label={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </button>
+                    {task.status !== 'active' ? (
+                      <button
+                        type="button"
+                        onClick={() => removeHistoryTask(task.id)}
+                        className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
+                        title="删除此条记录"
+                        aria-label="删除此条记录"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="flex gap-3 items-start mb-3">

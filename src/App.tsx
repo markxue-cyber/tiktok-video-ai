@@ -6132,16 +6132,17 @@ function ImageGenerator({
                         <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-white/95 sm:text-xl pr-1">
                           {(task.productName || '').trim() || '商品场景'}
                         </h3>
-                        <button
-                          type="button"
-                          disabled={task.status === 'active'}
-                          onClick={() => removeImageGenHistoryTask(task.id)}
-                          className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20 disabled:pointer-events-none disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-white/28"
-                          title={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
-                          aria-label={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                        </button>
+                        {task.status !== 'active' ? (
+                          <button
+                            type="button"
+                            onClick={() => removeImageGenHistoryTask(task.id)}
+                            className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
+                            title="删除此条记录"
+                            aria-label="删除此条记录"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          </button>
+                        ) : null}
                       </div>
                       <div className="mb-3 overflow-x-auto overflow-y-hidden pb-0.5 [scrollbar-width:thin]">
                         <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
