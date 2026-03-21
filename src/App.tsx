@@ -2416,6 +2416,10 @@ function ImageGenerator({
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const aiJobRef = useRef(0)
+  const [modelChangeNotice, setModelChangeNotice] = useState('')
+  const prevImageModelRef = useRef<string | null>(null)
+  const [promptGenOutputSettings, setPromptGenOutputSettings] = useState<{ aspect: ImageAspect; resolution: ImageRes } | null>(null)
+  const [promptRegenBusy, setPromptRegenBusy] = useState(false)
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
   const [unavailableImageMap, setUnavailableImageMap] = useState<Record<string, string>>({})
   const imageModelOptions = useMemo(
@@ -2651,11 +2655,25 @@ function ImageGenerator({
   }, [imageModelOptions, model])
 
   useEffect(() => {
+    if (prevImageModelRef.current === null) {
+      prevImageModelRef.current = model
+      return
+    }
+    if (prevImageModelRef.current !== model) {
+      prevImageModelRef.current = model
+      setModelChangeNotice('已切换模型，画幅/分辨率已按新模型能力更新（选项变化属正常现象）')
+      const t = window.setTimeout(() => setModelChangeNotice(''), 5500)
+      return () => window.clearTimeout(t)
+    }
+  }, [model])
+
+  useEffect(() => {
     if (!templatePreset) return
     if (templatePreset.model) setModel(String(templatePreset.model))
     if (templatePreset.aspectRatio) setSize(String(templatePreset.aspectRatio) as ImageAspect)
     if (templatePreset.resolution) setResolution(String(templatePreset.resolution) as ImageRes)
     setPrompt(String(templatePreset.prompt || ''))
+    setPromptGenOutputSettings(null)
     onTemplateApplied()
   }, [templatePreset, onTemplateApplied])
 
@@ -2664,6 +2682,7 @@ function ImageGenerator({
       alert('请先上传至少1张参考图')
       return
     }
+    setPromptGenOutputSettings(null)
     setShowModal(true)
     setModalStep(1)
     setAiError('')
@@ -2688,6 +2707,43 @@ function ImageGenerator({
     }
   }
 
+  const handleRegeneratePromptWithCurrentOutput = async () => {
+    if (!refImages.length) {
+      alert('请先上传至少1张参考图')
+      return
+    }
+    const jobId = ++aiJobRef.current
+    setPromptRegenBusy(true)
+    setAiError('')
+    try {
+      const aspectRatio = size
+      const res = resolution
+      const r = await generateImagePrompt({
+        product: productInfo,
+        language: productInfo.language || '简体中文',
+        aspectRatio,
+        resolution: res,
+        sceneMode,
+      })
+      if (jobId !== aiJobRef.current) return
+      setOptimizedNegativePrompt(r.negativePrompt || '')
+      const hint = String((r as any)?.categoryHint || 'other')
+      setCategoryHint(hint)
+      const presetParts = applySceneModePreset(sceneMode, r.parts || {})
+      const initialParts = applyLearnedTweaks(hint, presetParts)
+      setPromptParts(initialParts)
+      const nextP = r.prompt || buildPromptFromParts(initialParts)
+      setOptimizedPrompt(nextP)
+      setPrompt(nextP)
+      setPromptGenOutputSettings({ aspect: aspectRatio, resolution: res })
+    } catch (e: any) {
+      if (jobId !== aiJobRef.current) return
+      alert(e?.message || '重新生成失败')
+    } finally {
+      if (jobId === aiJobRef.current) setPromptRegenBusy(false)
+    }
+  }
+
   const handleNext = async () => {
     setAiError('')
     if (modalStep === 1) {
@@ -2695,7 +2751,15 @@ function ImageGenerator({
       const jobId = ++aiJobRef.current
       setIsAiBusy(true)
       try {
-        const r = await generateImagePrompt({ product: productInfo, language: productInfo.language, aspectRatio: size, resolution, sceneMode })
+        const aspectRatio = size
+        const res = resolution
+        const r = await generateImagePrompt({
+          product: productInfo,
+          language: productInfo.language,
+          aspectRatio,
+          resolution: res,
+          sceneMode,
+        })
         if (jobId !== aiJobRef.current) return
         setOptimizedPrompt(r.prompt)
         setOptimizedNegativePrompt(r.negativePrompt || '')
@@ -2705,6 +2769,7 @@ function ImageGenerator({
         const initialParts = applyLearnedTweaks(hint, presetParts)
         setPromptParts(initialParts)
         setOptimizedPrompt(r.prompt || buildPromptFromParts(initialParts))
+        setPromptGenOutputSettings({ aspect: aspectRatio, resolution: res })
       } catch (e: any) {
         if (jobId !== aiJobRef.current) return
         setAiError(e?.message || '提示词生成失败')
@@ -3148,6 +3213,13 @@ function ImageGenerator({
     }
   }
 
+  const formatImageResLabel = (r: ImageRes) =>
+    r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : String(r)
+  const currentModelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
+  const outputSpecsMismatch =
+    !!promptGenOutputSettings &&
+    (promptGenOutputSettings.aspect !== size || promptGenOutputSettings.resolution !== resolution)
+
   if (showModal) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -3339,9 +3411,10 @@ function ImageGenerator({
     <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <div className="mb-6">
+        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">生成模型</div>
           <label className="block text-sm font-medium mb-1">模型选择</label>
-          <select value={model} onChange={e => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+          <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
             {imageModelOptions.map((m) => (
               <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
                 {m.name}
@@ -3349,9 +3422,12 @@ function ImageGenerator({
               </option>
             ))}
           </select>
+          <p className="text-[11px] text-gray-500 mt-2">切换模型后，下方画幅与分辨率选项会随模型能力变化。</p>
+          {modelChangeNotice ? <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-2">{modelChangeNotice}</div> : null}
         </div>
 
-        <div className="mb-6">
+        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">参考图</div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium">参考图 <span className="text-[11px] text-gray-500 font-normal">支持上传1-5张图片</span></label>
             <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
@@ -3507,9 +3583,12 @@ function ImageGenerator({
           </div>
           {refUploadNotice ? <div className="mt-2 text-xs text-amber-500">{refUploadNotice}</div> : null}
           {refUploadBusy ? <div className="mt-1 text-xs text-gray-500">正在上传图片，请稍候...</div> : null}
+          <p className="text-[11px] text-gray-500 mt-2">第一张为「主参考」，拖拽可调整顺序；主参考对构图与商品识别影响最大。</p>
         </div>
 
-        <div className="mb-6">
+        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">输出规格</div>
+          <p className="text-[11px] text-gray-500 mb-3">选项随当前模型能力变化。一键生成提示词会结合此处<strong className="text-gray-700">画幅</strong>与<strong className="text-gray-700">分辨率</strong>优化文案。</p>
           <label className="block text-sm font-medium mb-2">比例</label>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {imageCaps.aspectRatios.map((ar) => (
@@ -3531,9 +3610,8 @@ function ImageGenerator({
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-2 gap-4 mb-0">
           <div>
             <label className="block text-sm font-medium mb-1">分辨率</label>
             <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
@@ -3553,18 +3631,50 @@ function ImageGenerator({
             </select>
           </div>
         </div>
+        </div>
 
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">提示词</label>
+        <div className="rounded-xl border border-gray-200/90 bg-gray-50/40 p-4 mb-5">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">提示词</div>
+          <p className="text-[11px] text-gray-500 mb-2">生成图片以本页下方文本框中的完整 prompt 为准；结构化编辑请在一键生成弹窗内完成。</p>
+          {outputSpecsMismatch ? (
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-xs text-amber-900">
+              <span>
+                输出规格已变更（当前 {size} / {formatImageResLabel(resolution)}，生成提示词时为 {promptGenOutputSettings!.aspect} /{' '}
+                {formatImageResLabel(promptGenOutputSettings!.resolution)}）。建议按新规格重新生成提示词。
+              </span>
+              <button
+                type="button"
+                disabled={promptRegenBusy || isAiBusy}
+                onClick={() => void handleRegeneratePromptWithCurrentOutput()}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 disabled:opacity-50"
+              >
+                {promptRegenBusy ? '生成中...' : '按当前设置重新生成'}
+              </button>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <label className="block text-sm font-medium">画面描述</label>
             <button
-              onClick={handlePromptGen}
-              className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
+              type="button"
+              onClick={() => void handlePromptGen()}
+              disabled={!refImages.length}
+              title={!refImages.length ? '请先上传至少1张参考图' : '将按当前画幅与分辨率优化提示词'}
+              className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Sparkles className="w-4 h-4 mr-1" /> 一键生成提示词
+              <Sparkles className="w-4 h-4 mr-1 shrink-0" /> 一键生成提示词
             </button>
           </div>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入画面描述/风格，或使用一键生成提示词..." />
+          <p className="text-[11px] text-gray-500 mb-2">一键生成会读取当前<strong className="text-gray-700">模型、画幅、分辨率</strong>；若之后修改画幅/分辨率，请使用上方「重新生成」或重新走一键流程。</p>
+          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入画面描述/风格，或使用一键生成提示词..." />
+        </div>
+        <div className="text-xs text-gray-500 mb-2 text-center sm:text-left">
+          本次生成：<span className="text-gray-700 font-medium">{currentModelLabel}</span>
+          <span className="mx-1.5 text-gray-300">·</span>
+          {size}
+          <span className="mx-1.5 text-gray-300">·</span>
+          {formatImageResLabel(resolution)}
+          <span className="mx-1.5 text-gray-300">·</span>
+          {imageCount} 张
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成图片'}</button>
       </div>
