@@ -28,6 +28,11 @@ export const TIKGEN_IG_IDB = {
   /** 图片翻译 */
   imageTranslateWorkspace: 'imageTranslate.workspace.v1',
   imageTranslateJob: 'imageTranslate.job.v1',
+  /** 各工具「生成历史」完整数据（含 data URL），避免仅写 localStorage 触发配额后刷新全丢 */
+  removeBgHistoryFull: 'removeBg.historyFull.v1',
+  imageUpscaleHistoryFull: 'imageUpscale.historyFull.v1',
+  imageCompressHistoryFull: 'imageCompress.historyFull.v1',
+  imageTranslateHistoryFull: 'imageTranslate.historyFull.v1',
 } as const
 
 export type TikgenWorkspaceSnapshotV1 = {
@@ -145,6 +150,23 @@ export function stripHistoryForLocalStorage(tasks: unknown[]): unknown[] {
     return {
       ...x,
       refThumb: stripDataUrl(x.refThumb),
+    }
+  })
+}
+
+/** 图片工具历史：localStorage 用，去掉 refThumb 与 outputUrls 中的 data URL，防止整段 JSON 写入失败 */
+export function stripImageToolHistoryForLocalStorage(tasks: unknown[]): unknown[] {
+  if (!Array.isArray(tasks)) return []
+  return tasks.map((t) => {
+    if (!t || typeof t !== 'object') return t
+    const x = t as Record<string, unknown>
+    const outs = Array.isArray(x.outputUrls)
+      ? (x.outputUrls as unknown[]).map((u) => (typeof u === 'string' && u.startsWith('data:') ? '' : u))
+      : []
+    return {
+      ...x,
+      refThumb: stripDataUrl(x.refThumb),
+      outputUrls: outs,
     }
   })
 }

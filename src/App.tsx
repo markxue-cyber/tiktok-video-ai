@@ -59,7 +59,7 @@ import { applyImageStyleTags } from './api/imageStyle'
 import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
-import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
+import { AI_ASSET_CREATED_EVENT, archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
@@ -5007,7 +5007,11 @@ function ImageGenerator({
   }
 
   const removeImageGenHistoryTask = (taskId: string) => {
-    setImageGenHistory((prev) => prev.filter((t) => t.id !== taskId))
+    setImageGenHistory((prev) => {
+      const t = prev.find((x) => x.id === taskId)
+      if (t?.status === 'active') return prev
+      return prev.filter((x) => x.id !== taskId)
+    })
   }
 
   const mergeNegative = (base: string, add: string) => {
@@ -6130,10 +6134,11 @@ function ImageGenerator({
                         </h3>
                         <button
                           type="button"
+                          disabled={task.status === 'active'}
                           onClick={() => removeImageGenHistoryTask(task.id)}
-                          className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
-                          title="删除此条记录"
-                          aria-label="删除此条记录"
+                          className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20 disabled:pointer-events-none disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-white/28"
+                          title={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
+                          aria-label={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
                         >
                           <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </button>
@@ -6628,6 +6633,7 @@ function Assets() {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
   const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null)
   const initializedRef = useRef(false)
+  const reloadAiAssetsRef = useRef<() => Promise<void>>(async () => {})
 
   const saveCache = (next: {
     userUploads: AssetItem[]
@@ -6697,6 +6703,14 @@ function Assets() {
     }
   }
 
+  reloadAiAssetsRef.current = async () => {
+    try {
+      await loadSource('ai_generated', true)
+    } catch {
+      // 静默失败，用户可手动刷新资产库
+    }
+  }
+
   const refreshAll = async () => {
     setLoading(true)
     setError('')
@@ -6728,6 +6742,15 @@ function Assets() {
     refreshAll()
     initializedRef.current = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handler = () => {
+      void reloadAiAssetsRef.current()
+    }
+    window.addEventListener(AI_ASSET_CREATED_EVENT, handler)
+    return () => window.removeEventListener(AI_ASSET_CREATED_EVENT, handler)
   }, [])
 
   useEffect(() => {

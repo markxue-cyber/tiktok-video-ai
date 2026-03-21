@@ -4,6 +4,9 @@
  */
 import { createAssetAPI } from '../api/assets'
 
+/** 资产库（App 内 Assets）监听此事件，AI 归档成功后立刻刷新列表 */
+export const AI_ASSET_CREATED_EVENT = 'tikgen:ai-asset-created' as const
+
 const LS_KEY = 'tikgen.archivedMediaFp.v1'
 const MAX_ENTRIES = 5000
 
@@ -60,6 +63,11 @@ export async function archiveAiMediaOnce(params: {
     })
     set.add(fp)
     saveFpSet(set)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(AI_ASSET_CREATED_EVENT, { detail: { type: params.type } }),
+      )
+    }
   } catch (e) {
     console.error('[assets] archiveAiMediaOnce failed:', e)
   }

@@ -19,7 +19,14 @@ import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 import { imageToolNanoAPI } from './api/imageToolNano'
 import { removeBackgroundAPI } from './api/removeBackground'
 import { DEFAULT_TARGET_LANG, TARGET_LANGUAGES, type TargetLanguageCode, targetLangByCode } from './imageTool/targetLanguages'
-import { tikgenIgIdbDelete, tikgenIgIdbGet, tikgenIgIdbSet, TIKGEN_IG_IDB } from './tikgenImageGenPersistence'
+import {
+  stripImageToolHistoryForLocalStorage,
+  tikgenIgIdbDelete,
+  tikgenIgIdbGet,
+  tikgenIgIdbSet,
+  TIKGEN_IG_IDB,
+  tryLocalStorageSetJson,
+} from './tikgenImageGenPersistence'
 
 const MAX_IMAGES = 5
 const HISTORY_MAX = 80
@@ -46,6 +53,8 @@ export type ImageToolMode = 'removeBg' | 'upscale' | 'compress' | 'translate'
 
 type ToolRuntime = {
   historyKey: string
+  /** IndexedDB：完整历史（含成片 data URL） */
+  historyIdbKey: string
   workspaceKey: string
   jobKey: string
   archiveInputFrom: string
@@ -60,6 +69,7 @@ type ToolRuntime = {
 const RUNTIME: Record<ImageToolMode, ToolRuntime> = {
   removeBg: {
     historyKey: 'tikgen.removeBg.history',
+    historyIdbKey: TIKGEN_IG_IDB.removeBgHistoryFull,
     workspaceKey: TIKGEN_IG_IDB.removeBgWorkspace,
     jobKey: TIKGEN_IG_IDB.removeBgJob,
     archiveInputFrom: 'remove_background_input',
@@ -72,6 +82,7 @@ const RUNTIME: Record<ImageToolMode, ToolRuntime> = {
   },
   upscale: {
     historyKey: 'tikgen.imageUpscale.history',
+    historyIdbKey: TIKGEN_IG_IDB.imageUpscaleHistoryFull,
     workspaceKey: TIKGEN_IG_IDB.imageUpscaleWorkspace,
     jobKey: TIKGEN_IG_IDB.imageUpscaleJob,
     archiveInputFrom: 'image_upscale_input',
@@ -84,6 +95,7 @@ const RUNTIME: Record<ImageToolMode, ToolRuntime> = {
   },
   compress: {
     historyKey: 'tikgen.imageCompress.history',
+    historyIdbKey: TIKGEN_IG_IDB.imageCompressHistoryFull,
     workspaceKey: TIKGEN_IG_IDB.imageCompressWorkspace,
     jobKey: TIKGEN_IG_IDB.imageCompressJob,
     archiveInputFrom: 'image_compress_input',
@@ -96,6 +108,7 @@ const RUNTIME: Record<ImageToolMode, ToolRuntime> = {
   },
   translate: {
     historyKey: 'tikgen.imageTranslate.history',
+    historyIdbKey: TIKGEN_IG_IDB.imageTranslateHistoryFull,
     workspaceKey: TIKGEN_IG_IDB.imageTranslateWorkspace,
     jobKey: TIKGEN_IG_IDB.imageTranslateJob,
     archiveInputFrom: 'image_translate_input',
@@ -316,32 +329,36 @@ async function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
-function loadHistory(key: string): ImageToolHistoryTask[] {
+function normalizeHistoryTask(t: any): ImageToolHistoryTask | null {
+  if (!t || typeof t.id !== 'string' || typeof t.ts !== 'number') return null
+  return {
+    ...t,
+    progress: typeof t.progress === 'number' ? t.progress : t.status === 'completed' ? 100 : 0,
+    outputUrls: Array.isArray(t.outputUrls) ? t.outputUrls : [],
+    status: t.status === 'active' || t.status === 'failed' || t.status === 'completed' ? t.status : 'completed',
+  } as ImageToolHistoryTask
+}
+
+/** 兜底：仅含精简字段时可能无缩略图/成片 data URL（旧版 localStorage 配额失败时） */
+function loadHistoryFromLocalStorage(key: string): ImageToolHistoryTask[] {
   try {
     const raw = localStorage.getItem(key)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
-      .filter((x: any) => x && typeof x.id === 'string' && typeof x.ts === 'number')
-      .map((t: any) => ({
-        ...t,
-        progress: typeof t.progress === 'number' ? t.progress : t.status === 'completed' ? 100 : 0,
-        outputUrls: Array.isArray(t.outputUrls) ? t.outputUrls : [],
-        status: t.status === 'active' || t.status === 'failed' || t.status === 'completed' ? t.status : 'completed',
-      }))
-      .slice(0, HISTORY_MAX) as ImageToolHistoryTask[]
+      .map((t: any) => normalizeHistoryTask(t))
+      .filter((x): x is ImageToolHistoryTask => x != null)
+      .slice(0, HISTORY_MAX)
   } catch {
     return []
   }
 }
 
-function saveHistory(key: string, tasks: ImageToolHistoryTask[]) {
-  try {
-    localStorage.setItem(key, JSON.stringify(tasks.slice(0, HISTORY_MAX)))
-  } catch {
-    // ignore
-  }
+function saveHistory(lsKey: string, idbKey: string, tasks: ImageToolHistoryTask[]) {
+  const slice = tasks.slice(0, HISTORY_MAX)
+  void tikgenIgIdbSet(idbKey, slice)
+  tryLocalStorageSetJson(lsKey, stripImageToolHistoryForLocalStorage(slice))
 }
 
 function dayKey(ts: number) {
@@ -485,8 +502,10 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   }, [])
 
   useEffect(() => {
-    saveHistory(rt.historyKey, history)
-  }, [history, rt.historyKey])
+    // 必须等 hydrate 完成后再写，否则首屏 [] 会覆盖 IDB/localStorage 里已有历史
+    if (!persistenceReady) return
+    saveHistory(rt.historyKey, rt.historyIdbKey, history)
+  }, [history, rt.historyKey, rt.historyIdbKey, persistenceReady])
 
   const sortedHistory = useMemo(() => [...history].sort((a, b) => b.ts - a.ts), [history])
 
@@ -500,12 +519,19 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
 
   const removeHistoryTask = useCallback(
     (taskId: string) => {
+      let didRemove = false
+      setHistory((prev) => {
+        const t = prev.find((x) => x.id === taskId)
+        if (!t || t.status === 'active') return prev
+        didRemove = true
+        return prev.filter((x) => x.id !== taskId)
+      })
+      if (!didRemove) return
       stopProgressTicker(taskId)
       void (async () => {
         const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
         if (job?.v === 1 && job.taskId === taskId) await tikgenIgIdbDelete(rt.jobKey)
       })()
-      setHistory((prev) => prev.filter((t) => t.id !== taskId))
     },
     [stopProgressTicker, rt.jobKey],
   )
@@ -787,7 +813,16 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const h0 = loadHistory(rt.historyKey)
+      const fromIdb = await tikgenIgIdbGet<ImageToolHistoryTask[]>(rt.historyIdbKey)
+      let h0: ImageToolHistoryTask[]
+      if (Array.isArray(fromIdb) && fromIdb.length > 0) {
+        h0 = fromIdb
+          .map((t: any) => normalizeHistoryTask(t))
+          .filter((x): x is ImageToolHistoryTask => x != null)
+          .slice(0, HISTORY_MAX)
+      } else {
+        h0 = loadHistoryFromLocalStorage(rt.historyKey)
+      }
       const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
 
       if (tool === 'removeBg') {
@@ -885,7 +920,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
     return () => {
       cancelled = true
     }
-  }, [tool, rt.historyKey, rt.workspaceKey, rt.jobKey])
+  }, [tool, rt.historyKey, rt.historyIdbKey, rt.workspaceKey, rt.jobKey])
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -1046,11 +1081,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       })
     }
 
-    setHistory((prev) => {
-      const next = [task, ...prev]
-      saveHistory(rt.historyKey, next)
-      return next
-    })
+    setHistory((prev) => [task, ...prev])
 
     await runPipeline({
       taskId,
@@ -1606,10 +1637,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
                     </div>
                     <button
                       type="button"
+                      disabled={task.status === 'active'}
                       onClick={() => removeHistoryTask(task.id)}
-                      className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
-                      title="删除此条记录"
-                      aria-label="删除此条记录"
+                      className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20 disabled:pointer-events-none disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-white/28"
+                      title={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
+                      aria-label={task.status === 'active' ? '生成中，暂不可删除' : '删除此条记录'}
                     >
                       <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
                     </button>
