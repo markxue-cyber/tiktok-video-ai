@@ -1,4 +1,5 @@
 import { apiRefresh } from './auth'
+import { clampRefImageForVercel } from '../utils/refImagePayloadClamp'
 
 async function refreshAccessTokenIfPossible(): Promise<string> {
   try {
@@ -52,6 +53,8 @@ export async function removeBackgroundAPI(params: {
   resolution: '1024' | '2048'
   outputFormat: 'png' | 'webp'
 }): Promise<{ imageUrl: string; size?: string; outputFormat?: string }> {
+  const refImage = await clampRefImageForVercel(params.refImage)
+
   const callOnce = async (token: string) => {
     const idem = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`) as string
     const resp = await fetch('/api/remove-background', {
@@ -63,11 +66,18 @@ export async function removeBackgroundAPI(params: {
         'X-Confirm-Billable': 'true',
       },
       body: JSON.stringify({
-        refImage: params.refImage,
+        refImage,
         resolution: params.resolution,
         outputFormat: params.outputFormat,
       }),
     })
+    if (resp.status === 413) {
+      const err: any = new Error(
+        '请求体过大（平台限制）。请换一张更小的图片，或用手机截图后重试。',
+      )
+      err.code = 'PAYLOAD_TOO_LARGE'
+      throw err
+    }
     const text = await resp.text()
     let data: any = null
     try {

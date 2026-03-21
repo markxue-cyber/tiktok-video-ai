@@ -1,4 +1,5 @@
 import { apiRefresh } from './auth'
+import { clampRefImageForVercel } from '../utils/refImagePayloadClamp'
 
 async function refreshAccessTokenIfPossible(): Promise<string> {
   try {
@@ -74,6 +75,9 @@ export type ImageToolNanoBody = ImageToolNanoUpscaleBody | ImageToolNanoCompress
 export async function imageToolNanoAPI(
   body: ImageToolNanoBody,
 ): Promise<{ imageUrl: string; size?: string; outputFormat?: string }> {
+  const refImage = await clampRefImageForVercel(body.refImage)
+  const payload: ImageToolNanoBody = { ...body, refImage }
+
   const callOnce = async (token: string) => {
     const idem = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`) as string
     const resp = await fetch('/api/image-tool-nano', {
@@ -84,8 +88,15 @@ export async function imageToolNanoAPI(
         'Idempotency-Key': idem,
         'X-Confirm-Billable': 'true',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     })
+    if (resp.status === 413) {
+      const err: any = new Error(
+        '请求体过大（平台限制）。请换一张更小的图片，或用手机截图后重试。',
+      )
+      err.code = 'PAYLOAD_TOO_LARGE'
+      throw err
+    }
     const text = await resp.text()
     let data: any = null
     try {
