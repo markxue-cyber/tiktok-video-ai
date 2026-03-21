@@ -3412,9 +3412,11 @@ function ImageGenerator({
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <div className="workbench-form-section p-4 mb-5">
-          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">生成模型</div>
-          <label className="block text-sm font-medium mb-1">模型选择</label>
-          <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-2">生成模型</div>
+          <label htmlFor="tikgen-image-model" className="sr-only">
+            生成模型
+          </label>
+          <select id="tikgen-image-model" value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
             {imageModelOptions.map((m) => (
               <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
                 {m.name}
@@ -3427,10 +3429,10 @@ function ImageGenerator({
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
-          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">参考图</div>
+          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-2">参考图</div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">参考图 <span className="text-[11px] text-gray-500 font-normal">支持上传1-5张图片</span></label>
-            <div className="text-xs text-gray-500">{refImages.length}/{MAX_REF_IMAGES}</div>
+            <span className="text-[11px] text-white/55">支持上传 1–5 张，JPG / PNG / WEBP，单张 ≤10MB</span>
+            <div className="text-xs text-white/50 shrink-0 tabular-nums">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
           <div
             className="border-2 border-dashed border-gray-300 rounded-xl p-2.5 relative"
@@ -3545,8 +3547,8 @@ function ImageGenerator({
             ) : (
               <div className="py-2 text-center min-h-[150px] flex flex-col items-center justify-center">
                 <Upload className="w-6 h-6 mx-auto text-gray-300 mb-1.5" />
-                <div className="text-base font-semibold mb-1">点击或拖拽上传图片</div>
-                <div className="text-[10px] text-gray-500 mb-2.5">支持上传1-5张；格式 JPG、JPEG、PNG、WEBP，单张不超过 10 MB</div>
+                <div className="text-base font-semibold mb-1">点击或拖拽到此区域上传</div>
+                <div className="text-[10px] text-white/45 mb-2.5">也可使用下方按钮</div>
                 <div className="flex items-center justify-center gap-2">
                   <label
                     className="px-3 py-1.5 rounded-lg border text-xs cursor-pointer hover:bg-gray-50"
