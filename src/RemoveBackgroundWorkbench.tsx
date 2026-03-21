@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Box,
-  ChevronDown,
-  Clock,
-  Download,
-  Eraser,
-  Image as ImageIcon,
-  Maximize2,
-  RefreshCw,
-  Upload,
-  X,
-} from 'lucide-react'
+import { Box, Clock, Download, Eraser, Image as ImageIcon, Maximize2, RefreshCw, Upload, X } from 'lucide-react'
 import { createAssetAPI } from './api/assets'
 import { removeBackgroundAPI } from './api/removeBackground'
 
@@ -187,6 +176,14 @@ export function RemoveBackgroundWorkbench() {
       delete progressTimersRef.current[taskId]
     }
   }, [])
+
+  const removeHistoryTask = useCallback(
+    (taskId: string) => {
+      stopProgressTicker(taskId)
+      setHistory((prev) => prev.filter((t) => t.id !== taskId))
+    },
+    [stopProgressTicker],
+  )
 
   const startProgressTicker = useCallback(
     (taskId: string, basePercent: number, span: number) => {
@@ -451,64 +448,90 @@ export function RemoveBackgroundWorkbench() {
               </div>
             </section>
 
-            <section className="w-full min-w-0">
-              <div className="mb-2 flex items-center gap-1.5">
+            <section className="w-full min-w-0 space-y-4">
+              <div className="flex items-center gap-1.5">
                 <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
               </div>
-              {/* 与上传区、主按钮同宽：无外层套框，左右与 tikgen-ref-dropzone 对齐 */}
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 w-full min-w-0">
-                <div className="min-w-0 flex flex-col gap-1">
-                  <label
-                    htmlFor="rb-resolution"
-                    className="text-[11px] font-medium text-white/45 pl-0.5 tracking-wide"
-                  >
-                    处理分辨率
-                  </label>
-                  <div className="relative">
-                    <Maximize2
-                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/90"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    <ChevronDown
-                      className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/35"
-                      aria-hidden
-                    />
-                    <select
-                      id="rb-resolution"
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
-                      className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/35 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-all duration-150 hover:bg-black/[0.42] hover:ring-white/16 focus:ring-2 focus:ring-violet-400/45"
-                    >
-                      <option value="1024">1024px</option>
-                      <option value="2048">2048px</option>
-                    </select>
-                  </div>
+
+              {/* 处理分辨率 — 独立一行，选项平铺 */}
+              <div className="flex w-full min-w-0 flex-col gap-2">
+                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+                  <Maximize2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/85" strokeWidth={2} aria-hidden />
+                  <span>处理分辨率</span>
                 </div>
-                <div className="min-w-0 flex flex-col gap-1">
-                  <label htmlFor="rb-format" className="text-[11px] font-medium text-white/45 pl-0.5 tracking-wide">
-                    输出格式
-                  </label>
-                  <div className="relative">
-                    <Box
-                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-violet-300/80"
-                      strokeWidth={1.75}
-                      aria-hidden
-                    />
-                    <ChevronDown
-                      className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/35"
-                      aria-hidden
-                    />
-                    <select
-                      id="rb-format"
-                      value={outputFormat}
-                      onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
-                      className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/35 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-all duration-150 hover:bg-black/[0.42] hover:ring-white/16 focus:ring-2 focus:ring-violet-400/45"
-                    >
-                      <option value="png">PNG</option>
-                      <option value="webp">WEBP</option>
-                    </select>
-                  </div>
+                <div
+                  className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+                  role="radiogroup"
+                  aria-label="处理分辨率"
+                >
+                  {(
+                    [
+                      { v: '1024' as const, hint: '推荐 · 更快' },
+                      { v: '2048' as const, hint: '细节更清晰' },
+                    ] as const
+                  ).map(({ v, hint }) => {
+                    const on = resolution === v
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => setResolution(v)}
+                        className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                          on
+                            ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                            : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold tabular-nums">{v}px</span>
+                        <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                          {hint}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 输出格式 — 独立一行，选项平铺 */}
+              <div className="flex w-full min-w-0 flex-col gap-2">
+                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+                  <Box className="h-3.5 w-3.5 shrink-0 text-violet-300/78" strokeWidth={1.75} aria-hidden />
+                  <span>输出格式</span>
+                </div>
+                <div
+                  className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+                  role="radiogroup"
+                  aria-label="输出格式"
+                >
+                  {(
+                    [
+                      { id: 'png' as const, label: 'PNG', hint: '透明背景' },
+                      { id: 'webp' as const, label: 'WEBP', hint: '体积更小' },
+                    ] as const
+                  ).map(({ id, label, hint }) => {
+                    const on = outputFormat === id
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => setOutputFormat(id)}
+                        className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                          on
+                            ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                            : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold tracking-wide">{label}</span>
+                        <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                          {hint}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             </section>
@@ -545,31 +568,41 @@ export function RemoveBackgroundWorkbench() {
               {sortedHistory.map((task) => (
                 <div
                   key={task.id}
-                  className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                  className="image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                 >
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                      <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                      {relativeZh(task.ts)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                      <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                      {task.resolutionLabel}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
-                      {task.formatLabel}
-                    </span>
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
-                        task.status === 'completed'
-                          ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
-                          : task.status === 'active'
-                            ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
-                            : 'bg-red-500/15 text-red-100 border-red-400/25'
-                      }`}
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                        <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                        {relativeZh(task.ts)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                        <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                        {task.resolutionLabel}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
+                        {task.formatLabel}
+                      </span>
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
+                          task.status === 'completed'
+                            ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
+                            : task.status === 'active'
+                              ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
+                              : 'bg-red-500/15 text-red-100 border-red-400/25'
+                        }`}
+                      >
+                        {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeHistoryTask(task.id)}
+                      className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-normal text-white/28 transition-colors hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
+                      title="删除此条记录"
                     >
-                      {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
-                    </span>
+                      删除
+                    </button>
                   </div>
 
                   <div className="flex gap-3 items-start mb-3">
