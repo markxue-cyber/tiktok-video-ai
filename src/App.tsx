@@ -2450,8 +2450,6 @@ function ImageGenerator({
   const [isAiBusy, setIsAiBusy] = useState(false)
   const [aiError, setAiError] = useState('')
   const aiJobRef = useRef(0)
-  const [modelChangeNotice, setModelChangeNotice] = useState('')
-  const prevImageModelRef = useRef<string | null>(null)
   const [promptGenOutputSettings, setPromptGenOutputSettings] = useState<{ aspect: ImageAspect; resolution: ImageRes } | null>(null)
   const [promptRegenBusy, setPromptRegenBusy] = useState(false)
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
@@ -2700,19 +2698,6 @@ function ImageGenerator({
     const firstAvailable = imageModelOptions.find((x) => !x.unavailableReason)
     if (firstAvailable && firstAvailable.id !== model) setModel(firstAvailable.id)
   }, [imageModelOptions, model])
-
-  useEffect(() => {
-    if (prevImageModelRef.current === null) {
-      prevImageModelRef.current = model
-      return
-    }
-    if (prevImageModelRef.current !== model) {
-      prevImageModelRef.current = model
-      setModelChangeNotice('已切换模型，画幅/分辨率已按新模型能力更新（选项变化属正常现象）')
-      const t = window.setTimeout(() => setModelChangeNotice(''), 5500)
-      return () => window.clearTimeout(t)
-    }
-  }, [model])
 
   useEffect(() => {
     if (!templatePreset) return
@@ -3479,7 +3464,6 @@ function ImageGenerator({
               </option>
             ))}
           </select>
-          {modelChangeNotice ? <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-2">{modelChangeNotice}</div> : null}
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
