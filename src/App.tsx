@@ -5242,11 +5242,12 @@ function ImageGenerator({
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch">
               {sceneRunBoard.slots.map((slot, sidx) => {
                 const rawDesc = (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim()
                 const hoverFull = styleCardSummary(rawDesc, 400)
                 const mosaicThumb = sceneRunBoard.refThumb || refImageDataUrl || ''
+                /** 占位：以主参考图为底做「高斯模糊照片」，避免琥珀色渐变盖住真实色相 */
                 const mosaicBase = (
                   <>
                     {mosaicThumb ? (
@@ -5254,39 +5255,45 @@ function ImageGenerator({
                         <img
                           src={mosaicThumb}
                           alt=""
-                          className="absolute inset-0 h-full w-full object-cover scale-[1.32] blur-[48px] saturate-[1.22] brightness-[0.86] contrast-[1.06]"
+                          className="absolute inset-0 h-full w-full object-cover scale-[1.45] blur-[64px] saturate-[1.12] brightness-[0.94] contrast-[1.04]"
                           draggable={false}
                         />
                         <img
                           src={mosaicThumb}
                           alt=""
-                          className="absolute inset-0 h-full w-full object-cover scale-[1.08] blur-[22px] opacity-[0.42] mix-blend-screen translate-x-[4%] -translate-y-[3%]"
+                          className="absolute inset-0 h-full w-full object-cover scale-[1.18] blur-[36px] opacity-[0.55] translate-x-[2%] -translate-y-[1.5%]"
                           draggable={false}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-b from-amber-100/[0.07] via-violet-300/[0.05] to-zinc-950/60" />
-                        <div className="absolute inset-0 backdrop-blur-[18px] bg-gradient-to-t from-black/25 via-transparent to-white/[0.06]" />
+                        <img
+                          src={mosaicThumb}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover scale-105 blur-[14px] opacity-[0.18]"
+                          draggable={false}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/45" />
+                        <div className="absolute inset-0 backdrop-blur-[8px] bg-white/[0.04]" />
                         <div
-                          className="absolute inset-0 pointer-events-none opacity-[0.32] mix-blend-overlay"
+                          className="absolute inset-0 pointer-events-none opacity-[0.16] mix-blend-overlay"
                           style={{
                             backgroundImage: SCENE_SLOT_PLACEHOLDER_GRAIN_TILE,
-                            backgroundSize: '96px 96px',
+                            backgroundSize: '88px 88px',
                           }}
                         />
-                        <div className="absolute inset-0 ring-1 ring-inset ring-white/[0.08]" />
+                        <div className="absolute inset-0 ring-1 ring-inset ring-white/[0.09]" />
                       </>
                     ) : (
                       <div className="absolute inset-0 overflow-hidden">
                         <div
-                          className="absolute -inset-[40%] scale-[1.65] blur-[56px] opacity-[0.92]"
+                          className="absolute -inset-[40%] scale-[1.65] blur-[56px] opacity-[0.88]"
                           style={{
                             background:
-                              'radial-gradient(ellipse 90% 55% at 18% 28%, rgba(253,230,138,0.42), transparent 52%), radial-gradient(ellipse 75% 60% at 82% 22%, rgba(196,181,253,0.4), transparent 50%), radial-gradient(ellipse 65% 50% at 48% 88%, rgba(45,212,191,0.22), transparent 48%), radial-gradient(ellipse 55% 45% at 72% 62%, rgba(244,114,182,0.28), transparent 46%), radial-gradient(ellipse 70% 40% at 30% 70%, rgba(56,189,248,0.2), transparent 50%)',
+                              'radial-gradient(ellipse 88% 52% at 22% 32%, rgba(148,163,184,0.48), transparent 52%), radial-gradient(ellipse 72% 58% at 80% 24%, rgba(99,102,241,0.32), transparent 50%), radial-gradient(ellipse 62% 48% at 52% 82%, rgba(51,65,85,0.42), transparent 48%), radial-gradient(ellipse 58% 44% at 68% 58%, rgba(129,140,248,0.22), transparent 46%)',
                           }}
                         />
-                        <div className="absolute inset-0 backdrop-blur-2xl bg-zinc-950/30" />
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.06] via-transparent to-black/35" />
+                        <div className="absolute inset-0 backdrop-blur-2xl bg-slate-950/40" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-slate-400/[0.04] via-transparent to-black/40" />
                         <div
-                          className="absolute inset-0 pointer-events-none opacity-[0.35] mix-blend-soft-light"
+                          className="absolute inset-0 pointer-events-none opacity-[0.22] mix-blend-soft-light"
                           style={{
                             backgroundImage: SCENE_SLOT_PLACEHOLDER_GRAIN_TILE,
                             backgroundSize: '112px 112px',
@@ -5321,18 +5328,23 @@ function ImageGenerator({
                         toggleSceneSlotSelected(sceneRunBoard.id, sidx)
                       }
                     }}
-                    className={`flex flex-col overflow-hidden rounded-2xl border text-center transition-[opacity,box-shadow] ${
+                    className={`flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border text-center transition-[opacity,box-shadow] ${
                       slot.selected
                         ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
                         : 'border-white/[0.07] bg-black/12 opacity-55'
                     } ${sceneBatchGenerating ? 'cursor-default' : 'cursor-pointer'}`}
                   >
-                    <div className="px-2.5 pb-2 pt-2.5">
-                      <div className="flex justify-center">
-                        <span className={`${SCENE_TAG_CLASS} max-w-full justify-center text-center`}>{slot.title}</span>
+                    {/* 固定顶栏高度：标题最多 2 行 + 描述 1 行，避免 6 张卡片的占位图上下错位 */}
+                    <div className="flex h-[5.25rem] shrink-0 flex-col px-2.5 pb-1.5 pt-2">
+                      <div className="flex min-h-0 flex-1 items-center justify-center">
+                        <span
+                          className={`${SCENE_TAG_CLASS} line-clamp-2 max-h-[2.6rem] min-w-0 w-full justify-center overflow-hidden text-center text-[10px] leading-snug`}
+                        >
+                          {slot.title}
+                        </span>
                       </div>
-                      <div className="relative group/desc mt-1.5 min-h-[1.25rem]">
-                        <p className="text-[10px] leading-snug text-white/48 truncate cursor-default select-none">
+                      <div className="relative group/desc mt-1 h-5 shrink-0">
+                        <p className="text-[10px] leading-5 text-white/48 truncate cursor-default select-none">
                           {rawDesc || '\u00a0'}
                         </p>
                         {rawDesc ? (
