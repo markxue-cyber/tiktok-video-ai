@@ -2454,6 +2454,8 @@ function ImageGenerator({
   const prevImageModelRef = useRef<string | null>(null)
   const [promptGenOutputSettings, setPromptGenOutputSettings] = useState<{ aspect: ImageAspect; resolution: ImageRes } | null>(null)
   const [promptRegenBusy, setPromptRegenBusy] = useState(false)
+  const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
+  const oneClickHintTimerRef = useRef(0)
   const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>(IMAGE_MODELS)
   const [unavailableImageMap, setUnavailableImageMap] = useState<Record<string, string>>({})
   const imageModelOptions = useMemo(
@@ -2471,6 +2473,17 @@ function ImageGenerator({
     setRefImagePreviewUrl(first)
     setRefImageDataUrl(first)
   }, [refImages])
+
+  useEffect(() => {
+    if (refImages.length > 0) {
+      setOneClickNeedRefHint(false)
+      window.clearTimeout(oneClickHintTimerRef.current)
+    }
+  }, [refImages.length])
+
+  useEffect(() => {
+    return () => window.clearTimeout(oneClickHintTimerRef.current)
+  }, [])
 
   const removeRefImage = (id: string) => {
     setRefImages((prev) => prev.filter((x) => x.id !== id))
@@ -2713,9 +2726,12 @@ function ImageGenerator({
 
   const handlePromptGen = async () => {
     if (!refImages.length) {
-      alert('请先上传参考图')
+      window.clearTimeout(oneClickHintTimerRef.current)
+      setOneClickNeedRefHint(true)
+      oneClickHintTimerRef.current = window.setTimeout(() => setOneClickNeedRefHint(false), 4500)
       return
     }
+    setOneClickNeedRefHint(false)
     setPromptGenOutputSettings(null)
     setShowModal(true)
     setModalStep(1)
@@ -2743,7 +2759,9 @@ function ImageGenerator({
 
   const handleRegeneratePromptWithCurrentOutput = async () => {
     if (!refImages.length) {
-      alert('请先上传参考图')
+      setOneClickNeedRefHint(true)
+      window.clearTimeout(oneClickHintTimerRef.current)
+      oneClickHintTimerRef.current = window.setTimeout(() => setOneClickNeedRefHint(false), 4500)
       return
     }
     const jobId = ++aiJobRef.current
@@ -3714,17 +3732,30 @@ function ImageGenerator({
               </button>
             </div>
           ) : null}
-          <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
             <label className="block text-sm font-medium">画面描述</label>
-            <button
-              type="button"
-              onClick={() => void handlePromptGen()}
-              disabled={isAiBusy || promptRegenBusy}
-              title="一键生成提示词（需先上传参考图）"
-              className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Sparkles className="w-4 h-4 mr-1 shrink-0" /> 一键生成
-            </button>
+            <div className="flex items-center gap-2 flex-wrap justify-end min-w-0">
+              {oneClickNeedRefHint ? (
+                <span className="text-xs text-amber-400/95 whitespace-nowrap shrink-0" role="status">
+                  请先上传参考图
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handlePromptGen()}
+                disabled={isAiBusy || promptRegenBusy}
+                title={refImages.length ? '一键生成提示词' : '需先上传参考图'}
+                className={`px-3 py-1.5 rounded-full text-sm flex items-center shrink-0 transition-colors ${
+                  isAiBusy || promptRegenBusy
+                    ? 'opacity-45 cursor-not-allowed bg-white/[0.06] text-white/40 border border-white/10'
+                    : refImages.length
+                      ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-transparent'
+                      : 'cursor-pointer bg-white/[0.05] text-white/38 border border-white/[0.10] hover:bg-white/[0.08] hover:text-white/50'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 mr-1 shrink-0 opacity-90" /> 一键生成
+              </button>
+            </div>
           </div>
           <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="描述画面与风格，或点「一键生成」…" />
         </div>
