@@ -19,6 +19,15 @@ export const TIKGEN_IG_IDB = {
   removeBgWorkspace: 'removeBg.workspace.v1',
   /** 去除背景：进行中的批量任务，用于刷新后续传 */
   removeBgJob: 'removeBg.job.v1',
+  /** 高清放大 */
+  imageUpscaleWorkspace: 'imageUpscale.workspace.v1',
+  imageUpscaleJob: 'imageUpscale.job.v1',
+  /** 图片压缩 */
+  imageCompressWorkspace: 'imageCompress.workspace.v1',
+  imageCompressJob: 'imageCompress.job.v1',
+  /** 图片翻译 */
+  imageTranslateWorkspace: 'imageTranslate.workspace.v1',
+  imageTranslateJob: 'imageTranslate.job.v1',
 } as const
 
 export type TikgenWorkspaceSnapshotV1 = {

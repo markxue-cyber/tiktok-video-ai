@@ -1,0 +1,1612 @@
+import type { LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Box,
+  Clock,
+  Download,
+  Eraser,
+  Image as ImageIcon,
+  Languages,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react'
+import { createAssetAPI } from './api/assets'
+import { imageToolNanoAPI } from './api/imageToolNano'
+import { removeBackgroundAPI } from './api/removeBackground'
+import { DEFAULT_TARGET_LANG, TARGET_LANGUAGES, type TargetLanguageCode, targetLangByCode } from './imageTool/targetLanguages'
+import { tikgenIgIdbDelete, tikgenIgIdbGet, tikgenIgIdbSet, TIKGEN_IG_IDB } from './tikgenImageGenPersistence'
+
+const MAX_IMAGES = 5
+const HISTORY_MAX = 80
+
+export type ImageToolHistoryTask = {
+  id: string
+  ts: number
+  refThumb: string
+  prompt: string
+  modelLabel: string
+  resolutionLabel: string
+  formatLabel: string
+  requestedCount: number
+  status: 'active' | 'completed' | 'failed'
+  progress: number
+  outputUrls: string[]
+  errorMessage?: string
+}
+
+/** @deprecated 使用 ImageToolHistoryTask */
+export type RemoveBgHistoryTask = ImageToolHistoryTask
+
+export type ImageToolMode = 'removeBg' | 'upscale' | 'compress' | 'translate'
+
+type ToolRuntime = {
+  historyKey: string
+  workspaceKey: string
+  jobKey: string
+  archiveInputFrom: string
+  archiveOutputTool: string
+  downloadBase: string
+  taskPrefix: string
+  emptySubtext: string
+  submitLabel: string
+  SubmitIcon: LucideIcon
+}
+
+const RUNTIME: Record<ImageToolMode, ToolRuntime> = {
+  removeBg: {
+    historyKey: 'tikgen.removeBg.history',
+    workspaceKey: TIKGEN_IG_IDB.removeBgWorkspace,
+    jobKey: TIKGEN_IG_IDB.removeBgJob,
+    archiveInputFrom: 'remove_background_input',
+    archiveOutputTool: 'remove_background',
+    downloadBase: 'remove-bg',
+    taskPrefix: 'rb_task_',
+    emptySubtext: '上传图片并点击「去除背景」后，进度与结果会出现在这里。',
+    submitLabel: '去除背景',
+    SubmitIcon: Eraser,
+  },
+  upscale: {
+    historyKey: 'tikgen.imageUpscale.history',
+    workspaceKey: TIKGEN_IG_IDB.imageUpscaleWorkspace,
+    jobKey: TIKGEN_IG_IDB.imageUpscaleJob,
+    archiveInputFrom: 'image_upscale_input',
+    archiveOutputTool: 'image_upscale',
+    downloadBase: 'image-upscale',
+    taskPrefix: 'up_task_',
+    emptySubtext: '上传图片并点击「高清放大」后，进度与结果会出现在这里。',
+    submitLabel: '高清放大',
+    SubmitIcon: Maximize2,
+  },
+  compress: {
+    historyKey: 'tikgen.imageCompress.history',
+    workspaceKey: TIKGEN_IG_IDB.imageCompressWorkspace,
+    jobKey: TIKGEN_IG_IDB.imageCompressJob,
+    archiveInputFrom: 'image_compress_input',
+    archiveOutputTool: 'image_compress',
+    downloadBase: 'image-compress',
+    taskPrefix: 'cp_task_',
+    emptySubtext: '上传图片并点击「图片压缩」后，进度与结果会出现在这里。',
+    submitLabel: '图片压缩',
+    SubmitIcon: Minimize2,
+  },
+  translate: {
+    historyKey: 'tikgen.imageTranslate.history',
+    workspaceKey: TIKGEN_IG_IDB.imageTranslateWorkspace,
+    jobKey: TIKGEN_IG_IDB.imageTranslateJob,
+    archiveInputFrom: 'image_translate_input',
+    archiveOutputTool: 'image_translate',
+    downloadBase: 'image-translate',
+    taskPrefix: 'tr_task_',
+    emptySubtext: '上传图片并点击「图片翻译」后，进度与结果会出现在这里。',
+    submitLabel: '图片翻译',
+    SubmitIcon: Languages,
+  },
+}
+
+type RemoveBgWorkspaceV1 = {
+  v: 1
+  images: Array<{ id: string; url: string; name?: string }>
+  resolution: '1024' | '2048'
+  outputFormat: 'png' | 'webp'
+}
+
+type UpscaleWorkspaceV1 = {
+  v: 1
+  images: Array<{ id: string; url: string; name?: string }>
+  scale: '2' | '4'
+  outputFormat: 'png' | 'jpeg'
+}
+
+type CompressWorkspaceV1 = {
+  v: 1
+  images: Array<{ id: string; url: string; name?: string }>
+  compressPercent: number
+  outputFormat: 'png' | 'jpeg'
+}
+
+type TranslateWorkspaceV1 = {
+  v: 1
+  images: Array<{ id: string; url: string; name?: string }>
+  targetLang: TargetLanguageCode
+  outputFormat: 'png' | 'jpeg'
+}
+
+type RemoveBgJobV1 = {
+  v: 1
+  taskId: string
+  refUrls: string[]
+  resolution: '1024' | '2048'
+  outputFormat: 'png' | 'webp'
+  outputs: string[]
+  tool?: 'removeBg'
+}
+
+type UpscaleJobV1 = {
+  v: 1
+  tool: 'upscale'
+  taskId: string
+  refUrls: string[]
+  scale: '2' | '4'
+  outputFormat: 'png' | 'jpeg'
+  outputs: string[]
+}
+
+type CompressJobV1 = {
+  v: 1
+  tool: 'compress'
+  taskId: string
+  refUrls: string[]
+  compressPercent: number
+  outputFormat: 'png' | 'jpeg'
+  outputs: string[]
+}
+
+type TranslateJobV1 = {
+  v: 1
+  tool: 'translate'
+  taskId: string
+  refUrls: string[]
+  targetLang: TargetLanguageCode
+  outputFormat: 'png' | 'jpeg'
+  outputs: string[]
+}
+
+type AnyJobV1 = RemoveBgJobV1 | UpscaleJobV1 | CompressJobV1 | TranslateJobV1
+
+/** 刷新后续跑时使用任务创建时的参数，避免与当前面板状态不一致 */
+type LockedPipelineSettings =
+  | { kind: 'removeBg'; resolution: '1024' | '2048'; outputFormat: 'png' | 'webp' }
+  | { kind: 'upscale'; scale: '2' | '4'; outputFormat: 'png' | 'jpeg' }
+  | { kind: 'compress'; compressPercent: number; outputFormat: 'png' | 'jpeg' }
+  | { kind: 'translate'; targetLang: TargetLanguageCode; outputFormat: 'png' | 'jpeg' }
+
+function lockedSettingsFromJob(job: AnyJobV1, t: ImageToolMode): LockedPipelineSettings | undefined {
+  if (t === 'removeBg') {
+    const j = job as RemoveBgJobV1
+    return {
+      kind: 'removeBg',
+      resolution: j.resolution === '2048' ? '2048' : '1024',
+      outputFormat: j.outputFormat === 'webp' ? 'webp' : 'png',
+    }
+  }
+  if (t === 'upscale' && 'tool' in job && job.tool === 'upscale') {
+    const j = job as UpscaleJobV1
+    return {
+      kind: 'upscale',
+      scale: j.scale === '4' ? '4' : '2',
+      outputFormat: j.outputFormat === 'jpeg' ? 'jpeg' : 'png',
+    }
+  }
+  if (t === 'compress' && 'tool' in job && job.tool === 'compress') {
+    const j = job as CompressJobV1
+    return {
+      kind: 'compress',
+      compressPercent: Math.max(1, Math.min(100, Math.round(Number(j.compressPercent) || 80))),
+      outputFormat: j.outputFormat === 'jpeg' ? 'jpeg' : 'png',
+    }
+  }
+  if (t === 'translate' && 'tool' in job && job.tool === 'translate') {
+    const j = job as TranslateJobV1
+    const code = targetLangByCode(j.targetLang) ? j.targetLang : DEFAULT_TARGET_LANG
+    return {
+      kind: 'translate',
+      targetLang: code,
+      outputFormat: j.outputFormat === 'jpeg' ? 'jpeg' : 'png',
+    }
+  }
+  return undefined
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result || ''))
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+}
+
+function loadHistory(key: string): ImageToolHistoryTask[] {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((x: any) => x && typeof x.id === 'string' && typeof x.ts === 'number')
+      .map((t: any) => ({
+        ...t,
+        progress: typeof t.progress === 'number' ? t.progress : t.status === 'completed' ? 100 : 0,
+        outputUrls: Array.isArray(t.outputUrls) ? t.outputUrls : [],
+        status: t.status === 'active' || t.status === 'failed' || t.status === 'completed' ? t.status : 'completed',
+      }))
+      .slice(0, HISTORY_MAX) as ImageToolHistoryTask[]
+  } catch {
+    return []
+  }
+}
+
+function saveHistory(key: string, tasks: ImageToolHistoryTask[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(tasks.slice(0, HISTORY_MAX)))
+  } catch {
+    // ignore
+  }
+}
+
+function dayKey(ts: number) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
+function relativeZh(ts: number) {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  if (sec < 55) return '刚刚'
+  if (sec < 3600) return `${Math.max(1, Math.floor(sec / 60))} 分钟前`
+  if (sec < 86400) return `${Math.max(1, Math.floor(sec / 3600))} 小时前`
+  if (sec < 86400 * 7) return `${Math.max(1, Math.floor(sec / 86400))} 天前`
+  return dayKey(ts)
+}
+
+async function safeArchiveUpload(file: File, dataUrl: string, from: string) {
+  try {
+    await createAssetAPI({
+      source: 'user_upload',
+      type: 'image',
+      url: dataUrl,
+      name: file.name,
+      metadata: { from, mime: file.type, size: file.size },
+    })
+  } catch {
+    // optional
+  }
+}
+
+async function safeArchiveOutput(params: {
+  url: string
+  taskId: string
+  index: number
+  tool: string
+  nameSuffix: string
+  meta: Record<string, unknown>
+}) {
+  try {
+    if (!params.url) return
+    await createAssetAPI({
+      source: 'ai_generated',
+      type: 'image',
+      url: params.url,
+      name: `${params.nameSuffix}-${params.index + 1}-${params.taskId.slice(-10)}.${params.meta.ext || 'png'}`,
+      metadata: {
+        from: `image_tool_${params.tool}`,
+        tool: params.tool,
+        task_id: params.taskId,
+        index: params.index,
+        ...params.meta,
+      },
+    })
+  } catch (e) {
+    console.error('[assets] image tool output archive failed:', e)
+  }
+}
+
+async function maybeToWebp(imageUrl: string): Promise<string> {
+  if (!imageUrl) return imageUrl
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas')
+        c.width = img.naturalWidth || 1
+        c.height = img.naturalHeight || 1
+        const ctx = c.getContext('2d')
+        if (!ctx) {
+          resolve(imageUrl)
+          return
+        }
+        ctx.drawImage(img, 0, 0)
+        const webp = c.toDataURL('image/webp', 0.92)
+        if (webp.startsWith('data:image/webp')) resolve(webp)
+        else resolve(imageUrl)
+      } catch {
+        resolve(imageUrl)
+      }
+    }
+    img.onerror = () => resolve(imageUrl)
+    img.src = imageUrl
+  })
+}
+
+async function maybeToJpeg(imageUrl: string, quality = 0.88): Promise<string> {
+  if (!imageUrl) return imageUrl
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas')
+        c.width = img.naturalWidth || 1
+        c.height = img.naturalHeight || 1
+        const ctx = c.getContext('2d')
+        if (!ctx) {
+          resolve(imageUrl)
+          return
+        }
+        ctx.drawImage(img, 0, 0)
+        const jpeg = c.toDataURL('image/jpeg', quality)
+        if (jpeg.startsWith('data:image/jpeg')) resolve(jpeg)
+        else resolve(imageUrl)
+      } catch {
+        resolve(imageUrl)
+      }
+    }
+    img.onerror = () => resolve(imageUrl)
+    img.src = imageUrl
+  })
+}
+
+export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
+  const rt = RUNTIME[tool]
+  const [images, setImages] = useState<Array<{ id: string; url: string; name?: string }>>([])
+  const [resolution, setResolution] = useState<'1024' | '2048'>('1024')
+  const [scale, setScale] = useState<'2' | '4'>('2')
+  const [compressPercent, setCompressPercent] = useState(80)
+  const [targetLang, setTargetLang] = useState<TargetLanguageCode>(DEFAULT_TARGET_LANG)
+  const [outputFormatRemoveBg, setOutputFormatRemoveBg] = useState<'png' | 'webp'>('png')
+  const [outputFormatNano, setOutputFormatNano] = useState<'png' | 'jpeg'>('png')
+  const [uploadNotice, setUploadNotice] = useState('')
+  const [uploadBusy, setUploadBusy] = useState(false)
+  const [submitBusy, setSubmitBusy] = useState(false)
+  const [history, setHistory] = useState<ImageToolHistoryTask[]>([])
+  const [lightbox, setLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
+  const [persistenceReady, setPersistenceReady] = useState(false)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const progressTimersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  const mountedRef = useRef(true)
+  const runPipelineRef = useRef<(opts: PipelineOpts) => Promise<void>>(async () => {})
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    saveHistory(rt.historyKey, history)
+  }, [history, rt.historyKey])
+
+  const sortedHistory = useMemo(() => [...history].sort((a, b) => b.ts - a.ts), [history])
+
+  const stopProgressTicker = useCallback((taskId: string) => {
+    const t = progressTimersRef.current[taskId]
+    if (t) {
+      clearInterval(t)
+      delete progressTimersRef.current[taskId]
+    }
+  }, [])
+
+  const removeHistoryTask = useCallback(
+    (taskId: string) => {
+      stopProgressTicker(taskId)
+      void (async () => {
+        const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
+        if (job?.v === 1 && job.taskId === taskId) await tikgenIgIdbDelete(rt.jobKey)
+      })()
+      setHistory((prev) => prev.filter((t) => t.id !== taskId))
+    },
+    [stopProgressTicker, rt.jobKey],
+  )
+
+  const startProgressTicker = useCallback(
+    (taskId: string, basePercent: number, span: number) => {
+      stopProgressTicker(taskId)
+      const start = Date.now()
+      const duration = 12000
+      progressTimersRef.current[taskId] = setInterval(() => {
+        const elapsed = Date.now() - start
+        const t = Math.min(1, elapsed / duration)
+        const eased = 1 - Math.exp(-3 * t)
+        const p = Math.min(94, Math.round(basePercent + span * eased))
+        setHistory((prev) => prev.map((x) => (x.id === taskId ? { ...x, progress: Math.max(x.progress, p) } : x)))
+      }, 180)
+    },
+    [stopProgressTicker],
+  )
+
+  type PipelineOpts = {
+    taskId: string
+    refUrls: string[]
+    startIndex: number
+    initialOutputs: string[]
+    clearImagesOnComplete: boolean
+    isCancelled: () => boolean
+    /** 存在时整段 pipeline 使用锁定参数（用于 IndexedDB 任务恢复） */
+    locked?: LockedPipelineSettings
+  }
+
+  const runPipeline = useCallback(
+    async (opts: PipelineOpts) => {
+      const { taskId, refUrls, startIndex, initialOutputs, clearImagesOnComplete, isCancelled, locked: L } = opts
+      const outputs = [...initialOutputs]
+
+      let effResolution = resolution
+      let effOutputFormatRemoveBg = outputFormatRemoveBg
+      let effScale = scale
+      let effOutputFormatNano = outputFormatNano
+      let effCompressPct = Math.max(1, Math.min(100, Math.round(compressPercent)))
+      let effTargetLang = targetLang
+
+      if (L) {
+        if (L.kind === 'removeBg') {
+          effResolution = L.resolution
+          effOutputFormatRemoveBg = L.outputFormat
+        } else if (L.kind === 'upscale') {
+          effScale = L.scale
+          effOutputFormatNano = L.outputFormat
+        } else if (L.kind === 'compress') {
+          effCompressPct = L.compressPercent
+          effOutputFormatNano = L.outputFormat
+        } else if (L.kind === 'translate') {
+          effTargetLang = L.targetLang
+          effOutputFormatNano = L.outputFormat
+        }
+      }
+
+      const buildJobSnapshot = (out: string[]): AnyJobV1 => {
+        if (tool === 'removeBg') {
+          return {
+            v: 1,
+            taskId,
+            refUrls,
+            resolution: effResolution,
+            outputFormat: effOutputFormatRemoveBg,
+            outputs: out,
+          }
+        }
+        if (tool === 'upscale') {
+          return {
+            v: 1,
+            tool: 'upscale',
+            taskId,
+            refUrls,
+            scale: effScale,
+            outputFormat: effOutputFormatNano,
+            outputs: out,
+          }
+        }
+        if (tool === 'compress') {
+          return {
+            v: 1,
+            tool: 'compress',
+            taskId,
+            refUrls,
+            compressPercent: effCompressPct,
+            outputFormat: effOutputFormatNano,
+            outputs: out,
+          }
+        }
+        return {
+          v: 1,
+          tool: 'translate',
+          taskId,
+          refUrls,
+          targetLang: effTargetLang,
+          outputFormat: effOutputFormatNano,
+          outputs: out,
+        }
+      }
+
+      setSubmitBusy(true)
+      try {
+        for (let i = startIndex; i < refUrls.length; i++) {
+          if (isCancelled()) return
+          const base = Math.round((i / refUrls.length) * 100)
+          const span = Math.round(100 / refUrls.length)
+          startProgressTicker(taskId, base, span - 1)
+          try {
+            let out = ''
+            let formatLabelForTask = ''
+            let resolutionChip = ''
+            let archiveMeta: Record<string, unknown> = { ext: 'png' }
+
+            if (tool === 'removeBg') {
+              const res = effResolution
+              const fmt = effOutputFormatRemoveBg
+              const { imageUrl } = await removeBackgroundAPI({ refImage: refUrls[i], resolution: res, outputFormat: fmt })
+              out = imageUrl
+              if (fmt === 'webp') out = await maybeToWebp(imageUrl)
+              formatLabelForTask = fmt.toUpperCase()
+              resolutionChip = `${res}px`
+              archiveMeta = { ext: fmt === 'webp' ? 'webp' : 'png', resolution: res, format: fmt }
+              void safeArchiveOutput({
+                url: out,
+                taskId,
+                index: i,
+                tool: rt.archiveOutputTool,
+                nameSuffix: rt.downloadBase,
+                meta: archiveMeta,
+              })
+            } else if (tool === 'upscale') {
+              const fmt = effOutputFormatNano
+              const sc = effScale
+              const { imageUrl } = await imageToolNanoAPI({
+                mode: 'upscale',
+                refImage: refUrls[i],
+                scale: sc,
+                outputFormat: fmt,
+              })
+              out = imageUrl
+              if (fmt === 'jpeg') out = await maybeToJpeg(imageUrl)
+              formatLabelForTask = fmt === 'jpeg' ? 'JPEG' : 'PNG'
+              resolutionChip = `${sc}x`
+              archiveMeta = { ext: fmt === 'jpeg' ? 'jpg' : 'png', scale: sc, format: fmt }
+              void safeArchiveOutput({
+                url: out,
+                taskId,
+                index: i,
+                tool: rt.archiveOutputTool,
+                nameSuffix: rt.downloadBase,
+                meta: archiveMeta,
+              })
+            } else if (tool === 'compress') {
+              const fmt = effOutputFormatNano
+              const pct = effCompressPct
+              const { imageUrl } = await imageToolNanoAPI({
+                mode: 'compress',
+                refImage: refUrls[i],
+                compressPercent: pct,
+                outputFormat: fmt,
+              })
+              out = imageUrl
+              if (fmt === 'jpeg') out = await maybeToJpeg(imageUrl)
+              formatLabelForTask = fmt === 'jpeg' ? 'JPEG' : 'PNG'
+              resolutionChip = `${pct}%`
+              archiveMeta = { ext: fmt === 'jpeg' ? 'jpg' : 'png', compress_percent: pct, format: fmt }
+              void safeArchiveOutput({
+                url: out,
+                taskId,
+                index: i,
+                tool: rt.archiveOutputTool,
+                nameSuffix: rt.downloadBase,
+                meta: archiveMeta,
+              })
+            } else {
+              const fmt = effOutputFormatNano
+              const tl = effTargetLang
+              const label = targetLangByCode(tl)?.labelZh || tl
+              const { imageUrl } = await imageToolNanoAPI({
+                mode: 'translate',
+                refImage: refUrls[i],
+                targetLang: tl,
+                outputFormat: fmt,
+              })
+              out = imageUrl
+              if (fmt === 'jpeg') out = await maybeToJpeg(imageUrl)
+              formatLabelForTask = fmt === 'jpeg' ? 'JPEG' : 'PNG'
+              resolutionChip = label
+              archiveMeta = { ext: fmt === 'jpeg' ? 'jpg' : 'png', target_lang: tl, format: fmt }
+              void safeArchiveOutput({
+                url: out,
+                taskId,
+                index: i,
+                tool: rt.archiveOutputTool,
+                nameSuffix: rt.downloadBase,
+                meta: archiveMeta,
+              })
+            }
+
+            outputs.push(out)
+            await tikgenIgIdbSet(rt.jobKey, buildJobSnapshot(outputs))
+
+            const doneChunk = Math.round(((i + 1) / refUrls.length) * 100)
+            setHistory((prev) =>
+              prev.map((x) =>
+                x.id === taskId
+                  ? {
+                      ...x,
+                      outputUrls: [...outputs],
+                      progress: Math.max(x.progress, Math.min(99, doneChunk)),
+                      resolutionLabel: resolutionChip,
+                      formatLabel: formatLabelForTask,
+                    }
+                  : x,
+              ),
+            )
+          } catch (e: any) {
+            const failedMsg = String(e?.message || '处理失败')
+            stopProgressTicker(taskId)
+            await tikgenIgIdbDelete(rt.jobKey)
+            setHistory((prev) =>
+              prev.map((x) =>
+                x.id === taskId
+                  ? {
+                      ...x,
+                      status: 'failed',
+                      progress: 100,
+                      outputUrls: outputs,
+                      errorMessage: failedMsg,
+                    }
+                  : x,
+              ),
+            )
+            return
+          }
+          stopProgressTicker(taskId)
+        }
+
+        if (isCancelled()) return
+
+        await tikgenIgIdbDelete(rt.jobKey)
+        setHistory((prev) =>
+          prev.map((x) =>
+            x.id === taskId
+              ? {
+                  ...x,
+                  status: 'completed',
+                  progress: 100,
+                  outputUrls: outputs,
+                }
+              : x,
+          ),
+        )
+        if (clearImagesOnComplete) setImages([])
+      } finally {
+        stopProgressTicker(taskId)
+        setSubmitBusy(false)
+      }
+    },
+    [
+      tool,
+      rt.jobKey,
+      resolution,
+      outputFormatRemoveBg,
+      scale,
+      outputFormatNano,
+      compressPercent,
+      targetLang,
+      startProgressTicker,
+      stopProgressTicker,
+    ],
+  )
+
+  runPipelineRef.current = runPipeline
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const h0 = loadHistory(rt.historyKey)
+      if (tool === 'removeBg') {
+        const ws = await tikgenIgIdbGet<RemoveBgWorkspaceV1>(rt.workspaceKey)
+        if (!cancelled && ws?.v === 1) {
+          if (Array.isArray(ws.images)) setImages(ws.images)
+          if (ws.resolution === '1024' || ws.resolution === '2048') setResolution(ws.resolution)
+          if (ws.outputFormat === 'png' || ws.outputFormat === 'webp') setOutputFormatRemoveBg(ws.outputFormat)
+        }
+      } else if (tool === 'upscale') {
+        const ws = await tikgenIgIdbGet<UpscaleWorkspaceV1>(rt.workspaceKey)
+        if (!cancelled && ws?.v === 1) {
+          if (Array.isArray(ws.images)) setImages(ws.images)
+          if (ws.scale === '2' || ws.scale === '4') setScale(ws.scale)
+          if (ws.outputFormat === 'png' || ws.outputFormat === 'jpeg') setOutputFormatNano(ws.outputFormat)
+        }
+      } else if (tool === 'compress') {
+        const ws = await tikgenIgIdbGet<CompressWorkspaceV1>(rt.workspaceKey)
+        if (!cancelled && ws?.v === 1) {
+          if (Array.isArray(ws.images)) setImages(ws.images)
+          if (typeof ws.compressPercent === 'number') setCompressPercent(Math.max(1, Math.min(100, ws.compressPercent)))
+          if (ws.outputFormat === 'png' || ws.outputFormat === 'jpeg') setOutputFormatNano(ws.outputFormat)
+        }
+      } else {
+        const ws = await tikgenIgIdbGet<TranslateWorkspaceV1>(rt.workspaceKey)
+        if (!cancelled && ws?.v === 1) {
+          if (Array.isArray(ws.images)) setImages(ws.images)
+          const tl = ws.targetLang
+          if (targetLangByCode(tl)) setTargetLang(tl as TargetLanguageCode)
+          if (ws.outputFormat === 'png' || ws.outputFormat === 'jpeg') setOutputFormatNano(ws.outputFormat)
+        }
+      }
+
+      if (cancelled) return
+      setHistory(h0)
+      setPersistenceReady(true)
+
+      const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
+      if (cancelled || !job || job.v !== 1 || !Array.isArray(job.refUrls) || !job.refUrls.length) return
+
+      const isOurJob =
+        tool === 'removeBg'
+          ? !('tool' in job && job.tool != null && job.tool !== 'removeBg')
+          : 'tool' in job && job.tool === tool
+      if (!isOurJob) return
+
+      const locked = lockedSettingsFromJob(job, tool)
+      if (!locked) {
+        await tikgenIgIdbDelete(rt.jobKey)
+        return
+      }
+
+      const task = h0.find((t) => t.id === job.taskId && t.status === 'active')
+      if (!task) {
+        await tikgenIgIdbDelete(rt.jobKey)
+        return
+      }
+      const jobOut = Array.isArray(job.outputs) ? job.outputs : []
+      const taskOut = Array.isArray(task.outputUrls) ? task.outputUrls : []
+      const merged = taskOut.length >= jobOut.length ? [...taskOut] : [...jobOut]
+      const startIndex = merged.length
+      if (startIndex >= job.refUrls.length) {
+        await tikgenIgIdbDelete(rt.jobKey)
+        if (cancelled) return
+        setHistory((prev) =>
+          prev.map((x) =>
+            x.id === job.taskId ? { ...x, status: 'completed' as const, progress: 100, outputUrls: merged } : x,
+          ),
+        )
+        return
+      }
+
+      if (cancelled || !mountedRef.current) return
+
+      await runPipelineRef.current({
+        taskId: job.taskId,
+        refUrls: job.refUrls,
+        startIndex,
+        initialOutputs: merged.slice(),
+        clearImagesOnComplete: false,
+        isCancelled: () => cancelled || !mountedRef.current,
+        locked,
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tool, rt.historyKey, rt.workspaceKey, rt.jobKey])
+
+  useEffect(() => {
+    if (!persistenceReady) return
+    if (tool === 'removeBg') {
+      const snap: RemoveBgWorkspaceV1 = { v: 1, images, resolution, outputFormat: outputFormatRemoveBg }
+      void tikgenIgIdbSet(rt.workspaceKey, snap)
+    } else if (tool === 'upscale') {
+      const snap: UpscaleWorkspaceV1 = { v: 1, images, scale, outputFormat: outputFormatNano }
+      void tikgenIgIdbSet(rt.workspaceKey, snap)
+    } else if (tool === 'compress') {
+      const snap: CompressWorkspaceV1 = {
+        v: 1,
+        images,
+        compressPercent: Math.max(1, Math.min(100, Math.round(compressPercent))),
+        outputFormat: outputFormatNano,
+      }
+      void tikgenIgIdbSet(rt.workspaceKey, snap)
+    } else {
+      const snap: TranslateWorkspaceV1 = { v: 1, images, targetLang, outputFormat: outputFormatNano }
+      void tikgenIgIdbSet(rt.workspaceKey, snap)
+    }
+  }, [
+    images,
+    resolution,
+    outputFormatRemoveBg,
+    scale,
+    outputFormatNano,
+    compressPercent,
+    targetLang,
+    persistenceReady,
+    rt.workspaceKey,
+    tool,
+  ])
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    const remain = Math.max(0, MAX_IMAGES - images.length)
+    if (remain <= 0) {
+      setUploadNotice('最多上传 5 张图片')
+      return
+    }
+    if (files.length > remain) setUploadNotice('最多上传 5 张图片，已自动截取')
+    else setUploadNotice('')
+    const picked = Array.from(files).slice(0, remain)
+    setUploadBusy(true)
+    try {
+      const next: Array<{ id: string; url: string; name?: string }> = []
+      for (const f of picked) {
+        if (!f.type.startsWith('image/')) continue
+        if (f.size > 10 * 1024 * 1024) {
+          setUploadNotice('单张图片需 ≤ 10MB')
+          continue
+        }
+        const dataUrl = await fileToDataUrl(f)
+        next.push({ id: `it_${Date.now()}_${Math.random().toString(16).slice(2)}`, url: dataUrl, name: f.name })
+        void safeArchiveUpload(f, dataUrl, rt.archiveInputFrom)
+      }
+      setImages((prev) => [...prev, ...next])
+    } finally {
+      setUploadBusy(false)
+    }
+  }
+
+  const removeImage = (id: string) => {
+    setImages((prev) => prev.filter((x) => x.id !== id))
+  }
+
+  const chipLabelForSubmit = (): string => {
+    if (tool === 'removeBg') return `${resolution}px`
+    if (tool === 'upscale') return `${scale}x`
+    if (tool === 'compress') return `${Math.max(1, Math.min(100, Math.round(compressPercent)))}%`
+    return targetLangByCode(targetLang)?.labelZh || targetLang
+  }
+
+  const formatChipForSubmit = (): string => {
+    if (tool === 'removeBg') return outputFormatRemoveBg.toUpperCase()
+    return outputFormatNano === 'jpeg' ? 'JPEG' : 'PNG'
+  }
+
+  const handleSubmit = async () => {
+    if (!images.length || submitBusy) return
+    const list = [...images]
+    const refUrls = list.map((x) => x.url)
+    const taskId = `${rt.taskPrefix}${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const task: ImageToolHistoryTask = {
+      id: taskId,
+      ts: Date.now(),
+      refThumb: list[0]?.url || '',
+      prompt: `共 ${list.length} 张`,
+      modelLabel: 'Nano Banana 2',
+      resolutionLabel: chipLabelForSubmit(),
+      formatLabel: formatChipForSubmit(),
+      requestedCount: list.length,
+      status: 'active',
+      progress: 1,
+      outputUrls: [],
+    }
+
+    if (tool === 'removeBg') {
+      await tikgenIgIdbSet(rt.jobKey, {
+        v: 1,
+        taskId,
+        refUrls,
+        resolution,
+        outputFormat: outputFormatRemoveBg,
+        outputs: [],
+      })
+    } else if (tool === 'upscale') {
+      await tikgenIgIdbSet(rt.jobKey, {
+        v: 1,
+        tool: 'upscale',
+        taskId,
+        refUrls,
+        scale,
+        outputFormat: outputFormatNano,
+        outputs: [],
+      })
+    } else if (tool === 'compress') {
+      await tikgenIgIdbSet(rt.jobKey, {
+        v: 1,
+        tool: 'compress',
+        taskId,
+        refUrls,
+        compressPercent: Math.max(1, Math.min(100, Math.round(compressPercent))),
+        outputFormat: outputFormatNano,
+        outputs: [],
+      })
+    } else {
+      await tikgenIgIdbSet(rt.jobKey, {
+        v: 1,
+        tool: 'translate',
+        taskId,
+        refUrls,
+        targetLang,
+        outputFormat: outputFormatNano,
+        outputs: [],
+      })
+    }
+
+    setHistory((prev) => [task, ...prev])
+
+    await runPipeline({
+      taskId,
+      refUrls,
+      startIndex: 0,
+      initialOutputs: [],
+      clearImagesOnComplete: true,
+      isCancelled: () => !mountedRef.current,
+    })
+  }
+
+  const extForTask = (task: ImageToolHistoryTask) => {
+    const f = task.formatLabel.toLowerCase()
+    if (f === 'jpeg' || f === 'jpg') return 'jpg'
+    if (f === 'webp') return 'webp'
+    return 'png'
+  }
+
+  const downloadAll = (task: ImageToolHistoryTask) => {
+    const ext = extForTask(task)
+    task.outputUrls.forEach((url, idx) => {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${rt.downloadBase}-${task.id}-${idx + 1}.${ext}`
+      a.rel = 'noreferrer'
+      a.target = '_blank'
+      a.click()
+    })
+  }
+
+  const SubmitIcon = rt.SubmitIcon
+
+  const outputSpecSection = () => {
+    if (tool === 'removeBg') {
+      return (
+        <>
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+              <Maximize2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/85" strokeWidth={2} aria-hidden />
+              <span>处理分辨率</span>
+            </div>
+            <div
+              className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+              role="radiogroup"
+              aria-label="处理分辨率"
+            >
+              {(
+                [
+                  { v: '1024' as const, hint: '推荐 · 更快' },
+                  { v: '2048' as const, hint: '细节更清晰' },
+                ] as const
+              ).map(({ v, hint }) => {
+                const on = resolution === v
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setResolution(v)}
+                    className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                      on
+                        ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                        : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold tabular-nums">{v}px</span>
+                    <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                      {hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+              <Box className="h-3.5 w-3.5 shrink-0 text-violet-300/78" strokeWidth={1.75} aria-hidden />
+              <span>输出格式</span>
+            </div>
+            <div
+              className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+              role="radiogroup"
+              aria-label="输出格式"
+            >
+              {(
+                [
+                  { id: 'png' as const, label: 'PNG', hint: '透明背景' },
+                  { id: 'webp' as const, label: 'WEBP', hint: '体积更小' },
+                ] as const
+              ).map(({ id, label, hint }) => {
+                const on = outputFormatRemoveBg === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setOutputFormatRemoveBg(id)}
+                    className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                      on
+                        ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                        : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold tracking-wide">{label}</span>
+                    <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                      {hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (tool === 'upscale') {
+      return (
+        <>
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+              <Maximize2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/85" strokeWidth={2} aria-hidden />
+              <span>放大倍率</span>
+            </div>
+            <div
+              className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+              role="radiogroup"
+              aria-label="放大倍率"
+            >
+              {(['2', '4'] as const).map((v) => {
+                const on = scale === v
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setScale(v)}
+                    className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                      on
+                        ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                        : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold tabular-nums">{v}x</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+              <Box className="h-3.5 w-3.5 shrink-0 text-violet-300/78" strokeWidth={1.75} aria-hidden />
+              <span>输出格式</span>
+            </div>
+            <div
+              className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+              role="radiogroup"
+              aria-label="输出格式"
+            >
+              {(
+                [
+                  { id: 'png' as const, label: 'PNG', hint: '无损' },
+                  { id: 'jpeg' as const, label: 'JPEG', hint: '体积更小' },
+                ] as const
+              ).map(({ id, label, hint }) => {
+                const on = outputFormatNano === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setOutputFormatNano(id)}
+                    className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                      on
+                        ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                        : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold tracking-wide">{label}</span>
+                    <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                      {hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    if (tool === 'compress') {
+      const pct = Math.max(1, Math.min(100, Math.round(compressPercent)))
+      return (
+        <>
+          <div className="flex w-full min-w-0 flex-col gap-3">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+              <div className="flex items-center gap-2">
+                <Minimize2 className="h-3.5 w-3.5 shrink-0 text-amber-300/85" strokeWidth={2} aria-hidden />
+                <span>缩小倍率</span>
+              </div>
+              <span className="tabular-nums text-white/55">{pct}%</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              step={1}
+              value={pct}
+              onChange={(e) => setCompressPercent(Number(e.target.value))}
+              className="w-full h-2 accent-violet-500 rounded-full bg-white/10 appearance-none cursor-pointer"
+              aria-label="缩小倍率"
+            />
+            <p className="text-[10px] text-white/35">1%–100%，数值越小输出尺寸越小</p>
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+              <Box className="h-3.5 w-3.5 shrink-0 text-violet-300/78" strokeWidth={1.75} aria-hidden />
+              <span>输出格式</span>
+            </div>
+            <div
+              className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+              role="radiogroup"
+              aria-label="输出格式"
+            >
+              {(
+                [
+                  { id: 'png' as const, label: 'PNG', hint: '无损' },
+                  { id: 'jpeg' as const, label: 'JPEG', hint: '体积更小' },
+                ] as const
+              ).map(({ id, label, hint }) => {
+                const on = outputFormatNano === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setOutputFormatNano(id)}
+                    className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                      on
+                        ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                        : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                    }`}
+                  >
+                    <span className="text-sm font-semibold tracking-wide">{label}</span>
+                    <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                      {hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )
+    }
+
+    return (
+      <>
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          <div className="tikgen-module-title text-xs font-semibold text-white/90 mb-1">目标语言</div>
+          <div
+            className="grid grid-cols-2 gap-2"
+            role="radiogroup"
+            aria-label="目标语言"
+          >
+            {TARGET_LANGUAGES.map((lang) => {
+              const on = targetLang === lang.code
+              return (
+                <button
+                  key={lang.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setTargetLang(lang.code)}
+                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200 ring-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                    on
+                      ? 'bg-white/[0.12] text-white ring-violet-400/45 shadow-[0_0_0_1px_rgba(167,139,250,0.35)]'
+                      : 'bg-black/30 text-white/70 ring-white/[0.12] hover:bg-white/[0.07] hover:ring-white/20'
+                  }`}
+                >
+                  <span
+                    className={`shrink-0 h-3.5 w-3.5 rounded-full border-2 ${
+                      on ? 'border-violet-400 bg-violet-500 shadow-[0_0_0_3px_rgba(139,92,246,0.25)]' : 'border-white/35 bg-transparent'
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 truncate">{lang.labelZh}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-white/42">
+            <Box className="h-3.5 w-3.5 shrink-0 text-violet-300/78" strokeWidth={1.75} aria-hidden />
+            <span>输出格式</span>
+          </div>
+          <div
+            className="flex w-full gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-inset ring-white/[0.09]"
+            role="radiogroup"
+            aria-label="输出格式"
+          >
+            {(
+              [
+                { id: 'png' as const, label: 'PNG', hint: '更清晰' },
+                { id: 'jpeg' as const, label: 'JPEG', hint: '体积更小' },
+              ] as const
+            ).map(({ id, label, hint }) => {
+              const on = outputFormatNano === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setOutputFormatNano(id)}
+                  className={`relative flex min-h-[2.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-2 text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                    on
+                      ? 'bg-gradient-to-r from-pink-500/95 to-violet-600/95 text-white shadow-[0_4px_20px_rgba(124,58,237,0.28)] ring-1 ring-inset ring-white/15'
+                      : 'text-white/48 hover:bg-white/[0.06] hover:text-white/78'
+                  }`}
+                >
+                  <span className="text-sm font-semibold tracking-wide">{label}</span>
+                  <span className={`text-[10px] font-normal leading-tight ${on ? 'text-white/75' : 'text-white/32'}`}>
+                    {hint}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
+          <div className="flex flex-col gap-6">
+            <section className="w-full min-w-0">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">上传图片</div>
+                </div>
+                <div className="text-xs text-white/50 shrink-0 tabular-nums">
+                  {images.length}/{MAX_IMAGES}
+                </div>
+              </div>
+              <div
+                className={`tikgen-ref-dropzone rounded-xl p-2.5 relative ${uploadBusy ? 'cursor-wait' : 'cursor-pointer'}`}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (uploadBusy) return
+                  await handleFiles(e.dataTransfer?.files || null)
+                }}
+                onClick={() => {
+                  if (uploadBusy) return
+                  fileRef.current?.click()
+                }}
+              >
+                {uploadBusy ? (
+                  <div
+                    className="absolute inset-0 z-[15] flex flex-col items-center justify-center gap-2.5 rounded-[inherit] bg-black/50 backdrop-blur-[3px]"
+                    aria-busy="true"
+                    aria-live="polite"
+                  >
+                    <RefreshCw className="h-7 w-7 shrink-0 animate-spin text-violet-300/90" strokeWidth={2} />
+                    <span className="text-xs font-medium text-white/75">读取图片中…</span>
+                  </div>
+                ) : null}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={uploadBusy}
+                  onChange={async (e) => {
+                    await handleFiles(e.target.files || null)
+                    e.target.value = ''
+                  }}
+                  className="hidden"
+                />
+                {images.length ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
+                      {images.map((img, i) => (
+                        <div
+                          key={img.id}
+                          className="relative rounded-lg overflow-hidden bg-black/35 ring-1 ring-inset ring-white/[0.1]"
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setLightbox({ url: img.url, downloadName: img.name || `input-${i + 1}.png` })
+                            }}
+                            className="block w-full"
+                          >
+                            <img src={img.url} alt="" className="w-full h-20 object-cover" />
+                          </button>
+                          {i === 0 && (
+                            <span className="absolute left-1 top-1 text-xs px-2 py-1 rounded bg-black/65 text-white font-medium">
+                              主图
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              removeImage(img.id)
+                            }}
+                            className="absolute right-1 top-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      {images.length < MAX_IMAGES ? (
+                        <button
+                          type="button"
+                          disabled={uploadBusy}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            fileRef.current?.click()
+                          }}
+                          className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-white/[0.07] hover:text-white/65"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span className="text-[11px]">上传</span>
+                        </button>
+                      ) : null}
+                    </div>
+                    {uploadNotice ? <p className="text-[11px] text-amber-200/90">{uploadNotice}</p> : null}
+                  </div>
+                ) : (
+                  <div className="py-10 px-4 text-center">
+                    <Upload className="w-10 h-10 mx-auto text-white/35 mb-3" />
+                    <p className="text-sm text-white/65">点击或拖拽上传图片</p>
+                    <p className="text-xs text-white/40 mt-1">JPG / PNG / WEBP，单张 ≤10MB，最多 5 张</p>
+                    {uploadNotice ? <p className="text-[11px] text-amber-200/90 mt-2">{uploadNotice}</p> : null}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="w-full min-w-0 space-y-4">
+              <div className="flex items-center gap-1.5">
+                <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
+              </div>
+              {outputSpecSection()}
+            </section>
+
+            <div className="pt-1 w-full min-w-0">
+              <button
+                type="button"
+                disabled={!images.length || submitBusy}
+                onClick={() => void handleSubmit()}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/25 ring-1 ring-inset ring-white/10 transition-[filter,opacity] hover:brightness-[1.03] active:brightness-[0.98] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
+              >
+                {submitBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <SubmitIcon className="w-4 h-4" />}
+                {rt.submitLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-lg font-bold text-white/95">生成历史</h2>
+          </div>
+
+          {history.length === 0 ? (
+            <div className="min-h-[200px] flex flex-col items-center justify-center text-center text-white/45 border border-white/12 rounded-xl bg-white/[0.02] px-6">
+              <ImageIcon className="w-14 h-14 mb-3 opacity-35" />
+              <p className="text-sm text-white/55">暂无记录</p>
+              <p className="text-xs text-white/40 mt-1 max-w-xs">{rt.emptySubtext}</p>
+            </div>
+          ) : null}
+
+          {sortedHistory.length > 0 ? (
+            <div className="flex flex-col gap-4 pb-2">
+              {sortedHistory.map((task) => (
+                <div
+                  key={task.id}
+                  className="image-history-card relative rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                >
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                        <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                        {relativeZh(task.ts)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                        <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                        {task.resolutionLabel}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
+                        {task.formatLabel}
+                      </span>
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
+                          task.status === 'completed'
+                            ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
+                            : task.status === 'active'
+                              ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
+                              : 'bg-red-500/15 text-red-100 border-red-400/25'
+                        }`}
+                      >
+                        {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeHistoryTask(task.id)}
+                      className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
+                      title="删除此条记录"
+                      aria-label="删除此条记录"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </button>
+                  </div>
+
+                  <div className="flex gap-3 items-start mb-3">
+                    <button
+                      type="button"
+                      className="shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-white/15 bg-white/[0.04]"
+                      onClick={() => {
+                        if (task.refThumb) setLightbox({ url: task.refThumb, downloadName: `reference-${task.id}.png` })
+                      }}
+                    >
+                      {task.refThumb ? (
+                        <img src={task.refThumb} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-white/30">无</div>
+                      )}
+                    </button>
+                    <p className="text-xs text-white/78 leading-relaxed flex-1 min-w-0 break-words">
+                      共 {task.requestedCount || task.outputUrls.length || 1} 张
+                    </p>
+                  </div>
+
+                  {task.status === 'active' ? (
+                    <div className="mb-4">
+                      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-violet-500 to-pink-500 transition-[width] duration-300 ease-out"
+                          style={{ width: `${Math.max(1, Math.min(100, task.progress))}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-white/55 mt-1.5 tabular-nums">
+                        处理进度 {Math.max(1, Math.min(99, task.progress))}%
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {task.status === 'failed' && task.errorMessage ? (
+                    <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
+                  ) : null}
+
+                  {task.outputUrls.length > 0 ? (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => downloadAll(task)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08]"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        下载全部（{task.outputUrls.length}）
+                      </button>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {task.outputUrls.map((url, idx) => {
+                          const ext = extForTask(task)
+                          return (
+                            <div
+                              key={`${task.id}_out_${idx}`}
+                              className="flex flex-col overflow-visible rounded-2xl border border-white/12 bg-black/30 group/out"
+                            >
+                              <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
+                                <span className="block w-full text-center text-[13px] sm:text-sm font-semibold leading-snug text-violet-100/95">
+                                  结果 {idx + 1}
+                                </span>
+                              </div>
+                              <div
+                                className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35"
+                                style={{
+                                  backgroundImage:
+                                    'linear-gradient(45deg, #2a2a35 25%, transparent 25%), linear-gradient(-45deg, #2a2a35 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #2a2a35 75%), linear-gradient(-45deg, transparent 75%, #2a2a35 75%)',
+                                  backgroundSize: '12px 12px',
+                                  backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0',
+                                }}
+                              >
+                                <img
+                                  src={url}
+                                  alt=""
+                                  className="absolute inset-0 h-full w-full object-contain pointer-events-none select-none"
+                                  draggable={false}
+                                />
+                                <a
+                                  href={url}
+                                  download={`${rt.downloadBase}-${task.id}-${idx + 1}.${ext}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
+                                  title="下载"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                                <button
+                                  type="button"
+                                  className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setLightbox({ url, downloadName: `${rt.downloadBase}-${task.id}-${idx + 1}.${ext}` })
+                                  }}
+                                  title="点击放大预览"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : task.status === 'active' ? (
+                    <p className="text-[11px] text-white/45 mb-1">处理进行中，完成后将显示在下面…</p>
+                  ) : task.status === 'completed' ? (
+                    <p className="text-[11px] text-white/40">未返回图片</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightbox(null)}
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            onClick={() => setLightbox(null)}
+            aria-label="关闭"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={lightbox.url}
+            alt=""
+            className="max-h-[90vh] max-w-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <a
+            href={lightbox.url}
+            download={lightbox.downloadName || 'image.png'}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 inline-flex items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm text-white hover:bg-white/25"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Download className="w-4 h-4" />
+            下载
+          </a>
+        </div>
+      ) : null}
+    </>
+  )
+}
