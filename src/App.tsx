@@ -42,6 +42,7 @@ import {
   Minimize2,
   Droplets,
   Scissors,
+  Trash2,
 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -4918,6 +4919,10 @@ function ImageGenerator({
     if (items.length) downloadUrlsStaggered(items)
   }
 
+  const removeImageGenHistoryTask = (taskId: string) => {
+    setImageGenHistory((prev) => prev.filter((t) => t.id !== taskId))
+  }
+
   const mergeNegative = (base: string, add: string) => {
     const a = String(base || '')
     const b = String(add || '')
@@ -6032,9 +6037,20 @@ function ImageGenerator({
                       key={task.id}
                       className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
                     >
-                      <h3 className="text-lg sm:text-xl font-bold text-white/95 leading-snug mb-2.5 pr-1">
-                        {(task.productName || '').trim() || '商品场景'}
-                      </h3>
+                      <div className="mb-2.5 flex items-start justify-between gap-2">
+                        <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-white/95 sm:text-xl pr-1">
+                          {(task.productName || '').trim() || '商品场景'}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => removeImageGenHistoryTask(task.id)}
+                          className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
+                          title="删除此条记录"
+                          aria-label="删除此条记录"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        </button>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
                           <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />

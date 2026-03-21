@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Clock, Download, Eraser, Image as ImageIcon, Maximize2, RefreshCw, Upload, X } from 'lucide-react'
+import { Box, Clock, Download, Eraser, Image as ImageIcon, Maximize2, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { createAssetAPI } from './api/assets'
 import { removeBackgroundAPI } from './api/removeBackground'
 
@@ -598,10 +598,11 @@ export function RemoveBackgroundWorkbench() {
                     <button
                       type="button"
                       onClick={() => removeHistoryTask(task.id)}
-                      className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-normal text-white/28 transition-colors hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
+                      className="shrink-0 rounded-md p-1.5 text-white/28 transition-colors hover:bg-white/[0.06] hover:text-white/48 focus:outline-none focus-visible:text-white/55 focus-visible:ring-1 focus-visible:ring-white/20"
                       title="删除此条记录"
+                      aria-label="删除此条记录"
                     >
-                      删除
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
                     </button>
                   </div>
 
