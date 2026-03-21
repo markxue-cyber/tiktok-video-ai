@@ -342,6 +342,21 @@
   color: rgba(255, 255, 255, 0.88) !important;
 }
 
+/* Image generation history: prompt clamp + card polish */
+.workbench-root .image-history-prompt-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.workbench-root .image-history-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 40px rgba(3, 6, 18, 0.35);
+}
+
 /* Image generator: ℹ️ trigger — no “button tile”, icon only */
 .workbench-root .image-form-tip-trigger {
   background: transparent !important;

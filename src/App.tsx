@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Images } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
-import { qcEcommerceImage } from './api/imageQc'
 import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
@@ -117,6 +116,55 @@ function getImageModelUnavailableReason(id: string): string {
     if (r.test.test(s)) return r.reason
   }
   return ''
+}
+
+const IMAGE_GEN_HISTORY_STORAGE_KEY = 'tikgen.imageGenHistory.v1'
+const IMAGE_GEN_HISTORY_MAX = 100
+
+type ImageGenHistoryTask = {
+  id: string
+  ts: number
+  refThumb: string
+  prompt: string
+  modelId: string
+  modelLabel: string
+  aspect: string
+  resolutionLabel: string
+  requestedCount: number
+  status: 'completed' | 'failed'
+  outputUrls: string[]
+  errorMessage?: string
+}
+
+function imageHistoryDayKey(ts: number) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
+function imageHistoryRelativeZh(ts: number) {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  if (sec < 55) return '刚刚'
+  if (sec < 3600) return `${Math.max(1, Math.floor(sec / 60))} 分钟前`
+  if (sec < 86400) return `${Math.max(1, Math.floor(sec / 3600))} 小时前`
+  if (sec < 86400 * 7) return `${Math.max(1, Math.floor(sec / 86400))} 天前`
+  return imageHistoryDayKey(ts)
+}
+
+function groupImageHistoryByDay(tasks: ImageGenHistoryTask[]) {
+  const sorted = [...tasks].sort((a, b) => b.ts - a.ts)
+  const order: string[] = []
+  const seen = new Set<string>()
+  const byDay: Record<string, ImageGenHistoryTask[]> = {}
+  for (const t of sorted) {
+    const k = imageHistoryDayKey(t.ts)
+    if (!seen.has(k)) {
+      seen.add(k)
+      order.push(k)
+    }
+    if (!byDay[k]) byDay[k] = []
+    byDay[k].push(t)
+  }
+  return order.map((day) => ({ day, tasks: byDay[day] }))
 }
 
 const IMAGE_ASPECT_OPTIONS = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2'] as const
@@ -2432,7 +2480,8 @@ function ImageGenerator({
   const [resolution, setResolution] = useState<ImageRes>('2048')
   const [imageCount, setImageCount] = useState<1 | 2 | 3 | 4>(1)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generatedImage, setGeneratedImage] = useState('')
+  const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>([])
+  const [historyLightbox, setHistoryLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
   const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
@@ -2442,8 +2491,6 @@ function ImageGenerator({
   const [sceneMode, setSceneMode] = useState<'clean' | 'lite'>('clean')
   const [categoryHint, setCategoryHint] = useState('other')
   const [selectedStyleTags, setSelectedStyleTags] = useState<string[]>([])
-  const [qcResult, setQcResult] = useState<any>(null)
-  const [isQcBusy, setIsQcBusy] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
   const [genErrorText, setGenErrorText] = useState('')
   const [genErrorCode, setGenErrorCode] = useState('UNKNOWN')
@@ -2465,6 +2512,30 @@ function ImageGenerator({
     [imageModels, unavailableImageMap],
   )
   const MAX_REF_IMAGES = 5
+
+  const historyGrouped = useMemo(() => groupImageHistoryByDay(imageGenHistory), [imageGenHistory])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(IMAGE_GEN_HISTORY_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const valid = parsed.filter((x: any) => x && typeof x.id === 'string' && typeof x.ts === 'number') as ImageGenHistoryTask[]
+        setImageGenHistory(valid.slice(0, IMAGE_GEN_HISTORY_MAX))
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(IMAGE_GEN_HISTORY_STORAGE_KEY, JSON.stringify(imageGenHistory.slice(0, IMAGE_GEN_HISTORY_MAX)))
+    } catch {
+      // ignore
+    }
+  }, [imageGenHistory])
 
   useEffect(() => {
     const first = refImages[0]?.url || ''
@@ -2580,6 +2651,15 @@ function ImageGenerator({
     window.addEventListener('keydown', onEsc)
     return () => window.removeEventListener('keydown', onEsc)
   }, [previewRefImage])
+
+  useEffect(() => {
+    if (!historyLightbox) return
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHistoryLightbox(null)
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [historyLightbox])
 
   useEffect(() => {
     ;(async () => {
@@ -3100,12 +3180,15 @@ function ImageGenerator({
       return
     }
     setIsGenerating(true)
-    setGeneratedImage('')
-    setQcResult(null)
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
     setGenProgress(1)
     const stopProgress = startSmoothGenProgress()
+    const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
+    const resLabel =
+      resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
+    const refThumb = refImageDataUrl || refImages[0]?.url || ''
+    const taskId = `ig_${Date.now()}_${Math.random().toString(16).slice(2)}`
     try {
       const r = await generateImageAPI({
         prompt,
@@ -3116,7 +3199,20 @@ function ImageGenerator({
         refImage: refImageDataUrl || undefined,
         imageCount,
       })
-      setGeneratedImage(r.imageUrl)
+      const task: ImageGenHistoryTask = {
+        id: taskId,
+        ts: Date.now(),
+        refThumb,
+        prompt,
+        modelId: model,
+        modelLabel,
+        aspect: size,
+        resolutionLabel: resLabel,
+        requestedCount: imageCount,
+        status: 'completed',
+        outputUrls: [r.imageUrl],
+      }
+      setImageGenHistory((prev) => [task, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX))
       Sentry.captureMessage('image_generation_success', { level: 'info', extra: { model, size, resolution } })
       await safeArchiveAsset({
         source: 'ai_generated',
@@ -3127,27 +3223,25 @@ function ImageGenerator({
       })
       stopProgress()
       await completeGenProgress()
-      // 仅在生成成功后做一次电商质检（仍需用户点击生成触发，且有计费保险栓）
-      setIsQcBusy(true)
-      try {
-        const qc = await qcEcommerceImage({
-          imageUrl: r.imageUrl,
-          refImage: refImageDataUrl || undefined,
-          product: productInfo,
-          aspectRatio: size,
-          resolution,
-          language: productInfo.language || '简体中文',
-        })
-        setQcResult(qc.qc)
-      } catch {
-        // ignore QC failures
-      } finally {
-        setIsQcBusy(false)
-      }
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution } })
       setGenErrorText(e?.message || '生成失败')
       setGenErrorCode(e?.code || 'UNKNOWN')
+      const failTask: ImageGenHistoryTask = {
+        id: taskId,
+        ts: Date.now(),
+        refThumb,
+        prompt,
+        modelId: model,
+        modelLabel,
+        aspect: size,
+        resolutionLabel: resLabel,
+        requestedCount: imageCount,
+        status: 'failed',
+        outputUrls: [],
+        errorMessage: e?.message || '生成失败',
+      }
+      setImageGenHistory((prev) => [failTask, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX))
       stopProgress()
       setGenProgress(0)
     } finally {
@@ -3165,89 +3259,6 @@ function ImageGenerator({
         .filter(Boolean)
     const set = new Set([...norm(a), ...norm(b)])
     return Array.from(set).join(', ')
-  }
-
-  const handleQcFixAndRetry = async () => {
-    if (!qcResult) return
-    const addNeg = String(qcResult?.fix?.addToNegative || '').trim()
-    const tweaks = qcResult?.fix?.promptTweaks || {}
-
-    // 轻量学习：将本次质检常见问题转成“下次同品类默认微调”
-    try {
-      const issues: string[] = Array.isArray(qcResult?.issues) ? qcResult.issues.map(String) : []
-      const hint = String(categoryHint || 'other')
-      const patch: any = {}
-      if (issues.some((x) => x.includes('主体') && (x.includes('偏小') || x.includes('占比')))) {
-        patch.compositionAdd = '主体占比更高（约70–80%），减少无关留白，突出主体'
-      }
-      if (issues.some((x) => x.includes('背景') && (x.includes('简单') || x.includes('缺少场景') || x.includes('场景')))) {
-        patch.sceneAdd = '在不抢主体前提下加入1–2个弱化场景元素/道具并虚化，增强场景感'
-      }
-      if (addNeg) patch.negativeAdd = addNeg
-      if (Object.keys(patch).length) saveCategoryTweaks(hint, patch)
-    } catch {
-      // ignore
-    }
-
-    const nextParts = { ...(promptParts || {}) }
-    ;['subject', 'scene', 'composition', 'lighting', 'camera', 'style', 'quality', 'extra'].forEach((k) => {
-      const v = String(tweaks?.[k] || '').trim()
-      if (v) nextParts[k] = v
-    })
-    setPromptParts(nextParts)
-    setOptimizedPrompt(buildPromptFromParts(nextParts))
-    setOptimizedNegativePrompt((prev) => mergeNegative(prev, addNeg))
-
-    // 直接用修复后的 prompt 重试生成
-    setPrompt(buildPromptFromParts(nextParts))
-    setIsGenerating(true)
-    setGeneratedImage('')
-    setQcResult(null)
-    setGenProgress(1)
-    const stopProgress = startSmoothGenProgress()
-    try {
-      const r = await generateImageAPI({
-        prompt: buildPromptFromParts(nextParts),
-        negativePrompt: mergeNegative(optimizedNegativePrompt, addNeg) || undefined,
-        model,
-        aspectRatio: size,
-        resolution,
-        refImage: refImageDataUrl || undefined,
-        imageCount,
-      })
-      setGeneratedImage(r.imageUrl)
-      await safeArchiveAsset({
-        source: 'ai_generated',
-        type: 'image',
-        url: r.imageUrl,
-        name: `image-${Date.now()}.png`,
-        metadata: { from: 'image_generator_retry', model, size, resolution },
-      })
-      stopProgress()
-      await completeGenProgress()
-      setIsQcBusy(true)
-      try {
-        const qc = await qcEcommerceImage({
-          imageUrl: r.imageUrl,
-          refImage: refImageDataUrl || undefined,
-          product: productInfo,
-          aspectRatio: size,
-          resolution,
-          language: productInfo.language || '简体中文',
-        })
-        setQcResult(qc.qc)
-      } catch {
-        // ignore
-      } finally {
-        setIsQcBusy(false)
-      }
-    } catch (e: any) {
-      alert(e?.message || '修复重试失败')
-      stopProgress()
-      setGenProgress(0)
-    } finally {
-      setIsGenerating(false)
-    }
   }
 
   const formatImageResLabel = (r: ImageRes) =>
@@ -3754,92 +3765,148 @@ function ImageGenerator({
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成图片'}</button>
       </div>
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-6">生成结果</h2>
-        {isGenerating ? (
-          <GenerationLoadingCard
-            title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
-            subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.subtitle}
-            chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
-            progressText={`生成进度：${Math.max(1, Math.min(99, genProgress))}%`}
-          />
-        ) : generatedImage ? (
-          <div>
-            <img src={generatedImage} alt="生成图片" className="w-full rounded-xl" />
-            <div className="mt-4">
-              <div className="flex items-center justify-between">
-                <div className="font-medium">电商主图质检</div>
-                {isQcBusy && <div className="text-sm text-gray-500 flex items-center"><RefreshCw className="w-4 h-4 mr-2 animate-spin" />质检中...</div>}
-              </div>
-              {qcResult ? (
-                <div className="mt-2 p-4 rounded-xl border bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm">
-                      <span className="font-medium">评分：</span>{Number(qcResult.score || 0)}
-                      <span className="mx-2 text-gray-300">|</span>
-                      <span className="font-medium">结论：</span>
-                      <span className={qcResult.verdict === 'pass' ? 'text-green-600' : qcResult.verdict === 'warn' ? 'text-amber-600' : 'text-red-600'}>
-                        {qcResult.verdict === 'pass' ? '可投放' : qcResult.verdict === 'warn' ? '可优化' : '不建议投放'}
-                      </span>
-                    </div>
-                    <button
-                      onClick={handleQcFixAndRetry}
-                      className="px-3 py-2 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-700"
-                    >
-                      一键修复并重试
-                    </button>
-                  </div>
-                  {Array.isArray(qcResult.issues) && qcResult.issues.length > 0 && (
-                    <div className="mt-3">
-                      <div className="text-xs text-gray-600 mb-1">问题</div>
-                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
-                        {qcResult.issues.slice(0, 6).map((x: string, i: number) => (
-                          <li key={i}>{x}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {Array.isArray(qcResult.suggestions) && qcResult.suggestions.length > 0 && (
-                    <div className="mt-3">
-                      <div className="text-xs text-gray-600 mb-1">建议</div>
-                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
-                        {qcResult.suggestions.slice(0, 6).map((x: string, i: number) => (
-                          <li key={i}>{x}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-gray-500">生成完成后将自动进行一次主图质检。</div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <a href={generatedImage} target="_blank" rel="noreferrer" className="py-3 bg-gray-100 rounded-xl flex items-center justify-center">
-                <Play className="w-5 h-5 mr-2" />预览
-              </a>
-              <a href={generatedImage} download className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center">
-                <Download className="w-5 h-5 mr-2" />下载
-              </a>
-            </div>
-          </div>
-        ) : genErrorText ? (
-          <div className="h-96 flex flex-col items-center justify-center text-center bg-red-50 rounded-xl px-6">
-            <p className="text-red-600 font-medium">生成失败</p>
-            <p className="text-sm text-red-600 mt-2 break-words">{genErrorText}</p>
-            <p className="text-xs text-red-400 mt-2">错误码：{genErrorCode}</p>
-            {genErrorCode !== 'QUOTA_EXHAUSTED' && (
+      <div className="bg-white rounded-2xl p-6 shadow-lg lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
+        <h2 className="text-xl font-bold mb-4 text-white/95">生成历史</h2>
+        {genErrorText && !isGenerating ? (
+          <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="break-words">
+              <span className="font-medium">上次失败</span> · {genErrorText}
+              <span className="text-red-300/80 ml-1">（{genErrorCode}）</span>
+            </span>
+            {genErrorCode !== 'QUOTA_EXHAUSTED' ? (
               <button
-                onClick={handleGenerate}
+                type="button"
+                onClick={() => void handleGenerate()}
                 disabled={isGenerating}
-                className="mt-5 px-4 py-2 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                className="shrink-0 px-3 py-1.5 rounded-lg text-xs bg-red-500/30 border border-red-400/35 hover:bg-red-500/40 disabled:opacity-50"
               >
-                重试（保留参数）
+                重试
               </button>
-            )}
+            ) : null}
+          </div>
+        ) : null}
+        {isGenerating ? (
+          <div className="mb-6">
+            <GenerationLoadingCard
+              title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
+              subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.subtitle}
+              chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
+              progressText={`生成进度：${Math.max(1, Math.min(99, genProgress))}%`}
+            />
+          </div>
+        ) : null}
+        {historyGrouped.length === 0 && !isGenerating ? (
+          <div className="min-h-[260px] flex flex-col items-center justify-center text-center text-white/45 border border-white/12 rounded-xl bg-white/[0.02] px-6">
+            <Image className="w-14 h-14 mb-3 opacity-35" />
+            <p className="text-sm text-white/55">暂无生成记录</p>
+            <p className="text-xs text-white/40 mt-1">在左侧配置后点击「生成图片」，记录将按时间归档在此</p>
           </div>
         ) : (
-          <div className="h-96 flex items-center justify-center text-gray-400 border-2 border-dashed rounded-xl"><Image className="w-16 h-16 opacity-50" /></div>
+          <div className="space-y-10 pb-2">
+            {historyGrouped.map(({ day, tasks }) => (
+              <div key={day}>
+                <div className="text-sm font-semibold text-white/90 mb-3">{day}</div>
+                <div className="flex flex-col gap-4">
+                  {tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                          <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                          {imageHistoryRelativeZh(task.ts)}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                          <Box className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                          {task.modelLabel}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                          <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                          {task.aspect}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
+                          {task.resolutionLabel}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                          <Images className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                          {task.status === 'completed' ? `${task.outputUrls.length}/${task.requestedCount}` : `0/${task.requestedCount}`}
+                        </span>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
+                            task.status === 'completed'
+                              ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
+                              : 'bg-red-500/15 text-red-100 border-red-400/25'
+                          }`}
+                        >
+                          {task.status === 'completed' ? '已完成' : '失败'}
+                        </span>
+                      </div>
+                      <div className="flex gap-3 items-start mb-3">
+                        <button
+                          type="button"
+                          className="shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-white/15 bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50"
+                          onClick={() => {
+                            if (task.refThumb) setHistoryLightbox({ url: task.refThumb, downloadName: `reference-${task.id}.png` })
+                          }}
+                          title="点击放大参考图"
+                        >
+                          {task.refThumb ? (
+                            <img src={task.refThumb} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[10px] text-white/30">无</div>
+                          )}
+                        </button>
+                        <p
+                          title={task.prompt}
+                          className="image-history-prompt-clamp text-xs text-white/78 leading-relaxed flex-1 min-w-0 text-left cursor-default"
+                        >
+                          {task.prompt || '（无提示词）'}
+                        </p>
+                      </div>
+                      {task.status === 'failed' && task.errorMessage ? (
+                        <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
+                      ) : null}
+                      {task.outputUrls.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {task.outputUrls.map((url, idx) => (
+                            <div
+                              key={`${task.id}_out_${idx}`}
+                              className="relative w-[calc(50%-0.25rem)] sm:w-[calc(33.333%-0.34rem)] max-w-[148px] aspect-square rounded-xl overflow-hidden border border-white/12 group/out"
+                            >
+                              <button
+                                type="button"
+                                className="absolute inset-0 block"
+                                onClick={() =>
+                                  setHistoryLightbox({ url, downloadName: `tikgen-${task.id}-${idx + 1}.png` })
+                                }
+                                title="点击放大"
+                              >
+                                <img src={url} alt="" className="w-full h-full object-cover" />
+                              </button>
+                              <a
+                                href={url}
+                                download={`tikgen-${task.id}-${idx + 1}.png`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="absolute bottom-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 text-white/95 hover:bg-black/75 border border-white/15 opacity-90 sm:opacity-0 sm:group-hover/out:opacity-100 transition-opacity"
+                                title="下载"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      ) : task.status === 'completed' ? (
+                        <p className="text-[11px] text-white/40">未返回图片地址</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -3917,6 +3984,37 @@ function ImageGenerator({
           </div>
           <div className="mt-2 text-center text-xs text-white/70">
             {previewRefImage.name}（{previewRefImage.index + 1}/{refImages.length}）
+          </div>
+        </div>
+      </div>
+    )}
+    {historyLightbox && (
+      <div
+        className="fixed inset-0 z-[90] bg-black/82 backdrop-blur-sm flex items-center justify-center p-4"
+        onClick={() => setHistoryLightbox(null)}
+      >
+        <div className="relative max-w-5xl w-full flex flex-col items-stretch gap-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end gap-2">
+            <a
+              href={historyLightbox.url}
+              download={historyLightbox.downloadName || 'tikgen-image.png'}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:opacity-95"
+            >
+              <Download className="w-4 h-4" />
+              下载
+            </a>
+            <button
+              type="button"
+              onClick={() => setHistoryLightbox(null)}
+              className="px-3 py-2 rounded-xl text-sm bg-white/10 hover:bg-white/18 text-white border border-white/15"
+            >
+              关闭
+            </button>
+          </div>
+          <div className="rounded-2xl border border-white/18 bg-white/[0.06] p-2">
+            <img src={historyLightbox.url} alt="" className="w-full max-h-[78vh] object-contain rounded-xl mx-auto" />
           </div>
         </div>
       </div>
