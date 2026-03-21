@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
   beautifyScript,
@@ -4154,24 +4154,6 @@ function ImageGenerator({
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg overflow-visible">
         <div className="workbench-form-section p-4 mb-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">生成模型</div>
-            <ImageFormTip text="切换模型后，下方「输出规格」中的画幅与分辨率会随该模型能力自动变化。" label="生成模型说明" />
-          </div>
-          <label htmlFor="tikgen-image-model" className="sr-only">
-            生成模型
-          </label>
-          <select id="tikgen-image-model" value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
-            {imageModelOptions.map((m) => (
-              <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
-                {m.name}
-                {m.unavailableReason ? `（暂不可用）` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="workbench-form-section p-4 mb-5">
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">参考图</div>
@@ -4341,43 +4323,78 @@ function ImageGenerator({
 
         <div className="workbench-form-section p-4 mb-5">
           <div className="flex items-center gap-1.5 mb-3">
-            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
+            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">模型与规格</div>
             <ImageFormTip
               wide
-              label="输出规格说明"
-              text={`画幅与分辨率的可选项会随当前模型变化。
+              label="说明"
+              text={`模型、分辨率与画幅在同一行设置。切换模型后，分辨率与比例的可选项会随模型能力变化。
 
-一键生成提示词会结合此处的画幅与分辨率优化文案。若之后修改了画幅或分辨率，建议重新生成提示词，以免文案与出图设置不一致。`}
+一键生成提示词会结合当前画幅与分辨率优化文案；若之后修改了画幅或分辨率，建议重新生成提示词。`}
             />
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4 mb-0">
-            <div className="flex-1 min-w-0">
-              <label className="block text-sm font-medium mb-1">比例</label>
-              <select
-                value={size}
-                onChange={(e) => setSize(e.target.value as ImageAspect)}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-white/[0.03] border-white/12 text-white/90"
-              >
-                {imageCaps.aspectRatios.map((ar) => (
-                  <option key={ar} value={ar}>
-                    {ar}
-                  </option>
-                ))}
-              </select>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-3">
+            <div className="min-w-0 flex-1 sm:min-w-[160px] sm:flex-[1.35]">
+              <label htmlFor="tikgen-image-model" className="block text-xs text-white/50 mb-1.5 font-medium">
+                模型选择
+              </label>
+              <div className="relative">
+                <Box className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" strokeWidth={1.75} />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-image-model"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-9 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                >
+                  {imageModelOptions.map((m) => (
+                    <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
+                      {m.name}
+                      {m.unavailableReason ? `（暂不可用）` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <label className="block text-sm font-medium mb-1">分辨率</label>
-              <select
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value as ImageRes)}
-                className="w-full px-3 py-2 border rounded-lg text-sm bg-white/[0.03] border-white/12 text-white/90"
-              >
-                {imageCaps.resolutions.map((r) => (
-                  <option key={r} value={r}>
-                    {r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : r}
-                  </option>
-                ))}
-              </select>
+            <div className="w-full shrink-0 sm:w-[min(28%,9.5rem)] sm:max-w-[10rem]">
+              <label htmlFor="tikgen-image-resolution" className="mb-1.5 flex items-center gap-1 text-xs font-medium text-white/50">
+                分辨率选择
+                <Sparkles className="h-3 w-3 text-emerald-400/90" strokeWidth={2} aria-hidden />
+              </label>
+              <div className="relative">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-image-resolution"
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value as ImageRes)}
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                >
+                  {imageCaps.resolutions.map((r) => (
+                    <option key={r} value={r}>
+                      {r === '1024' ? '1K' : r === '1536' ? '1.5K' : r === '2048' ? '2K' : r === '4096' ? '4K' : r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="w-full shrink-0 sm:w-[min(22%,6.5rem)] sm:max-w-[7rem]">
+              <label htmlFor="tikgen-image-aspect" className="block text-xs font-medium text-white/50 mb-1.5">
+                图片比例
+              </label>
+              <div className="relative">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-image-aspect"
+                  value={size}
+                  onChange={(e) => setSize(e.target.value as ImageAspect)}
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                >
+                  {imageCaps.aspectRatios.map((ar) => (
+                    <option key={ar} value={ar}>
+                      {ar}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
