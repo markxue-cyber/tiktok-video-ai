@@ -4489,37 +4489,6 @@ function ImageGenerator({
           <div className="rounded-lg border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200/95">{aiError}</div>
         ) : null}
 
-        {!productStylePanelOpen && refImages.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            {oneClickNeedRefHint ? (
-              <span className="text-center text-xs text-amber-400/95" role="status">
-                请先上传参考图
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void handleOneClickFill()}
-              disabled={isAiBusy || promptRegenBusy}
-              title="分析商品信息并生成 4 套画面方案"
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold ${
-                isAiBusy || promptRegenBusy
-                  ? 'cursor-not-allowed bg-white/[0.06] text-white/40 ring-1 ring-inset ring-white/10'
-                  : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-900/30 hover:from-violet-500 hover:to-fuchsia-500'
-              }`}
-            >
-              {isAiBusy || promptRegenBusy ? (
-                <RefreshCw className="h-5 w-5 shrink-0 animate-spin opacity-90" />
-              ) : (
-                <Wand2 className="h-5 w-5 shrink-0 opacity-95" />
-              )}
-              {isAiBusy ? '分析中…' : promptRegenBusy ? '生成描述中…' : '一键分析商品及爆款风格'}
-            </button>
-            <p className="text-center text-[11px] leading-relaxed text-white/38">
-              点击后将展示商品分析与画面方案，并同步生成主提示词
-            </p>
-          </div>
-        ) : null}
-
         {productStylePanelOpen ? (
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -4708,42 +4677,86 @@ function ImageGenerator({
         </section>
         ) : null}
 
-        <div className={`pt-4 ${productStylePanelOpen ? 'mt-1' : 'mt-6'}`}>
-          <div className="mb-1.5 text-center text-xs text-white/50 sm:text-left">
-            <span className="font-medium text-white/75">{currentModelLabel}</span>
-            <span className="mx-1.5 text-white/20">·</span>
-            {size}
-            <span className="mx-1.5 text-white/20">·</span>
-            {formatImageResLabel(resolution)}
+        <div
+          className={`rounded-2xl border border-white/[0.09] bg-black/[0.22] p-4 ring-1 ring-inset ring-white/[0.04] ${
+            productStylePanelOpen ? 'mt-1' : 'mt-6'
+          }`}
+        >
+          {!productStylePanelOpen && refImages.length > 0 ? (
+            <div className="mb-4 border-b border-white/[0.07] pb-4">
+              {oneClickNeedRefHint ? (
+                <span className="mb-2 block text-center text-xs text-amber-400/95" role="status">
+                  请先上传参考图
+                </span>
+              ) : null}
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <span className="text-[11px] font-medium text-white/55">先分析商品</span>
+                <span className="text-[10px] text-white/35">生成主提示词与画面方案</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleOneClickFill()}
+                disabled={isAiBusy || promptRegenBusy}
+                title="分析商品信息并生成 4 套画面方案"
+                className={`flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition-colors ${
+                  isAiBusy || promptRegenBusy
+                    ? 'cursor-not-allowed border-white/[0.08] bg-white/[0.04] text-white/35'
+                    : 'border-violet-400/40 bg-violet-500/[0.14] text-violet-100 hover:border-violet-400/55 hover:bg-violet-500/[0.2]'
+                }`}
+              >
+                {isAiBusy || promptRegenBusy ? (
+                  <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4 shrink-0" strokeWidth={2} />
+                )}
+                {isAiBusy ? '分析中…' : promptRegenBusy ? '生成描述中…' : '一键分析商品及爆款风格'}
+              </button>
+              <p className="mt-2 text-center text-[10px] leading-relaxed text-white/38">
+                完成后展开下方模块；再使用「一键生成图片」规划 6 场景
+              </p>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="mb-2 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <span className="text-[11px] font-medium text-white/45">规划 6 场景并出图</span>
+              <span className="text-center text-[11px] tabular-nums text-white/50 sm:text-right">
+                <span className="text-white/70">{currentModelLabel}</span>
+                <span className="mx-1 text-white/25">·</span>
+                {size}
+                <span className="mx-1 text-white/25">·</span>
+                {formatImageResLabel(resolution)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handlePrepareSceneBoard()}
+              disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
+              className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
+                sceneBoardPreparing || (prompt.trim() && refImages.length > 0)
+                  ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_10px_40px_-8px_rgba(217,70,239,0.55),0_6px_20px_-6px_rgba(124,58,237,0.45)] ring-1 ring-inset ring-white/25 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)] hover:enabled:shadow-[0_14px_48px_-6px_rgba(217,70,239,0.65),0_8px_24px_-6px_rgba(99,102,241,0.4)] hover:enabled:brightness-[1.05] active:enabled:scale-[0.99] active:enabled:brightness-100 disabled:cursor-wait'
+                  : 'cursor-not-allowed bg-[#252532] text-white/40 ring-1 ring-inset ring-white/[0.08]'
+              }`}
+            >
+              {!sceneBoardPreparing && prompt.trim() && refImages.length > 0 ? (
+                <span
+                  className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent via-white/[0.08] to-white/[0.14] opacity-90"
+                  aria-hidden
+                />
+              ) : null}
+              {sceneBoardPreparing ? (
+                <>
+                  <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
+                  <span className="relative">正在规划场景…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
+                  <span className="relative">一键生成图片</span>
+                </>
+              )}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void handlePrepareSceneBoard()}
-            disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
-            className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
-              sceneBoardPreparing || (prompt.trim() && refImages.length > 0)
-                ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_10px_40px_-8px_rgba(217,70,239,0.55),0_6px_20px_-6px_rgba(124,58,237,0.45)] ring-1 ring-inset ring-white/25 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)] hover:enabled:shadow-[0_14px_48px_-6px_rgba(217,70,239,0.65),0_8px_24px_-6px_rgba(99,102,241,0.4)] hover:enabled:brightness-[1.05] active:enabled:scale-[0.99] active:enabled:brightness-100 disabled:cursor-wait'
-                : 'cursor-not-allowed bg-[#252532] text-white/40 ring-1 ring-inset ring-white/[0.08]'
-            }`}
-          >
-            {!sceneBoardPreparing && prompt.trim() && refImages.length > 0 ? (
-              <span
-                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent via-white/[0.08] to-white/[0.14] opacity-90"
-                aria-hidden
-              />
-            ) : null}
-            {sceneBoardPreparing ? (
-              <>
-                <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
-                <span className="relative">正在规划场景…</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
-                <span className="relative">一键生成图片</span>
-              </>
-            )}
-          </button>
         </div>
         </div>
       </div>
