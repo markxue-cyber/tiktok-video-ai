@@ -219,14 +219,13 @@ type SceneRunBoard = {
   slots: SceneRunSlot[]
 }
 
-/** 是否允许点「一键生成图片」：有待出图的已选槽，或已选槽全部已结束且可整批重出 */
+/** 是否允许点「一键生成图片」：仅已选中且仍为 pending / failed 的槽（已生成 done 不可再出） */
 function sceneBoardAllowsBatchGenerate(board: SceneRunBoard | null, batchBusy: boolean): boolean {
   if (!board || batchBusy) return false
   if (board.slots.some((s) => s.selected && s.status === 'generating')) return false
   const sel = board.slots.filter((s) => s.selected)
   if (!sel.length) return false
-  if (sel.some((s) => s.status === 'pending' || s.status === 'failed')) return true
-  return sel.every((s) => s.status === 'done' || s.status === 'failed')
+  return sel.some((s) => s.status === 'pending' || s.status === 'failed')
 }
 
 const IMAGE_SCENE_BLUEPRINT = [
@@ -3125,6 +3124,47 @@ function ImageGenerator({
     setRefImages((prev) => prev.filter((x) => x.id !== id))
   }
 
+  /** 删除主参考图后清空与本次分析/场景相关的编辑态（不删生成历史归档） */
+  const clearImageGenPageAfterMainRefRemoved = () => {
+    setHotStyles([])
+    setSelectedHotStyleIndex(0)
+    setProductAnalysisText('')
+    setProductInfo({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
+    setSceneRunBoard(null)
+    setPrompt('')
+    setOptimizedPrompt('')
+    setOptimizedNegativePrompt('')
+    setPromptParts({})
+    setPromptGenOutputSettings(null)
+    setCategoryHint('other')
+    setImageScenes(
+      IMAGE_SCENE_BLUEPRINT.map((b) => ({
+        key: b.key,
+        title: b.title,
+        description: '',
+        imagePrompt: '',
+        selected: true,
+      })),
+    )
+    setProductStylePanelOpen(false)
+    setGenErrorText('')
+    setGenErrorCode('UNKNOWN')
+  }
+
+  const requestRemoveRefImage = (id: string, slotIndex: number) => {
+    const isMain = slotIndex === 0
+    const hasAnalysisOrBoard =
+      hotStyles.length > 0 || productAnalysisText.trim() !== '' || sceneRunBoard != null
+    if (isMain && hasAnalysisOrBoard) {
+      const ok = window.confirm(
+        '删除主参考图后，当前页面内的商品分析、画面方案与场景看板等内容将被清空。是否继续删除？',
+      )
+      if (!ok) return
+      clearImageGenPageAfterMainRefRemoved()
+    }
+    removeRefImage(id)
+  }
+
   const moveRefImage = (fromId: string, toId: string) => {
     if (!fromId || !toId || fromId === toId) return
     setRefImages((prev) => {
@@ -4252,20 +4292,6 @@ function ImageGenerator({
     await runSceneSlotGeneration(boardId, slotIndex, bLive.basePrompt, sl)
   }
 
-  const handleRegenerateSceneSlot = async (boardId: string, slotIndex: number) => {
-    setSceneRunBoard((b) => {
-      if (!b || b.id !== boardId) return b
-      return {
-        ...b,
-        slots: b.slots.map((s, i) =>
-          i === slotIndex ? { ...s, status: 'pending' as const, imageUrl: undefined, error: undefined } : s,
-        ),
-      }
-    })
-    await new Promise<void>((r) => setTimeout(r, 0))
-    await handleGenerateSceneSlot(boardId, slotIndex)
-  }
-
   const toggleSceneSlotSelected = (boardId: string, slotIndex: number) => {
     if (sceneBatchGenerating) return
     setSceneRunBoard((b) => {
@@ -4283,24 +4309,10 @@ function ImageGenerator({
     const selEntries = board.slots.map((s, i) => ({ s, i })).filter(({ s }) => s.selected)
     if (!selEntries.length) return
 
-    const hasIncomplete = selEntries.some(
-      ({ s }) => s.status === 'pending' || s.status === 'failed',
-    )
-    const allSelectedTerminal = selEntries.every(
-      ({ s }) => s.status === 'done' || s.status === 'failed',
-    )
-
     const indices: number[] = []
-    if (hasIncomplete) {
-      selEntries.forEach(({ s, i }) => {
-        if (s.status === 'pending' || s.status === 'failed') indices.push(i)
-      })
-    } else if (allSelectedTerminal) {
-      // 已选全部已结束（通常为全 done）：整批重出，新图仍写入同一 board.id → 生成历史同一条记录增量更新
-      selEntries.forEach(({ s, i }) => {
-        if (s.status === 'done' || s.status === 'failed') indices.push(i)
-      })
-    }
+    selEntries.forEach(({ s, i }) => {
+      if (s.status === 'pending' || s.status === 'failed') indices.push(i)
+    })
     if (!indices.length) return
 
     const snap = board
@@ -4751,7 +4763,7 @@ function ImageGenerator({
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          removeRefImage(img.id)
+                          requestRemoveRefImage(img.id, i)
                         }}
                         className="absolute right-1 top-1 w-5 h-5 rounded-full bg-black/60 text-white text-xs"
                       >
@@ -5196,7 +5208,6 @@ function ImageGenerator({
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {sceneRunBoard.slots.map((slot, sidx) => {
                 const rawDesc = (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim()
-                const lineTeaser = styleCardTeaser(rawDesc, 48)
                 const hoverFull = styleCardSummary(rawDesc, 400)
                 const mosaicThumb = sceneRunBoard.refThumb || refImageDataUrl || ''
                 const mosaicBase = (
@@ -5206,20 +5217,25 @@ function ImageGenerator({
                         <img
                           src={mosaicThumb}
                           alt=""
-                          className="absolute inset-0 h-full w-full object-cover scale-[1.15] blur-2xl opacity-75"
+                          className="absolute inset-0 h-full w-full object-cover scale-[1.2] blur-[28px] saturate-[1.15] brightness-[0.92]"
                           draggable={false}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.14] via-violet-950/25 to-zinc-950/35" />
-                        <div
-                          className="absolute inset-0 opacity-[0.42] mix-blend-soft-light"
-                          style={{
-                            backgroundImage: `linear-gradient(90deg, rgba(255,255,255,0.14) 1px, transparent 1px), linear-gradient(rgba(255,255,255,0.11) 1px, transparent 1px)`,
-                            backgroundSize: '12px 12px',
-                          }}
-                        />
+                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.08] via-transparent to-zinc-950/40" />
+                        <div className="absolute inset-0 backdrop-blur-md bg-white/[0.06]" />
+                        <div className="absolute inset-0 ring-1 ring-inset ring-white/[0.06]" />
                       </>
                     ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/45 via-zinc-600/35 to-zinc-900/55" />
+                      <div className="absolute inset-0 overflow-hidden">
+                        <div
+                          className="absolute -inset-[35%] scale-150 blur-3xl opacity-90"
+                          style={{
+                            background:
+                              'radial-gradient(ellipse 80% 60% at 25% 30%, rgba(167,139,250,0.45), transparent 55%), radial-gradient(ellipse 70% 50% at 75% 70%, rgba(56,189,248,0.35), transparent 50%), radial-gradient(ellipse 60% 40% at 50% 50%, rgba(244,114,182,0.25), transparent 45%)',
+                          }}
+                        />
+                        <div className="absolute inset-0 backdrop-blur-xl bg-zinc-950/25" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.05] to-black/25" />
+                      </div>
                     )}
                   </>
                 )
@@ -5258,12 +5274,19 @@ function ImageGenerator({
                       <div className="flex justify-center">
                         <span className={`${SCENE_TAG_CLASS} max-w-full justify-center text-center`}>{slot.title}</span>
                       </div>
-                      <p
-                        className="mt-1.5 min-h-[1.25rem] text-[10px] leading-snug text-white/48 line-clamp-1"
-                        title={hoverFull || undefined}
-                      >
-                        {lineTeaser || '\u00a0'}
-                      </p>
+                      <div className="relative group/desc mt-1.5 min-h-[1.25rem]">
+                        <p className="text-[10px] leading-snug text-white/48 truncate cursor-default select-none">
+                          {rawDesc || '\u00a0'}
+                        </p>
+                        {rawDesc ? (
+                          <div
+                            className="pointer-events-none absolute left-1/2 z-[60] -translate-x-1/2 bottom-full mb-1 max-w-[min(100%,18rem)] rounded-lg border border-white/15 bg-[#111116]/95 px-2.5 py-1.5 text-[10px] leading-snug text-white/90 shadow-xl whitespace-normal opacity-0 translate-y-0.5 transition-[opacity,transform] duration-75 ease-out group-hover/desc:opacity-100 group-hover/desc:translate-y-0"
+                            role="tooltip"
+                          >
+                            {hoverFull}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="group/sc relative aspect-square w-full overflow-hidden bg-zinc-900/30">
                       {slot.status === 'done' && slot.imageUrl ? (
@@ -5325,18 +5348,6 @@ function ImageGenerator({
                             <Eye className="h-6 w-6" />
                           </button>
                           <div className="absolute right-2 top-2 flex gap-1">
-                            <button
-                              type="button"
-                              className="pointer-events-auto rounded-full border border-white/20 bg-black/70 p-1.5 text-white hover:bg-black/85"
-                              title="重新生成"
-                              disabled={sceneBatchGenerating}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                void handleRegenerateSceneSlot(sceneRunBoard.id, sidx)
-                              }}
-                            >
-                              <Wand2 className="h-3.5 w-3.5" />
-                            </button>
                             <a
                               href={slot.imageUrl}
                               download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
