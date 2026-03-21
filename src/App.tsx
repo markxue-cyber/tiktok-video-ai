@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2 } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
   beautifyScript,
@@ -167,6 +167,8 @@ type SceneRunSlot = {
   title: string
   description: string
   imagePrompt: string
+  /** 是否参与批量出图，默认 true */
+  selected: boolean
   status: 'pending' | 'generating' | 'done' | 'failed'
   imageUrl?: string
   error?: string
@@ -2562,6 +2564,9 @@ function ImageGenerator({
   const [sceneBoardPreparing, setSceneBoardPreparing] = useState(false)
   const [customStyleModalOpen, setCustomStyleModalOpen] = useState(false)
   const [customStyleDraft, setCustomStyleDraft] = useState({ title: '自定义方案', description: '', imagePrompt: '' })
+  const [styleCardEditIndex, setStyleCardEditIndex] = useState<number | null>(null)
+  const [styleCardEditDraft, setStyleCardEditDraft] = useState({ title: '', description: '', imagePrompt: '' })
+  const [sceneBatchGenerating, setSceneBatchGenerating] = useState(false)
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
     IMAGE_SCENE_BLUEPRINT.map((b) => ({
       key: b.key,
@@ -2613,28 +2618,37 @@ function ImageGenerator({
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
 
-  /** 六场景逐张出图全部结束后，写入一条「生成历史」摘要 */
+  /** 六场景：已选中的全部进入终态后写入「生成历史」；未勾选的不参与出图与归档 */
   useEffect(() => {
     if (!sceneRunBoard || sceneRunBoard.historyWritten) return
     const slots = sceneRunBoard.slots
     if (!slots.length) return
-    if (!slots.every((s) => s.status === 'done' || s.status === 'failed')) return
+    const slotTerminal = (s: SceneRunSlot) =>
+      !s.selected || s.status === 'done' || s.status === 'failed'
+    if (!slots.every(slotTerminal)) return
 
     const bid = sceneRunBoard.id
     const refThumb = sceneRunBoard.refThumb
     const basePrompt = sceneRunBoard.basePrompt
-    const doneSlots = slots.filter((s) => s.status === 'done' && s.imageUrl)
+    const anySelected = slots.some((s) => s.selected)
+    if (!anySelected) {
+      setSceneRunBoard((b) => (b && b.id === bid ? { ...b, historyWritten: true } : b))
+      return
+    }
+
+    const doneSlots = slots.filter((s) => s.selected && s.status === 'done' && s.imageUrl)
     const outputUrls = doneSlots.map((s) => s.imageUrl!)
     const sceneLabels = doneSlots.map((s) => s.title)
+    const failedSelected = slots.filter((s) => s.selected && s.status === 'failed')
     const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
     const resLb =
       resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
 
     if (!outputUrls.length) {
       const errMsg =
-        slots.filter((s) => s.status === 'failed').map((s) => `${s.title}：${s.error || '失败'}`).join('\n') || '生成失败'
+        failedSelected.map((s) => `${s.title}：${s.error || '失败'}`).join('\n') || '生成失败'
       setGenErrorText(
-        slots.filter((s) => s.status === 'failed').map((s) => `${s.title}：${s.error || '失败'}`).join('；') || '全部场景生成失败',
+        failedSelected.map((s) => `${s.title}：${s.error || '失败'}`).join('；') || '全部场景生成失败',
       )
       setGenErrorCode('UNKNOWN')
       setImageGenHistory((prev) =>
@@ -2645,12 +2659,12 @@ function ImageGenerator({
                 id: bid,
                 ts: Date.now(),
                 refThumb,
-                prompt: `多场景：${slots.map((s) => s.title).join('、')}\n────────\n${basePrompt.slice(0, 800)}`,
+                prompt: `多场景：${slots.filter((s) => s.selected).map((s) => s.title).join('、')}\n────────\n${basePrompt.slice(0, 800)}`,
                 modelId: model,
                 modelLabel,
                 aspect: size,
                 resolutionLabel: resLb,
-                requestedCount: slots.length,
+                requestedCount: slots.filter((s) => s.selected).length,
                 status: 'failed' as const,
                 outputUrls: [],
                 errorMessage: errMsg,
@@ -2662,7 +2676,7 @@ function ImageGenerator({
       return
     }
 
-    const errors = slots.filter((s) => s.status === 'failed').map((s) => `${s.title}：${s.error || '失败'}`)
+    const errors = failedSelected.map((s) => `${s.title}：${s.error || '失败'}`)
     const task: ImageGenHistoryTask = {
       id: bid,
       ts: Date.now(),
@@ -2941,12 +2955,6 @@ function ImageGenerator({
     setPromptGenOutputSettings(null)
     onTemplateApplied()
   }, [templatePreset, onTemplateApplied])
-
-  const openAdvancedPromptModal = () => {
-    setAiError('')
-    setShowModal(true)
-    setModalStep(productAnalysisText.trim() || productInfo.name || productInfo.category ? 2 : 1)
-  }
 
   /** 卡片上已有完整 imagePrompt 时直接应用；否则走 image-prompt 接口兜底 */
   const regeneratePromptFromStyleApi = async (idx: number) => {
@@ -3747,6 +3755,7 @@ function ImageGenerator({
           title: sc.title,
           description: sc.description,
           imagePrompt: sc.imagePrompt,
+          selected: true,
           status: 'pending' as const,
         })),
         historyWritten: false,
@@ -3767,7 +3776,8 @@ function ImageGenerator({
     const board = sceneRunBoardRef.current
     if (!board || board.id !== boardId) return
     const slot = board.slots[slotIndex]
-    if (!slot || slot.status === 'generating') return
+    if (!slot || !slot.selected) return
+    if (slot.status === 'generating') return
     if (slot.status === 'done') return
     if (!refImages.length || !board.basePrompt.trim()) return
 
@@ -3852,12 +3862,40 @@ function ImageGenerator({
     if (!b || b.id !== boardId) return
     const sl = b.slots[slotIndex]
     if (!sl) return
-    if (sl.status === 'pending' || sl.status === 'failed') {
-      void handleGenerateSceneSlot(boardId, slotIndex)
-      return
-    }
     if (sl.status === 'done' && sl.imageUrl) {
       setHistoryLightbox({ url: sl.imageUrl, downloadName: `tikgen-${boardId}-${slotIndex + 1}.png` })
+    }
+  }
+
+  const toggleSceneSlotSelected = (boardId: string, slotIndex: number) => {
+    if (sceneBatchGenerating) return
+    setSceneRunBoard((b) => {
+      if (!b || b.id !== boardId) return b
+      return {
+        ...b,
+        historyWritten: false,
+        slots: b.slots.map((s, i) => (i === slotIndex ? { ...s, selected: !s.selected } : s)),
+      }
+    })
+  }
+
+  const handleBatchGenerateSelectedScenes = async () => {
+    const board = sceneRunBoardRef.current
+    if (!board || !refImages.length || !board.basePrompt.trim()) return
+    const indices: number[] = []
+    board.slots.forEach((s, i) => {
+      if (s.selected && (s.status === 'pending' || s.status === 'failed')) indices.push(i)
+    })
+    if (!indices.length) return
+    setSceneBatchGenerating(true)
+    setGenErrorText('')
+    setGenErrorCode('UNKNOWN')
+    try {
+      for (const i of indices) {
+        await handleGenerateSceneSlot(board.id, i)
+      }
+    } finally {
+      setSceneBatchGenerating(false)
     }
   }
 
@@ -3866,12 +3904,43 @@ function ImageGenerator({
       void handlePrepareSceneBoard()
       return
     }
-    const bid = sceneRunBoard.id
-    for (let i = 0; i < sceneRunBoard.slots.length; i++) {
-      if (sceneRunBoard.slots[i].status === 'failed') {
-        await handleGenerateSceneSlot(bid, i)
-      }
-    }
+    await handleBatchGenerateSelectedScenes()
+  }
+
+  const downloadUrlsStaggered = (items: { url: string; name: string }[]) => {
+    items.forEach((item, i) => {
+      window.setTimeout(() => {
+        const a = document.createElement('a')
+        a.href = item.url
+        a.download = item.name
+        a.rel = 'noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      }, i * 450)
+    })
+  }
+
+  const handleDownloadAllSceneBoard = () => {
+    const b = sceneRunBoardRef.current
+    if (!b) return
+    const items: { url: string; name: string }[] = []
+    b.slots.forEach((s, i) => {
+      if (s.imageUrl)
+        items.push({
+          url: s.imageUrl,
+          name: `tikgen-${b.id}-${i + 1}-${String(s.title).slice(0, 20)}.png`,
+        })
+    })
+    if (items.length) downloadUrlsStaggered(items)
+  }
+
+  const handleDownloadAllHistoryTask = (task: ImageGenHistoryTask) => {
+    const items = task.outputUrls.map((url, idx) => ({
+      url,
+      name: `tikgen-${task.id}-${idx + 1}.png`,
+    }))
+    if (items.length) downloadUrlsStaggered(items)
   }
 
   const mergeNegative = (base: string, add: string) => {
@@ -4281,38 +4350,36 @@ function ImageGenerator({
 一键生成提示词会结合此处的画幅与分辨率优化文案。若之后修改了画幅或分辨率，建议重新生成提示词，以免文案与出图设置不一致。`}
             />
           </div>
-          <label className="block text-sm font-medium mb-2">比例</label>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {imageCaps.aspectRatios.map((ar) => (
-              <button
-                key={ar}
-                onClick={() => setSize(ar)}
-                className={`rounded-lg border px-1.5 py-1.5 text-xs shrink-0 w-[74px] ${size === ar ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4 mb-0">
+            <div className="flex-1 min-w-0">
+              <label className="block text-sm font-medium mb-1">比例</label>
+              <select
+                value={size}
+                onChange={(e) => setSize(e.target.value as ImageAspect)}
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-white/[0.03] border-white/12 text-white/90"
               >
-                <div className="h-5 flex items-center justify-center">
-                  <div
-                    className="bg-gray-400/80 rounded-sm"
-                    style={{
-                      width: ar === '16:9' ? 20 : ar === '4:3' ? 17 : ar === '1:1' ? 13 : ar === '3:4' ? 10 : 8,
-                      height: ar === '9:16' ? 20 : ar === '3:4' ? 16 : ar === '1:1' ? 13 : ar === '4:3' ? 12 : ar === '16:9' ? 8 : 6,
-                    }}
-                  />
-                </div>
-                <div>{ar}</div>
-              </button>
-            ))}
+                {imageCaps.aspectRatios.map((ar) => (
+                  <option key={ar} value={ar}>
+                    {ar}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-0">
+              <label className="block text-sm font-medium mb-1">分辨率</label>
+              <select
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value as ImageRes)}
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-white/[0.03] border-white/12 text-white/90"
+              >
+                {imageCaps.resolutions.map((r) => (
+                  <option key={r} value={r}>
+                    {r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : r}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-
-        <div className="mb-0">
-          <label className="block text-sm font-medium mb-1">分辨率</label>
-          <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm max-w-xs">
-            {imageCaps.resolutions.map((r) => (
-              <option key={r} value={r}>
-                {r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : r}
-              </option>
-            ))}
-          </select>
-        </div>
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
@@ -4322,11 +4389,9 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「一键填充」会以第一张主参考图调用 GPT-4o，生成商品分析与多组「画面方案」：每组含短说明 + 完整出图主描述。
+                text={`「一键填充」会以第一张主参考图调用 GPT-4o，生成商品分析与多组「画面方案」。点卡片切换方案；悬停可看完整出图主描述，点「编辑」在弹窗中修改。
 
-点选卡片即切换当前方案；标题与短说明可直接在卡片上改。鼠标悬停在卡片上会显示「出图主描述」浮层并可编辑。仅更新「商品分析」后，各卡片的完整描述会清空，需「重新分析」或兜底接口再生成。
-
-右侧「生成历史」中点击「一键生成图片」会先规划 6 个场景卡片；需逐张点击才会调用模型出图。`}
+左侧「一键生成图片」会加载 6 场景；在右侧勾选后批量生成，可一键下载全部出图。`}
               />
             </div>
             <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
@@ -4380,7 +4445,7 @@ function ImageGenerator({
               <div>
                 <div className="text-sm font-medium text-white/88">画面方案（风格 + 出图描述）</div>
                 <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
-                  每组含完整出图主描述；点卡片切换方案。标题与短说明在卡片上直接改；悬停卡片可编辑出图主描述。可添加「自定义方案」。
+                  点卡片切换当前方案。悬停显示完整出图主描述；点铅笔在弹窗中编辑。可添加「自定义方案」。
                 </p>
               </div>
               <button
@@ -4411,64 +4476,51 @@ function ImageGenerator({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5 overflow-visible">
+              <div className="grid grid-cols-2 gap-3">
                 {hotStyles.map((st, idx) => (
                   <div
                     key={`${st.title}_${idx}`}
-                    className={`group/style relative text-left rounded-xl border p-3 transition-all overflow-visible ${
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => !promptRegenBusy && selectHotStyleCard(idx)}
+                    onKeyDown={(e) => {
+                      if (promptRegenBusy) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        selectHotStyleCard(idx)
+                      }
+                    }}
+                    className={`group/scard relative text-left rounded-2xl border px-3.5 pt-3.5 pb-3 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
                       selectedHotStyleIndex === idx
-                        ? 'ring-2 ring-white/85 border-white/45 bg-white/[0.08]'
-                        : 'border-white/12 bg-white/[0.02] hover:border-white/20'
-                    } ${promptRegenBusy ? 'opacity-50 pointer-events-none' : ''}`}
+                        ? 'border-violet-400/55 bg-gradient-to-b from-violet-500/12 to-white/[0.06] shadow-[0_0_0_1px_rgba(167,139,250,0.25)]'
+                        : 'border-white/10 bg-white/[0.03] hover:border-white/18 hover:bg-white/[0.05]'
+                    } ${promptRegenBusy ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
                   >
-                    <button
-                      type="button"
-                      className="absolute inset-0 z-0 rounded-xl"
-                      aria-label={`选用方案 ${st.title}`}
-                      onClick={() => selectHotStyleCard(idx)}
-                    />
-                    <div className="relative z-10 space-y-2 pointer-events-none">
-                      <input
-                        value={st.title}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          setHotStyles((prev) => prev.map((s, i) => (i === idx ? { ...s, title: v } : s)))
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className="text-sm font-semibold text-white/95 leading-snug pr-1 line-clamp-2">{st.title}</h3>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setStyleCardEditDraft({
+                            title: st.title,
+                            description: st.description,
+                            imagePrompt: st.imagePrompt || '',
+                          })
+                          setStyleCardEditIndex(idx)
                         }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="pointer-events-auto w-full text-sm font-semibold text-white/92 tracking-wide bg-black/20 border border-white/10 rounded-lg px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
-                      />
-                      <textarea
-                        value={st.description}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          setHotStyles((prev) => prev.map((s, i) => (i === idx ? { ...s, description: v } : s)))
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        rows={2}
-                        className="pointer-events-auto w-full text-[11px] text-white/60 leading-relaxed bg-black/20 border border-white/10 rounded-lg px-2 py-1 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
-                      />
-                    </div>
-                    <div className="relative z-20 mt-2 hidden group-hover/style:block group-focus-within/style:block">
-                      <div
-                        className="rounded-xl border border-white/20 bg-zinc-900/98 shadow-2xl p-2.5 pointer-events-auto"
-                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0 p-1.5 rounded-lg border border-white/12 bg-black/30 text-violet-200/95 hover:bg-violet-500/20 hover:border-violet-400/35 transition-colors"
+                        title="编辑方案"
                       >
-                        <div className="text-[10px] font-medium text-white/55 mb-1">出图主描述（可编辑）</div>
-                        <textarea
-                          value={st.imagePrompt ?? ''}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            setHotStyles((prev) => prev.map((s, i) => (i === idx ? { ...s, imagePrompt: v } : s)))
-                            if (selectedHotStyleIndex === idx) {
-                              setPrompt(v)
-                              setOptimizedPrompt(v)
-                            }
-                          }}
-                          rows={6}
-                          className="w-full text-[11px] leading-relaxed bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 min-h-[120px]"
-                          placeholder="完整出图描述…"
-                        />
-                      </div>
+                        <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-white/50 leading-relaxed line-clamp-3 min-h-[3.25rem]">{st.description || ' '}</p>
+                    <div className="mt-3 pt-3 border-t border-white/[0.08] rounded-b-xl overflow-hidden max-h-0 opacity-0 group-hover/scard:max-h-[140px] group-hover/scard:opacity-100 transition-all duration-200 ease-out">
+                      <p className="text-[10px] font-medium text-violet-300/90 mb-1">出图主描述</p>
+                      <p className="text-[10px] text-white/65 leading-relaxed line-clamp-6 whitespace-pre-wrap break-words">
+                        {String(st.imagePrompt || '').trim() || '（暂无，可在编辑中填写）'}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -4521,30 +4573,6 @@ function ImageGenerator({
             </div>
           ) : null}
 
-          <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <p className="text-[11px] text-white/45 leading-relaxed">
-              六组场景卡片在右侧「生成历史」中展示；点击左侧按钮会先加载场景规划，再逐张点击出图。
-            </p>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => openAdvancedPromptModal()}
-                disabled={isAiBusy}
-                className="text-[11px] px-2 py-1 rounded-lg border border-white/12 text-white/45 hover:text-white/75 hover:bg-white/[0.06] disabled:opacity-45"
-              >
-                结构化编辑（高级）
-              </button>
-              <button
-                type="button"
-                onClick={() => void refreshImageScenesPlanWithPrompt(prompt)}
-                disabled={scenesPlanBusy || !prompt.trim() || isAiBusy}
-                className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
-              >
-                {scenesPlanBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                刷新场景方案
-              </button>
-            </div>
-          </div>
           {aiError ? (
             <div className="mt-3 text-xs text-red-200/95 bg-red-500/12 border border-red-400/25 rounded-lg px-3 py-2">{aiError}</div>
           ) : null}
@@ -4587,7 +4615,7 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleRetryGenBanner()}
-                disabled={sceneBoardPreparing}
+                disabled={sceneBoardPreparing || sceneBatchGenerating}
                 className="shrink-0 px-3 py-1.5 rounded-lg text-xs bg-red-500/30 border border-red-400/35 hover:bg-red-500/40 disabled:opacity-50"
               >
                 重试
@@ -4599,7 +4627,7 @@ function ImageGenerator({
           <div className="mb-6">
             <GenerationLoadingCard
               title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
-              subtitle="正在规划 6 组场景文案，稍后在下方卡片中逐张出图"
+              subtitle="正在规划 6 组场景，完成后可勾选并批量生成"
               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
               progressText={`准备进度：${Math.max(1, Math.min(99, genProgress))}%`}
             />
@@ -4607,115 +4635,158 @@ function ImageGenerator({
         ) : null}
         {sceneRunBoard ? (
           <div className="mb-8 rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-white/90">场景出图</h3>
-                <p className="text-[11px] text-white/45 mt-0.5">点击每张卡片生成该场景；已生成可再点预览大图。悬停已出图可看重新生成与下载。</p>
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white/90">场景出图</h3>
+                  <p className="text-[11px] text-white/45 mt-0.5">
+                    默认全选；可取消不需要的场景。点「生成已选」一次性出图；完成后可「下载全部」。点击图片可预览。
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={
+                      sceneBatchGenerating ||
+                      !sceneRunBoard.slots.some(
+                        (s) => s.selected && (s.status === 'pending' || s.status === 'failed'),
+                      )
+                    }
+                    onClick={() => void handleBatchGenerateSelectedScenes()}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {sceneBatchGenerating ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 inline mr-1 animate-spin" />
+                        生成中…
+                      </>
+                    ) : (
+                      <>
+                        生成已选（
+                        {
+                          sceneRunBoard.slots.filter(
+                            (s) => s.selected && (s.status === 'pending' || s.status === 'failed'),
+                          ).length
+                        }
+                        ）
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!sceneRunBoard.slots.some((s) => s.imageUrl)}
+                    onClick={() => handleDownloadAllSceneBoard()}
+                    className="px-3 py-2 rounded-xl text-xs font-medium border border-white/20 text-white/90 hover:bg-white/[0.08] disabled:opacity-40"
+                  >
+                    <Download className="w-3.5 h-3.5 inline mr-1" />
+                    下载全部
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {sceneRunBoard.slots.map((slot, sidx) => {
                 const summary =
-                  (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim().slice(0, 72) +
-                  ((slot.description || slot.imagePrompt || '').length > 72 ? '…' : '')
+                  (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim().slice(0, 64) +
+                  ((slot.description || slot.imagePrompt || '').length > 64 ? '…' : '')
                 return (
                   <div
                     key={slot.key}
-                    className="snap-start shrink-0 w-[min(100%,220px)] flex flex-col rounded-2xl border border-white/12 bg-black/20 overflow-hidden"
+                    className={`flex flex-col rounded-2xl border overflow-hidden transition-opacity ${
+                      slot.selected ? 'border-white/14 bg-black/25' : 'border-white/[0.08] bg-black/15 opacity-60'
+                    }`}
                   >
-                    <div className="p-2.5 space-y-1.5">
-                      <span className="inline-block rounded-full bg-white/85 text-zinc-900 text-[10px] font-semibold px-2 py-0.5 max-w-full truncate">
-                        {slot.title}
-                      </span>
-                      <p className="text-[10px] text-white/50 leading-snug line-clamp-2 min-h-[2rem]" title={summary}>
-                        {summary || '点击下图区域生成'}
-                      </p>
+                    <div className="flex items-start gap-2 p-2.5 border-b border-white/[0.08]">
+                      <label className="flex items-center gap-2 cursor-pointer shrink-0 mt-0.5">
+                        <input
+                          type="checkbox"
+                          checked={slot.selected}
+                          disabled={sceneBatchGenerating}
+                          onChange={() => toggleSceneSlotSelected(sceneRunBoard.id, sidx)}
+                          className="rounded border-white/30 w-3.5 h-3.5"
+                        />
+                      </label>
+                      <div className="min-w-0 flex-1">
+                        <span className="inline-block rounded-full bg-white/88 text-zinc-900 text-[10px] font-semibold px-2 py-0.5 max-w-full truncate">
+                          {slot.title}
+                        </span>
+                        <p className="text-[10px] text-white/45 leading-snug line-clamp-2 mt-1">{summary}</p>
+                      </div>
                     </div>
-                    <div className="relative group/sc aspect-square w-full bg-black/40 border-t border-white/10">
+                    <div className="relative group/sc aspect-square w-full bg-black/35">
                       {slot.status === 'done' && slot.imageUrl ? (
                         <button
                           type="button"
                           className="absolute inset-0 z-[1] block"
-                          onClick={() =>
-                            setHistoryLightbox({
-                              url: slot.imageUrl!,
-                              downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
-                            })
-                          }
+                          onClick={() => handleSceneSlotCardActivate(sceneRunBoard.id, sidx)}
                         >
                           <img src={slot.imageUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
                         </button>
                       ) : slot.status === 'generating' ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70 text-xs">
-                          <RefreshCw className="w-8 h-8 animate-spin opacity-80" />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70 text-[11px]">
+                          <RefreshCw className="w-7 h-7 animate-spin opacity-80" />
                           生成中…
                         </div>
-                      ) : slot.status === 'failed' ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleGenerateSceneSlot(sceneRunBoard.id, sidx)}
-                          className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center text-xs text-red-200/95 hover:bg-red-500/10"
-                        >
-                          <span>失败</span>
-                          <span className="text-[10px] text-white/50 line-clamp-3">{slot.error}</span>
-                          <span className="text-violet-300 underline">点击重试</span>
-                        </button>
+                      ) : slot.status === 'failed' && slot.selected ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-2 text-center text-[11px] text-red-200/95">
+                          <span>生成失败</span>
+                          <span className="text-[10px] text-white/45 line-clamp-2">{slot.error}</span>
+                          <button
+                            type="button"
+                            disabled={sceneBatchGenerating}
+                            onClick={() => void handleGenerateSceneSlot(sceneRunBoard.id, sidx)}
+                            className="mt-1 text-violet-300 underline text-xs disabled:opacity-40"
+                          >
+                            单张重试
+                          </button>
+                        </div>
+                      ) : !slot.selected ? (
+                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/35">不生成</div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleSceneSlotCardActivate(sceneRunBoard.id, sidx)}
-                          className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/55 text-xs hover:bg-white/[0.06]"
-                        >
-                          <Eye className="w-10 h-10 opacity-50" />
-                          点击生成
-                        </button>
+                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/40">待批量生成</div>
                       )}
                       {slot.status === 'done' && slot.imageUrl ? (
                         <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/0 hover:bg-black/45 opacity-0 group-hover/sc:opacity-100 transition-opacity pointer-events-none group-hover/sc:pointer-events-auto">
                           <button
                             type="button"
-                            className="p-3 rounded-full bg-white/15 text-white border border-white/25 hover:bg-white/25 pointer-events-auto"
+                            className="p-2.5 rounded-full bg-white/15 text-white border border-white/25 hover:bg-white/25 pointer-events-auto"
                             title="预览"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setHistoryLightbox({ url: slot.imageUrl!, downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png` })
+                              setHistoryLightbox({
+                                url: slot.imageUrl!,
+                                downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
+                              })
                             }}
                           >
-                            <Eye className="w-7 h-7" />
+                            <Eye className="w-6 h-6" />
                           </button>
-                          <div className="absolute top-2 right-2 flex gap-1.5">
+                          <div className="absolute top-2 right-2 flex gap-1">
                             <button
                               type="button"
-                              className="p-2 rounded-full bg-black/65 text-white border border-white/20 hover:bg-black/80 pointer-events-auto"
+                              className="p-1.5 rounded-full bg-black/65 text-white border border-white/20 hover:bg-black/80 pointer-events-auto"
                               title="重新生成"
+                              disabled={sceneBatchGenerating}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 void handleRegenerateSceneSlot(sceneRunBoard.id, sidx)
                               }}
                             >
-                              <Wand2 className="w-4 h-4" />
+                              <Wand2 className="w-3.5 h-3.5" />
                             </button>
                             <a
                               href={slot.imageUrl}
                               download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-2 rounded-full bg-black/65 text-white border border-white/20 hover:bg-black/80 pointer-events-auto"
+                              className="p-1.5 rounded-full bg-black/65 text-white border border-white/20 hover:bg-black/80 pointer-events-auto"
                               title="下载"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-3.5 h-3.5" />
                             </a>
                           </div>
                         </div>
-                      ) : null}
-                      {slot.status === 'pending' ? (
-                        <button
-                          type="button"
-                          aria-label={`生成 ${slot.title}`}
-                          className="absolute inset-0 z-[1]"
-                          onClick={() => handleSceneSlotCardActivate(sceneRunBoard.id, sidx)}
-                        />
                       ) : null}
                     </div>
                   </div>
@@ -4729,7 +4800,7 @@ function ImageGenerator({
             <Image className="w-14 h-14 mb-3 opacity-35" />
             <p className="text-sm text-white/55">暂无归档记录</p>
             <p className="text-xs text-white/40 mt-1 max-w-xs">
-              左侧点击「一键生成图片」将在此出现 6 张场景卡；每张需再点击才会调用模型。全部完成后会归档一条历史。
+              左侧「一键生成图片」加载 6 场景后，在此勾选并批量生成；完成后会归档一条历史，并可下载全部图片。
             </p>
           </div>
         ) : null}
@@ -4800,47 +4871,57 @@ function ImageGenerator({
                         <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
                       ) : null}
                       {task.outputUrls.length > 0 ? (
-                        <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory">
-                          {task.outputUrls.map((url, idx) => {
-                            const label = task.sceneLabels?.[idx] || `图 ${idx + 1}`
-                            return (
-                              <div
-                                key={`${task.id}_out_${idx}`}
-                                className="snap-start shrink-0 w-[200px] flex flex-col rounded-2xl border border-white/12 bg-black/25 overflow-hidden group/out"
-                              >
-                                <div className="p-2 space-y-1">
-                                  <span className="inline-block rounded-full bg-white/85 text-zinc-900 text-[10px] font-semibold px-2 py-0.5 max-w-full truncate">
-                                    {label}
-                                  </span>
-                                </div>
-                                <div className="relative aspect-square w-full border-t border-white/10">
-                                  <button
-                                    type="button"
-                                    className="absolute inset-0 z-[1] block"
-                                    onClick={() =>
-                                      setHistoryLightbox({ url, downloadName: `tikgen-${task.id}-${idx + 1}.png` })
-                                    }
-                                    title="点击放大"
-                                  >
-                                    <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
-                                  </button>
-                                  <div className="absolute inset-0 z-[2] flex items-start justify-end p-2 opacity-0 group-hover/out:opacity-100 transition-opacity pointer-events-none group-hover/out:pointer-events-auto">
-                                    <a
-                                      href={url}
-                                      download={`tikgen-${task.id}-${idx + 1}.png`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="p-2 rounded-full bg-black/70 text-white border border-white/20 hover:bg-black/85 pointer-events-auto"
-                                      title="下载"
-                                      onClick={(e) => e.stopPropagation()}
+                        <div className="space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadAllHistoryTask(task)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08]"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            下载全部图片（{task.outputUrls.length}）
+                          </button>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {task.outputUrls.map((url, idx) => {
+                              const label = task.sceneLabels?.[idx] || `图 ${idx + 1}`
+                              return (
+                                <div
+                                  key={`${task.id}_out_${idx}`}
+                                  className="flex flex-col rounded-2xl border border-white/12 bg-black/25 overflow-hidden group/out"
+                                >
+                                  <div className="p-2 space-y-1">
+                                    <span className="inline-block rounded-full bg-white/85 text-zinc-900 text-[10px] font-semibold px-2 py-0.5 max-w-full truncate">
+                                      {label}
+                                    </span>
+                                  </div>
+                                  <div className="relative aspect-square w-full border-t border-white/10">
+                                    <button
+                                      type="button"
+                                      className="absolute inset-0 z-[1] block"
+                                      onClick={() =>
+                                        setHistoryLightbox({ url, downloadName: `tikgen-${task.id}-${idx + 1}.png` })
+                                      }
+                                      title="点击放大"
                                     >
-                                      <Download className="w-4 h-4" />
-                                    </a>
+                                      <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
+                                    </button>
+                                    <div className="absolute inset-0 z-[2] flex items-start justify-end p-2 opacity-0 group-hover/out:opacity-100 transition-opacity pointer-events-none group-hover/out:pointer-events-auto">
+                                      <a
+                                        href={url}
+                                        download={`tikgen-${task.id}-${idx + 1}.png`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="p-2 rounded-full bg-black/70 text-white border border-white/20 hover:bg-black/85 pointer-events-auto"
+                                        title="下载"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </a>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )
-                          })}
+                              )
+                            })}
+                          </div>
                         </div>
                       ) : task.status === 'completed' ? (
                         <p className="text-[11px] text-white/40">未返回图片地址</p>
@@ -4928,6 +5009,87 @@ function ImageGenerator({
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium"
             >
               保存并选用
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    {styleCardEditIndex !== null ? (
+      <div
+        className="fixed inset-0 z-[71] bg-black/70 flex items-center justify-center p-4"
+        onClick={() => setStyleCardEditIndex(null)}
+        role="presentation"
+      >
+        <div
+          className="w-full max-w-lg rounded-2xl border border-white/15 bg-zinc-900 shadow-2xl p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">编辑画面方案</h3>
+            <button
+              type="button"
+              onClick={() => setStyleCardEditIndex(null)}
+              className="p-1 rounded-lg hover:bg-white/10 text-white/80"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-white/55 mb-1">标题</label>
+              <input
+                value={styleCardEditDraft.title}
+                onChange={(e) => setStyleCardEditDraft((d) => ({ ...d, title: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/55 mb-1">短说明</label>
+              <textarea
+                value={styleCardEditDraft.description}
+                onChange={(e) => setStyleCardEditDraft((d) => ({ ...d, description: e.target.value }))}
+                rows={3}
+                className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-white/55 mb-1">出图主描述</label>
+              <textarea
+                value={styleCardEditDraft.imagePrompt}
+                onChange={(e) => setStyleCardEditDraft((d) => ({ ...d, imagePrompt: e.target.value }))}
+                rows={8}
+                className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm resize-y min-h-[160px]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              type="button"
+              onClick={() => setStyleCardEditIndex(null)}
+              className="px-4 py-2 rounded-xl border border-white/15 text-white/80 text-sm hover:bg-white/5"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const idx = styleCardEditIndex
+                if (idx === null) return
+                const title = styleCardEditDraft.title.trim()
+                const description = styleCardEditDraft.description.trim()
+                const imagePrompt = styleCardEditDraft.imagePrompt.trim()
+                setHotStyles((prev) =>
+                  prev.map((s, i) => (i === idx ? { ...s, title: title || s.title, description, imagePrompt } : s)),
+                )
+                if (selectedHotStyleIndex === idx) {
+                  setPrompt(imagePrompt)
+                  setOptimizedPrompt(imagePrompt)
+                }
+                setStyleCardEditIndex(null)
+              }}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium"
+            >
+              保存
             </button>
           </div>
         </div>
