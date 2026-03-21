@@ -2713,7 +2713,7 @@ function ImageGenerator({
 
   const handlePromptGen = async () => {
     if (!refImages.length) {
-      alert('请先上传至少1张参考图')
+      alert('请先上传参考图')
       return
     }
     setPromptGenOutputSettings(null)
@@ -2743,7 +2743,7 @@ function ImageGenerator({
 
   const handleRegeneratePromptWithCurrentOutput = async () => {
     if (!refImages.length) {
-      alert('请先上传至少1张参考图')
+      alert('请先上传参考图')
       return
     }
     const jobId = ++aiJobRef.current
@@ -3719,8 +3719,8 @@ function ImageGenerator({
             <button
               type="button"
               onClick={() => void handlePromptGen()}
-              disabled={!refImages.length}
-              title={!refImages.length ? '请先上传至少1张参考图' : '一键生成提示词'}
+              disabled={isAiBusy || promptRegenBusy}
+              title="一键生成提示词（需先上传参考图）"
               className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Sparkles className="w-4 h-4 mr-1 shrink-0" /> 一键生成
