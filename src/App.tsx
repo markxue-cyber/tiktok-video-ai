@@ -259,6 +259,93 @@ function hotStyleCardPreviewText(st: { isCustom?: boolean; description?: string;
   return String(st.description || '').trim() || String(st.imagePrompt || '').trim()
 }
 
+/** 收集画面方案网格内其它卡片矩形（不含当前悬停卡片），用于浮层避让 */
+function getHotStyleSchemeObstacleRects(grid: HTMLElement | null, anchor: HTMLElement | null): DOMRect[] {
+  if (!grid || !anchor) return []
+  return Array.from(grid.querySelectorAll<HTMLElement>('[data-hot-style-scheme-card]'))
+    .filter((el) => el !== anchor)
+    .map((el) => el.getBoundingClientRect())
+}
+
+function normalizePopBox(
+  rawLeft: number,
+  rawTop: number,
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+): { left: number; top: number; width: number } {
+  return {
+    left: Math.max(8, Math.min(rawLeft, vw - w - 8)),
+    top: Math.max(8, Math.min(rawTop, vh - h - 8)),
+    width: w,
+  }
+}
+
+function popoverOverlapsAnyObstacle(
+  left: number,
+  top: number,
+  w: number,
+  h: number,
+  obstacles: DOMRect[],
+  pad: number,
+): boolean {
+  const right = left + w
+  const bottom = top + h
+  for (const o of obstacles) {
+    if (left < o.right + pad && right > o.left - pad && top < o.bottom + pad && bottom > o.top - pad) return true
+  }
+  return false
+}
+
+/**
+ * 出图主描述悬停浮层：贴在卡片外侧，避让其它画面方案卡片（含下一行、相邻列），避免挡点击。
+ */
+function computeWorkbenchStylePromptPopoverPosition(
+  cardRect: DOMRect,
+  otherCardRects: DOMRect[],
+): { top: number; left: number; width: number } {
+  const GAP = 10
+  const PAD = 2
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const w = Math.max(176, Math.min(cardRect.width * 0.45, 320))
+  const estH = Math.min(288, vh * 0.55)
+  /** 含当前卡片：浮层不可压在任何方案卡片上（含自己与其它格、下一行） */
+  const blockers = [...otherCardRects, cardRect]
+
+  const tryBox = (rawLeft: number, rawTop: number) => {
+    const p = normalizePopBox(rawLeft, rawTop, w, estH, vw, vh)
+    if (popoverOverlapsAnyObstacle(p.left, p.top, w, estH, blockers, PAD)) return null
+    return p
+  }
+
+  const attempts: Array<[number, number]> = [
+    [cardRect.right + GAP, cardRect.top + 2],
+    [cardRect.left - w - GAP, cardRect.top + 2],
+    [Math.max(8, cardRect.right - w), cardRect.top - estH - GAP],
+    [Math.max(8, cardRect.left), cardRect.top - estH - GAP],
+    [cardRect.left + (cardRect.width - w) / 2, cardRect.bottom + GAP],
+    [vw - w - 8, cardRect.top + 2],
+    [8, cardRect.top + 2],
+  ]
+
+  for (const [lx, ty] of attempts) {
+    const r = tryBox(lx, ty)
+    if (r) return r
+  }
+
+  for (let dy = -280; dy <= 280; dy += 10) {
+    const top = cardRect.top + 2 + dy
+    for (const left of [cardRect.right + GAP, cardRect.left - w - GAP]) {
+      const r = tryBox(left, top)
+      if (r) return r
+    }
+  }
+
+  return normalizePopBox(cardRect.right + GAP, cardRect.top + 2, w, estH, vw, vh)
+}
+
 /** 生成历史等窄卡片用的一行级摘要 */
 function styleCardTeaser(text: string, maxChars = 40): string {
   const s = String(text || '')
@@ -2668,13 +2755,12 @@ function ImageGenerator({
       const el = stylePromptAnchorRef.current
       if (!el) return
       const r = el.getBoundingClientRect()
-      const w = Math.max(176, Math.min(r.width * 0.45, 320))
-      const vw = window.innerWidth
-      const left = Math.max(8, Math.min(r.right - w, vw - w - 8))
-      const top = r.top + 44
+      const grid = el.closest('[data-hot-styles-grid]') as HTMLElement | null
+      const obstacles = getHotStyleSchemeObstacleRects(grid, el)
+      const next = computeWorkbenchStylePromptPopoverPosition(r, obstacles)
       setStylePromptPopBox((prev) => {
-        if (prev && prev.top === top && prev.left === left && prev.width === w) return prev
-        return { top, left, width: w }
+        if (prev && prev.top === next.top && prev.left === next.left && prev.width === next.width) return prev
+        return next
       })
     }
     sync()
@@ -4640,10 +4726,11 @@ function ImageGenerator({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 items-stretch gap-3 overflow-visible">
+              <div className="grid grid-cols-2 items-stretch gap-3 overflow-visible" data-hot-styles-grid>
                 {hotStyles.map((st, idx) => (
                   <div
                     key={`${st.title}_${idx}`}
+                    data-hot-style-scheme-card
                     role="button"
                     tabIndex={0}
                     onClick={() => !promptRegenBusy && selectHotStyleCard(idx)}
@@ -4664,11 +4751,9 @@ function ImageGenerator({
                       stylePromptAnchorRef.current = el
                       setStylePromptHoverIdx(idx)
                       const apply = () => {
-                        const r = el.getBoundingClientRect()
-                        const w = Math.max(176, Math.min(r.width * 0.45, 320))
-                        const vw = window.innerWidth
-                        const left = Math.max(8, Math.min(r.right - w, vw - w - 8))
-                        setStylePromptPopBox({ top: r.top + 44, left, width: w })
+                        const grid = el.closest('[data-hot-styles-grid]') as HTMLElement | null
+                        const obstacles = getHotStyleSchemeObstacleRects(grid, el)
+                        setStylePromptPopBox(computeWorkbenchStylePromptPopoverPosition(el.getBoundingClientRect(), obstacles))
                       }
                       apply()
                       requestAnimationFrame(apply)
