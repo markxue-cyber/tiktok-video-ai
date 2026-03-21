@@ -417,11 +417,31 @@ function sanitizeWorkbenchStylesFromApi<T extends { title: string; description: 
 const SCENE_TAG_CLASS =
   'inline-flex max-w-full items-center rounded-full border border-white/12 bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white/95 shadow-sm backdrop-blur-sm'
 
+/** 场景占位：SVG 噪点贴图，叠在强模糊层上模拟胶片颗粒、减轻「纯 CSS 渐变」塑料感 */
+const SCENE_SLOT_PLACEHOLDER_GRAIN_TILE =
+  'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 512 512\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\' x=\'-20%25\' y=\'-20%25\' width=\'140%25\' height=\'140%25\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.72\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3CfeColorMatrix type=\'saturate\' values=\'0\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.55\'/%3E%3C/svg%3E")'
+
 const IMAGE_ASPECT_OPTIONS = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2'] as const
 const IMAGE_RES_OPTIONS = ['1024', '1536', '2048', '4096'] as const // 通用档位（部分模型会映射到2k/4k）
 
 type ImageAspect = (typeof IMAGE_ASPECT_OPTIONS)[number]
 type ImageRes = (typeof IMAGE_RES_OPTIONS)[number]
+
+const IMAGE_GEN_HISTORY_PLAN_LABEL = '画面方案：'
+
+/** 生成历史列表/悬停全文：分隔线后为画面方案，统一带「画面方案：」前缀（兼容旧存档无前缀） */
+function formatImageGenHistoryPromptDisplay(prompt: string): string {
+  const p = String(prompt || '')
+  const sep = '\n────────\n'
+  const idx = p.indexOf(sep)
+  if (idx < 0) return p || '（无提示词）'
+  const head = p.slice(0, idx + sep.length)
+  let body = p.slice(idx + sep.length)
+  if (body && !body.startsWith(IMAGE_GEN_HISTORY_PLAN_LABEL)) {
+    body = IMAGE_GEN_HISTORY_PLAN_LABEL + body
+  }
+  return head + body
+}
 
 /** 由当前场景看板同步到「生成历史」的一条记录（支持进行中 / 增量更新） */
 function buildHistoryTaskFromSceneBoard(
@@ -437,7 +457,6 @@ function buildHistoryTaskFromSceneBoard(
   const doneSlots = selected.filter((s) => s.status === 'done' && s.imageUrl)
   const failedSelected = selected.filter((s) => s.status === 'failed')
   const generating = selected.some((s) => s.status === 'generating')
-  const pending = selected.some((s) => s.status === 'pending')
 
   const outputUrls = doneSlots.map((s) => s.imageUrl!)
   const sceneLabels = doneSlots.map((s) => s.title)
@@ -446,12 +465,16 @@ function buildHistoryTaskFromSceneBoard(
   )
 
   const basePrompt = board.basePrompt || ''
+  const basePromptStored = basePrompt
+    ? `${IMAGE_GEN_HISTORY_PLAN_LABEL}${basePrompt.slice(0, 2000)}`
+    : ''
   const titlesLine = (anySelected ? selected : slots).map((s) => s.title).join('、')
 
+  /** 仅当有槽位正在请求出图时为 active；全为 pending 属于「仅预览方案」，不记入生成历史 */
   let status: 'active' | 'completed' | 'failed'
   if (!anySelected) {
     status = 'completed'
-  } else if (generating || pending) {
+  } else if (generating) {
     status = 'active'
   } else if (!outputUrls.length && failedSelected.length) {
     status = 'failed'
@@ -468,7 +491,7 @@ function buildHistoryTaskFromSceneBoard(
     id: board.id,
     ts: board.ts,
     refThumb: board.refThumb,
-    prompt: `多场景：${titlesLine}\n────────\n${basePrompt.slice(0, 2000)}`,
+    prompt: `多场景：${titlesLine}\n────────\n${basePromptStored}`,
     modelId,
     modelLabel,
     aspect,
@@ -3060,6 +3083,16 @@ function ImageGenerator({
   /** 场景看板 ⇄ 生成历史：实时同步（进行中增量、多轮合并同一 id、刷新后可从 localStorage 恢复看板） */
   useEffect(() => {
     if (!sceneRunBoard || !sceneRunBoard.slots.length) return
+    const imageWorkStarted = sceneRunBoard.slots.some(
+      (s) => s.status === 'generating' || s.status === 'done' || s.status === 'failed',
+    )
+    /** 仅点了「一键生成图片」或单张出图后才有历史；仅「免费生成预览」不写入，避免换主图后残留假「生成中」 */
+    if (!imageWorkStarted) {
+      setImageGenHistory((prev) => prev.filter((t) => t.id !== sceneRunBoard.id))
+      setGenErrorText('')
+      setGenErrorCode('UNKNOWN')
+      return
+    }
     const resLb =
       resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
     const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
@@ -3126,6 +3159,10 @@ function ImageGenerator({
 
   /** 删除主参考图后清空与本次分析/场景相关的编辑态（不删生成历史归档） */
   const clearImageGenPageAfterMainRefRemoved = () => {
+    const boardId = sceneRunBoardRef.current?.id
+    if (boardId) {
+      setImageGenHistory((prev) => prev.filter((t) => t.id !== boardId))
+    }
     setHotStyles([])
     setSelectedHotStyleIndex(0)
     setProductAnalysisText('')
@@ -5217,24 +5254,44 @@ function ImageGenerator({
                         <img
                           src={mosaicThumb}
                           alt=""
-                          className="absolute inset-0 h-full w-full object-cover scale-[1.2] blur-[28px] saturate-[1.15] brightness-[0.92]"
+                          className="absolute inset-0 h-full w-full object-cover scale-[1.32] blur-[48px] saturate-[1.22] brightness-[0.86] contrast-[1.06]"
                           draggable={false}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.08] via-transparent to-zinc-950/40" />
-                        <div className="absolute inset-0 backdrop-blur-md bg-white/[0.06]" />
-                        <div className="absolute inset-0 ring-1 ring-inset ring-white/[0.06]" />
+                        <img
+                          src={mosaicThumb}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover scale-[1.08] blur-[22px] opacity-[0.42] mix-blend-screen translate-x-[4%] -translate-y-[3%]"
+                          draggable={false}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-b from-amber-100/[0.07] via-violet-300/[0.05] to-zinc-950/60" />
+                        <div className="absolute inset-0 backdrop-blur-[18px] bg-gradient-to-t from-black/25 via-transparent to-white/[0.06]" />
+                        <div
+                          className="absolute inset-0 pointer-events-none opacity-[0.32] mix-blend-overlay"
+                          style={{
+                            backgroundImage: SCENE_SLOT_PLACEHOLDER_GRAIN_TILE,
+                            backgroundSize: '96px 96px',
+                          }}
+                        />
+                        <div className="absolute inset-0 ring-1 ring-inset ring-white/[0.08]" />
                       </>
                     ) : (
                       <div className="absolute inset-0 overflow-hidden">
                         <div
-                          className="absolute -inset-[35%] scale-150 blur-3xl opacity-90"
+                          className="absolute -inset-[40%] scale-[1.65] blur-[56px] opacity-[0.92]"
                           style={{
                             background:
-                              'radial-gradient(ellipse 80% 60% at 25% 30%, rgba(167,139,250,0.45), transparent 55%), radial-gradient(ellipse 70% 50% at 75% 70%, rgba(56,189,248,0.35), transparent 50%), radial-gradient(ellipse 60% 40% at 50% 50%, rgba(244,114,182,0.25), transparent 45%)',
+                              'radial-gradient(ellipse 90% 55% at 18% 28%, rgba(253,230,138,0.42), transparent 52%), radial-gradient(ellipse 75% 60% at 82% 22%, rgba(196,181,253,0.4), transparent 50%), radial-gradient(ellipse 65% 50% at 48% 88%, rgba(45,212,191,0.22), transparent 48%), radial-gradient(ellipse 55% 45% at 72% 62%, rgba(244,114,182,0.28), transparent 46%), radial-gradient(ellipse 70% 40% at 30% 70%, rgba(56,189,248,0.2), transparent 50%)',
                           }}
                         />
-                        <div className="absolute inset-0 backdrop-blur-xl bg-zinc-950/25" />
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.05] to-black/25" />
+                        <div className="absolute inset-0 backdrop-blur-2xl bg-zinc-950/30" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.06] via-transparent to-black/35" />
+                        <div
+                          className="absolute inset-0 pointer-events-none opacity-[0.35] mix-blend-soft-light"
+                          style={{
+                            backgroundImage: SCENE_SLOT_PLACEHOLDER_GRAIN_TILE,
+                            backgroundSize: '112px 112px',
+                          }}
+                        />
                       </div>
                     )}
                   </>
@@ -5434,11 +5491,11 @@ function ImageGenerator({
                         </button>
                         <div className="group/prompt relative flex-1 min-w-0">
                           <p className="image-history-prompt-clamp text-xs text-white/78 leading-relaxed text-left cursor-help break-words">
-                            {task.prompt || '（无提示词）'}
+                            {formatImageGenHistoryPromptDisplay(task.prompt)}
                           </p>
                           <div className="pointer-events-none absolute left-0 top-full z-40 -mt-1 w-full max-w-[min(100%,22rem)] pt-1 opacity-0 transition-opacity duration-75 ease-out group-hover/prompt:pointer-events-auto group-hover/prompt:opacity-100">
                             <div className="image-form-tip-pop rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed text-white/92 shadow-2xl max-h-52 overflow-y-auto whitespace-pre-wrap break-words">
-                              {task.prompt || '（无提示词）'}
+                              {formatImageGenHistoryPromptDisplay(task.prompt)}
                             </div>
                           </div>
                         </div>
@@ -5464,7 +5521,8 @@ function ImageGenerator({
                                 styleCardTeaser(
                                   String(task.prompt || '')
                                     .split(/\n────────\n/)[1]
-                                    ?.replace(/\s+/g, ' ')
+                                    ?.replace(/^\s*画面方案：/, '')
+                                    .replace(/\s+/g, ' ')
                                     .trim() || '',
                                   40,
                                 )
