@@ -455,69 +455,70 @@ export function RemoveBackgroundWorkbench() {
               <div className="mb-2 flex items-center gap-1.5">
                 <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
               </div>
-              {/* 与上方上传区同宽：整行拉满，两列等分，右缘与 tikgen-ref-dropzone 对齐 */}
-              <div className="rounded-xl border border-white/[0.12] bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-inset ring-white/[0.06]">
-                <div className="grid grid-cols-2 gap-3 w-full min-w-0">
-                  <div className="min-w-0">
-                    <label htmlFor="rb-resolution" className="sr-only">
-                      处理分辨率
-                    </label>
-                    <div className="relative">
-                      <Maximize2
-                        className="pointer-events-none absolute left-3 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/90"
-                        strokeWidth={2}
-                        aria-hidden
-                      />
-                      <ChevronDown
-                        className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/40"
-                        aria-hidden
-                      />
-                      <select
-                        id="rb-resolution"
-                        value={resolution}
-                        onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
-                        className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/40 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.12] transition-[box-shadow,background-color] duration-150 hover:bg-black/45 hover:ring-white/20 focus:ring-2 focus:ring-violet-400/40"
-                      >
-                        <option value="1024">1024px</option>
-                        <option value="2048">2048px</option>
-                      </select>
-                    </div>
+              {/* 与上传区、主按钮同宽：无外层套框，左右与 tikgen-ref-dropzone 对齐 */}
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 w-full min-w-0">
+                <div className="min-w-0 flex flex-col gap-1">
+                  <label
+                    htmlFor="rb-resolution"
+                    className="text-[11px] font-medium text-white/45 pl-0.5 tracking-wide"
+                  >
+                    处理分辨率
+                  </label>
+                  <div className="relative">
+                    <Maximize2
+                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/90"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <ChevronDown
+                      className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/35"
+                      aria-hidden
+                    />
+                    <select
+                      id="rb-resolution"
+                      value={resolution}
+                      onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
+                      className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/35 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-all duration-150 hover:bg-black/[0.42] hover:ring-white/16 focus:ring-2 focus:ring-violet-400/45"
+                    >
+                      <option value="1024">1024px</option>
+                      <option value="2048">2048px</option>
+                    </select>
                   </div>
-                  <div className="min-w-0">
-                    <label htmlFor="rb-format" className="sr-only">
-                      输出格式
-                    </label>
-                    <div className="relative">
-                      <Box
-                        className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-violet-300/75"
-                        strokeWidth={1.75}
-                        aria-hidden
-                      />
-                      <ChevronDown
-                        className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/40"
-                        aria-hidden
-                      />
-                      <select
-                        id="rb-format"
-                        value={outputFormat}
-                        onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
-                        className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/40 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.12] transition-[box-shadow,background-color] duration-150 hover:bg-black/45 hover:ring-white/20 focus:ring-2 focus:ring-violet-400/40"
-                      >
-                        <option value="png">PNG</option>
-                        <option value="webp">WEBP</option>
-                      </select>
-                    </div>
+                </div>
+                <div className="min-w-0 flex flex-col gap-1">
+                  <label htmlFor="rb-format" className="text-[11px] font-medium text-white/45 pl-0.5 tracking-wide">
+                    输出格式
+                  </label>
+                  <div className="relative">
+                    <Box
+                      className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-violet-300/80"
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                    <ChevronDown
+                      className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/35"
+                      aria-hidden
+                    />
+                    <select
+                      id="rb-format"
+                      value={outputFormat}
+                      onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
+                      className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/35 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-all duration-150 hover:bg-black/[0.42] hover:ring-white/16 focus:ring-2 focus:ring-violet-400/45"
+                    >
+                      <option value="png">PNG</option>
+                      <option value="webp">WEBP</option>
+                    </select>
                   </div>
                 </div>
               </div>
             </section>
 
-            <div className="pt-1 flex w-full justify-center">
+            <div className="pt-1 w-full min-w-0">
               <button
                 type="button"
                 disabled={!images.length || submitBusy}
                 onClick={() => void handleSubmit()}
-                className="w-full max-w-lg inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/30 disabled:opacity-45 disabled:cursor-not-allowed"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/25 ring-1 ring-inset ring-white/10 transition-[filter,opacity] hover:brightness-[1.03] active:brightness-[0.98] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
               >
                 {submitBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eraser className="w-4 h-4" />}
                 去除背景
