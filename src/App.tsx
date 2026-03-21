@@ -143,6 +143,8 @@ type ImageGenHistoryTask = {
   outputUrls: string[]
   /** 多场景批量出图时各张对应的场景标题 */
   sceneLabels?: string[]
+  /** 与各 outputUrls 对齐的短说明（卡片外露一行） */
+  sceneTeasers?: string[]
   errorMessage?: string
 }
 
@@ -223,6 +225,35 @@ function groupImageHistoryByDay(tasks: ImageGenHistoryTask[]) {
   }
   return order.map((day) => ({ day, tasks: byDay[day] }))
 }
+
+/** 商品分析：不展示值为「未知」「未标注」的行 */
+function filterProductAnalysisText(raw: string): string {
+  const lines = String(raw || '').split(/\n/)
+  const out: string[] = []
+  for (const line of lines) {
+    const t = line.trim()
+    if (!t) continue
+    const m = t.match(/^([^：:]+)\s*[：:]\s*(.*)$/)
+    if (m) {
+      const v = String(m[2] || '').trim()
+      if (v === '未知' || v === '未标注') continue
+    }
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
+/** 画面方案卡片外露短文案（控制篇幅，避免卡片内出现截断省略号） */
+function styleCardTeaser(text: string, maxChars = 40): string {
+  const s = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (s.length <= maxChars) return s
+  return s.slice(0, maxChars)
+}
+
+const SCENE_TAG_CLASS =
+  'inline-flex max-w-full items-center rounded-full border border-white/12 bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white/95 shadow-sm backdrop-blur-sm'
 
 const IMAGE_ASPECT_OPTIONS = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2'] as const
 const IMAGE_RES_OPTIONS = ['1024', '1536', '2048', '4096'] as const // 通用档位（部分模型会映射到2k/4k）
@@ -826,7 +857,7 @@ function App() {
               <div className="flex items-center gap-3 text-white">
                 <ShieldCheck className="w-5 h-5 text-emerald-300" />
                 <span className="font-semibold">企业级稳定</span>
-              </div>
+        </div>
               <p className="text-white/60 mt-2 text-sm">任务式生成 + 进度轮询，支持异步产出。</p>
             </div>
             <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
@@ -879,7 +910,7 @@ function App() {
                 >
                   {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
-              </div>
+          </div>
             ) : (
               // recoverReset 模式：也要展示新密码输入框
               <div className="relative">
@@ -898,7 +929,7 @@ function App() {
                 >
                   {authShowPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
-              </div>
+        </div>
             )}
             {(authMode === 'register' || authMode === 'recoverReset') && (
               <div className="relative">
@@ -2105,7 +2136,7 @@ function VideoGenerator({
             metadata: { from: 'video_generator', model, size, resolution, durationSec },
           })
           setStatusText('生成完成')
-          setIsGenerating(false)
+    setIsGenerating(false)
           return
         }
 
@@ -2160,7 +2191,7 @@ function VideoGenerator({
                       onChange={(e) => setProductInfo({ ...productInfo, [f]: e.target.value })}
                       className="w-full px-4 py-2 border rounded-lg"
                     />
-                  </div>
+          </div>
                 ))}
                 <div>
                   <label className="block text-sm font-medium mb-1">视频语言</label>
@@ -2563,7 +2594,7 @@ function ImageGenerator({
   const sceneRunBoardRef = useRef<SceneRunBoard | null>(null)
   const [sceneBoardPreparing, setSceneBoardPreparing] = useState(false)
   const [customStyleModalOpen, setCustomStyleModalOpen] = useState(false)
-  const [customStyleDraft, setCustomStyleDraft] = useState({ title: '自定义方案', description: '', imagePrompt: '' })
+  const [customStylePromptOnly, setCustomStylePromptOnly] = useState('')
   const [styleCardEditIndex, setStyleCardEditIndex] = useState<number | null>(null)
   const [styleCardEditDraft, setStyleCardEditDraft] = useState({ title: '', description: '', imagePrompt: '' })
   const [sceneBatchGenerating, setSceneBatchGenerating] = useState(false)
@@ -2639,6 +2670,9 @@ function ImageGenerator({
     const doneSlots = slots.filter((s) => s.selected && s.status === 'done' && s.imageUrl)
     const outputUrls = doneSlots.map((s) => s.imageUrl!)
     const sceneLabels = doneSlots.map((s) => s.title)
+    const sceneTeasers = doneSlots.map((s) =>
+      styleCardTeaser((s.description || s.imagePrompt || '').replace(/\s+/g, ' ').trim(), 42),
+    )
     const failedSelected = slots.filter((s) => s.selected && s.status === 'failed')
     const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
     const resLb =
@@ -2690,6 +2724,7 @@ function ImageGenerator({
       status: 'completed',
       outputUrls,
       sceneLabels,
+      sceneTeasers,
       errorMessage: errors.length ? `部分失败：${errors.join('；')}` : undefined,
     }
     setImageGenHistory((prev) => (prev.some((t) => t.id === bid) ? prev : [task, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)))
@@ -3028,7 +3063,7 @@ function ImageGenerator({
         targetAudience: w.product?.targetAudience || '',
         language: w.product?.language || productInfo.language || '简体中文',
       }
-      analysisText = w.productAnalysisText || ''
+      analysisText = filterProductAnalysisText(w.productAnalysisText || '')
       styles = w.styles || []
       setProductAnalysisText(analysisText)
       setProductInfo(nextProduct)
@@ -3108,7 +3143,7 @@ function ImageGenerator({
         targetAudience: w.product?.targetAudience || '',
         language: w.product?.language || productInfo.language || '简体中文',
       }
-      analysisText = w.productAnalysisText || ''
+      analysisText = filterProductAnalysisText(w.productAnalysisText || '')
       setProductAnalysisText(analysisText)
       setProductInfo(nextProduct)
       setHotStyles((prev) => prev.map((s) => ({ ...s, imagePrompt: '' })))
@@ -3772,6 +3807,58 @@ function ImageGenerator({
     }
   }
 
+  const runSceneSlotGeneration = async (
+    boardId: string,
+    slotIndex: number,
+    basePrompt: string,
+    slot: SceneRunSlot,
+  ) => {
+    if (!slot.selected) return
+    const mergedPrompt = mergeScenePromptForSlot(basePrompt, slot)
+    const ref = refImageDataUrl || undefined
+    const neg = optimizedNegativePrompt || undefined
+    try {
+      const r = await generateImageAPI({
+        prompt: mergedPrompt,
+        negativePrompt: neg,
+        model,
+        aspectRatio: size,
+        resolution,
+        refImage: ref,
+        imageCount: 1,
+      })
+      await safeArchiveAsset({
+        source: 'ai_generated',
+        type: 'image',
+        url: r.imageUrl,
+        name: `image-${boardId}-${slotIndex + 1}.png`,
+        metadata: { from: 'image_generator', model, size, resolution, scene: slot.title },
+      })
+      setSceneRunBoard((b) => {
+        if (!b || b.id !== boardId) return b
+        return {
+          ...b,
+          slots: b.slots.map((s, i) =>
+            i === slotIndex ? { ...s, status: 'done' as const, imageUrl: r.imageUrl, error: undefined } : s,
+          ),
+        }
+      })
+    } catch (e: any) {
+      Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: slot.title } })
+      setSceneRunBoard((b) => {
+        if (!b || b.id !== boardId) return b
+        return {
+          ...b,
+          slots: b.slots.map((s, i) =>
+            i === slotIndex
+              ? { ...s, status: 'failed' as const, error: e?.message || '失败', imageUrl: undefined }
+              : s,
+          ),
+        }
+      })
+    }
+  }
+
   const handleGenerateSceneSlot = async (boardId: string, slotIndex: number) => {
     const board = sceneRunBoardRef.current
     if (!board || board.id !== boardId) return
@@ -3795,50 +3882,7 @@ function ImageGenerator({
     const sl = bLive.slots[slotIndex]
     if (!sl || sl.status !== 'generating') return
 
-    const mergedPrompt = mergeScenePromptForSlot(bLive.basePrompt, sl)
-    const ref = refImageDataUrl || undefined
-    const neg = optimizedNegativePrompt || undefined
-
-    try {
-      const r = await generateImageAPI({
-        prompt: mergedPrompt,
-        negativePrompt: neg,
-        model,
-        aspectRatio: size,
-        resolution,
-        refImage: ref,
-        imageCount: 1,
-      })
-      await safeArchiveAsset({
-        source: 'ai_generated',
-        type: 'image',
-        url: r.imageUrl,
-        name: `image-${boardId}-${slotIndex + 1}.png`,
-        metadata: { from: 'image_generator', model, size, resolution, scene: sl.title },
-      })
-      setSceneRunBoard((b) => {
-        if (!b || b.id !== boardId) return b
-        return {
-          ...b,
-          slots: b.slots.map((s, i) =>
-            i === slotIndex ? { ...s, status: 'done' as const, imageUrl: r.imageUrl, error: undefined } : s,
-          ),
-        }
-      })
-    } catch (e: any) {
-      Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: sl.title } })
-      setSceneRunBoard((b) => {
-        if (!b || b.id !== boardId) return b
-        return {
-          ...b,
-          slots: b.slots.map((s, i) =>
-            i === slotIndex
-              ? { ...s, status: 'failed' as const, error: e?.message || '失败', imageUrl: undefined }
-              : s,
-          ),
-        }
-      })
-    }
+    await runSceneSlotGeneration(boardId, slotIndex, bLive.basePrompt, sl)
   }
 
   const handleRegenerateSceneSlot = async (boardId: string, slotIndex: number) => {
@@ -3855,16 +3899,6 @@ function ImageGenerator({
     })
     await new Promise<void>((r) => setTimeout(r, 0))
     await handleGenerateSceneSlot(boardId, slotIndex)
-  }
-
-  const handleSceneSlotCardActivate = (boardId: string, slotIndex: number) => {
-    const b = sceneRunBoardRef.current
-    if (!b || b.id !== boardId) return
-    const sl = b.slots[slotIndex]
-    if (!sl) return
-    if (sl.status === 'done' && sl.imageUrl) {
-      setHistoryLightbox({ url: sl.imageUrl, downloadName: `tikgen-${boardId}-${slotIndex + 1}.png` })
-    }
   }
 
   const toggleSceneSlotSelected = (boardId: string, slotIndex: number) => {
@@ -3887,13 +3921,26 @@ function ImageGenerator({
       if (s.selected && (s.status === 'pending' || s.status === 'failed')) indices.push(i)
     })
     if (!indices.length) return
+    const snap = board
+    const basePrompt = snap.basePrompt
+    const slotSnap = indices.map((i) => ({ i, slot: { ...snap.slots[i] } }))
     setSceneBatchGenerating(true)
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
-    try {
-      for (const i of indices) {
-        await handleGenerateSceneSlot(board.id, i)
+    setSceneRunBoard((b) => {
+      if (!b || b.id !== snap.id) return b
+      return {
+        ...b,
+        slots: b.slots.map((s, i) =>
+          indices.includes(i) ? { ...s, status: 'generating' as const, error: undefined } : s,
+        ),
       }
+    })
+    try {
+      await new Promise<void>((r) => setTimeout(r, 0))
+      await Promise.all(
+        slotSnap.map(({ i, slot }) => runSceneSlotGeneration(snap.id, i, basePrompt, slot)),
+      )
     } finally {
       setSceneBatchGenerating(false)
     }
@@ -4014,7 +4061,7 @@ function ImageGenerator({
                       >
                         场景对比海报
                       </button>
-                    </div>
+          </div>
                     <div className="flex items-center bg-gray-100 rounded-full p-1 mr-1">
                       <button
                         onClick={() => {
@@ -4153,6 +4200,84 @@ function ImageGenerator({
     <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg overflow-visible">
+        <div className="workbench-form-section p-4 mb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">模型与规格</div>
+            <ImageFormTip
+              wide
+              label="说明"
+              text={`模型、分辨率与画幅在同一行设置。切换模型后，分辨率与比例的可选项会随模型能力变化。
+
+一键生成提示词会结合当前画幅与分辨率优化文案；若之后修改了画幅或分辨率，建议重新生成提示词。`}
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-3">
+            <div className="min-w-0 flex-1 sm:min-w-[160px] sm:flex-[1.35]">
+              <label htmlFor="tikgen-image-model" className="block text-xs text-white/50 mb-1.5 font-medium">
+                模型选择
+              </label>
+              <div className="relative">
+                <Box className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" strokeWidth={1.75} />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-image-model"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-9 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                >
+                  {imageModelOptions.map((m) => (
+                    <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
+                      {m.name}
+                      {m.unavailableReason ? `（暂不可用）` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="w-full shrink-0 sm:w-[min(28%,9.5rem)] sm:max-w-[10rem]">
+              <label htmlFor="tikgen-image-resolution" className="mb-1.5 flex items-center gap-1 text-xs font-medium text-white/50">
+                分辨率选择
+                <Sparkles className="h-3 w-3 text-emerald-400/90" strokeWidth={2} aria-hidden />
+              </label>
+              <div className="relative">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-image-resolution"
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value as ImageRes)}
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                >
+                  {imageCaps.resolutions.map((r) => (
+                    <option key={r} value={r}>
+                      {r === '1024' ? '1K' : r === '1536' ? '1.5K' : r === '2048' ? '2K' : r === '4096' ? '4K' : r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="w-full shrink-0 sm:w-[min(22%,6.5rem)] sm:max-w-[7rem]">
+              <label htmlFor="tikgen-image-aspect" className="block text-xs font-medium text-white/50 mb-1.5">
+                图片比例
+              </label>
+              <div className="relative">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-image-aspect"
+                  value={size}
+                  onChange={(e) => setSize(e.target.value as ImageAspect)}
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                >
+                  {imageCaps.aspectRatios.map((ar) => (
+                    <option key={ar} value={ar}>
+                      {ar}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="workbench-form-section p-4 mb-5">
           <div className="flex items-center justify-between gap-2 mb-2">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -4322,93 +4447,15 @@ function ImageGenerator({
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
-          <div className="flex items-center gap-1.5 mb-3">
-            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">模型与规格</div>
-            <ImageFormTip
-              wide
-              label="说明"
-              text={`模型、分辨率与画幅在同一行设置。切换模型后，分辨率与比例的可选项会随模型能力变化。
-
-一键生成提示词会结合当前画幅与分辨率优化文案；若之后修改了画幅或分辨率，建议重新生成提示词。`}
-            />
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-3">
-            <div className="min-w-0 flex-1 sm:min-w-[160px] sm:flex-[1.35]">
-              <label htmlFor="tikgen-image-model" className="block text-xs text-white/50 mb-1.5 font-medium">
-                模型选择
-              </label>
-              <div className="relative">
-                <Box className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" strokeWidth={1.75} />
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                <select
-                  id="tikgen-image-model"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-9 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
-                >
-                  {imageModelOptions.map((m) => (
-                    <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
-                      {m.name}
-                      {m.unavailableReason ? `（暂不可用）` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="w-full shrink-0 sm:w-[min(28%,9.5rem)] sm:max-w-[10rem]">
-              <label htmlFor="tikgen-image-resolution" className="mb-1.5 flex items-center gap-1 text-xs font-medium text-white/50">
-                分辨率选择
-                <Sparkles className="h-3 w-3 text-emerald-400/90" strokeWidth={2} aria-hidden />
-              </label>
-              <div className="relative">
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                <select
-                  id="tikgen-image-resolution"
-                  value={resolution}
-                  onChange={(e) => setResolution(e.target.value as ImageRes)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
-                >
-                  {imageCaps.resolutions.map((r) => (
-                    <option key={r} value={r}>
-                      {r === '1024' ? '1K' : r === '1536' ? '1.5K' : r === '2048' ? '2K' : r === '4096' ? '4K' : r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="w-full shrink-0 sm:w-[min(22%,6.5rem)] sm:max-w-[7rem]">
-              <label htmlFor="tikgen-image-aspect" className="block text-xs font-medium text-white/50 mb-1.5">
-                图片比例
-              </label>
-              <div className="relative">
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                <select
-                  id="tikgen-image-aspect"
-                  value={size}
-                  onChange={(e) => setSize(e.target.value as ImageAspect)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
-                >
-                  {imageCaps.aspectRatios.map((ar) => (
-                    <option key={ar} value={ar}>
-                      {ar}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="workbench-form-section p-4 mb-5">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">商品分析与爆款风格</div>
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「一键填充」会以第一张主参考图调用 GPT-4o，生成商品分析与多组「画面方案」。点卡片切换方案；悬停可看完整出图主描述，点「编辑」在弹窗中修改。
+                text={`「一键填充」生成商品分析与画面方案。点卡片切换方案；鼠标悬停卡片可看完整出图主描述浮层；点铅笔在弹窗中编辑。
 
-左侧「一键生成图片」会加载 6 场景；在右侧勾选后批量生成，可一键下载全部出图。`}
+左侧「一键生成图片」加载 6 场景后，在右侧点击卡片即可勾选/取消，再批量生成。`}
               />
             </div>
             <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
@@ -4436,7 +4483,7 @@ function ImageGenerator({
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/12 bg-white/[0.03] p-3 mb-4">
+          <div className="border-b border-white/[0.09] pb-5 mb-5">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium text-white/88">商品分析</span>
               <button
@@ -4452,17 +4499,17 @@ function ImageGenerator({
             <textarea
               value={productAnalysisText}
               onChange={(e) => setProductAnalysisText(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl min-h-[160px] text-sm leading-relaxed bg-black/25 border border-white/10 text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+              className="w-full resize-y min-h-[168px] rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/35"
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
           </div>
 
-          <div className="rounded-xl border border-white/12 bg-white/[0.03] p-3 mb-4">
+          <div>
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
               <div>
                 <div className="text-sm font-medium text-white/88">画面方案（风格 + 出图描述）</div>
                 <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
-                  点卡片切换当前方案。悬停显示完整出图主描述；点铅笔在弹窗中编辑。可添加「自定义方案」。
+                  点卡片切换方案；悬停浮层查看完整出图主描述；铅笔编辑。可添加「自定义方案」。
                 </p>
               </div>
               <button
@@ -4477,19 +4524,19 @@ function ImageGenerator({
             </div>
             {hotStyles.length === 0 ? (
               <div className="space-y-2">
-                <div className="text-center text-xs text-white/40 py-6 border border-dashed border-white/12 rounded-xl">
+                <div className="text-center text-xs text-white/40 py-6 border border-dashed border-white/14 rounded-xl bg-white/[0.02]">
                   上传主参考图后，使用「一键填充」或「重新分析」生成画面方案（标题建议 4 字）
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    setCustomStyleDraft({ title: '自定义方案', description: '', imagePrompt: '' })
+                    setCustomStylePromptOnly('')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="w-full flex flex-col items-center justify-center min-h-[100px] rounded-xl border-2 border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] hover:border-violet-400/40 text-center p-3 transition-colors"
+                  className="w-full flex flex-col items-center justify-center min-h-[100px] rounded-xl border border-dashed border-white/18 bg-white/[0.02] hover:bg-white/[0.05] hover:border-violet-400/35 text-center p-3 transition-colors"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                  <span className="text-[10px] text-white/45 mt-1">不依赖分析，直接自定义出图描述</span>
+                  <span className="text-[10px] text-white/45 mt-1">用一段话描述你想要的画面与商品关系</span>
                 </button>
               </div>
             ) : (
@@ -4507,14 +4554,14 @@ function ImageGenerator({
                         selectHotStyleCard(idx)
                       }
                     }}
-                    className={`group/scard relative text-left rounded-2xl border px-3.5 pt-3.5 pb-3 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                    className={`group/scard relative z-0 text-left rounded-2xl border px-3.5 pt-3 pb-3 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
                       selectedHotStyleIndex === idx
-                        ? 'border-violet-400/55 bg-gradient-to-b from-violet-500/12 to-white/[0.06] shadow-[0_0_0_1px_rgba(167,139,250,0.25)]'
-                        : 'border-white/10 bg-white/[0.03] hover:border-white/18 hover:bg-white/[0.05]'
+                        ? 'border-violet-400/50 bg-gradient-to-b from-violet-500/[0.14] to-white/[0.04] shadow-[0_0_0_1px_rgba(167,139,250,0.22)]'
+                        : 'border-white/10 bg-white/[0.025] hover:border-white/16 hover:bg-white/[0.04]'
                     } ${promptRegenBusy ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="text-sm font-semibold text-white/95 leading-snug pr-1 line-clamp-2">{st.title}</h3>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-white/95 leading-tight line-clamp-1 pr-1">{st.title}</h3>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -4526,18 +4573,24 @@ function ImageGenerator({
                           })
                           setStyleCardEditIndex(idx)
                         }}
-                        className="shrink-0 p-1.5 rounded-lg border border-white/12 bg-black/30 text-violet-200/95 hover:bg-violet-500/20 hover:border-violet-400/35 transition-colors"
+                        className="shrink-0 rounded-md border border-white/12 bg-black/35 p-1.5 text-violet-200/95 transition-colors hover:border-violet-400/35 hover:bg-violet-500/15"
                         title="编辑方案"
                       >
-                        <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
                       </button>
                     </div>
-                    <p className="text-[11px] text-white/50 leading-relaxed line-clamp-3 min-h-[3.25rem]">{st.description || ' '}</p>
-                    <div className="mt-3 pt-3 border-t border-white/[0.08] rounded-b-xl overflow-hidden max-h-0 opacity-0 group-hover/scard:max-h-[140px] group-hover/scard:opacity-100 transition-all duration-200 ease-out">
-                      <p className="text-[10px] font-medium text-violet-300/90 mb-1">出图主描述</p>
-                      <p className="text-[10px] text-white/65 leading-relaxed line-clamp-6 whitespace-pre-wrap break-words">
-                        {String(st.imagePrompt || '').trim() || '（暂无，可在编辑中填写）'}
-                      </p>
+                    <p className="mt-2 h-[2.35rem] text-[11px] leading-snug text-white/48 overflow-hidden">
+                      {styleCardTeaser(st.description, 44) || '\u00a0'}
+                    </p>
+                    <div className="pointer-events-none invisible absolute left-0 right-0 top-full z-[90] mt-2 opacity-0 transition-opacity duration-150 group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100">
+                      <div className="max-h-64 overflow-y-auto rounded-xl border border-white/14 bg-zinc-950/98 p-3 text-[11px] leading-relaxed text-white/82 shadow-[0_16px_50px_rgba(0,0,0,0.55)] backdrop-blur-md">
+                        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/95">
+                          出图主描述
+                        </div>
+                        <div className="whitespace-pre-wrap break-words">
+                          {String(st.imagePrompt || '').trim() || '（暂无，可点击铅笔编辑后填写）'}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -4545,22 +4598,13 @@ function ImageGenerator({
                   type="button"
                   onClick={() => {
                     const i = hotStyles.findIndex((s) => s.isCustom)
-                    if (i >= 0) {
-                      const s = hotStyles[i]
-                      setCustomStyleDraft({
-                        title: s.title || '自定义方案',
-                        description: s.description || '',
-                        imagePrompt: s.imagePrompt || '',
-                      })
-                    } else {
-                      setCustomStyleDraft({ title: '自定义方案', description: '', imagePrompt: '' })
-                    }
+                    setCustomStylePromptOnly(i >= 0 ? hotStyles[i].imagePrompt || '' : '')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="flex flex-col items-center justify-center min-h-[120px] rounded-xl border-2 border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.06] hover:border-violet-400/40 text-center p-3 transition-colors"
+                  className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border border-dashed border-white/18 bg-white/[0.02] p-3 text-center transition-colors hover:border-violet-400/35 hover:bg-white/[0.05]"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                  <span className="text-[10px] text-white/45 mt-1">点击填写标题、说明与出图描述</span>
+                  <span className="mt-1 text-[10px] text-white/45">一段话描述想要的画面、风格与卖点呈现</span>
                 </button>
               </div>
             )}
@@ -4657,7 +4701,7 @@ function ImageGenerator({
                 <div>
                   <h3 className="text-sm font-semibold text-white/90">场景出图</h3>
                   <p className="text-[11px] text-white/45 mt-0.5">
-                    默认全选；可取消不需要的场景。点「生成已选」一次性出图；完成后可「下载全部」。点击图片可预览。
+                    默认全选。点击卡片任意区域可勾选/取消；点「生成已选」并行出图；完成后可「下载全部」。已出图请用悬停层上的「预览」看图。
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -4703,42 +4747,48 @@ function ImageGenerator({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {sceneRunBoard.slots.map((slot, sidx) => {
-                const summary =
-                  (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim().slice(0, 64) +
-                  ((slot.description || slot.imagePrompt || '').length > 64 ? '…' : '')
+                const summary = styleCardTeaser(
+                  (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim(),
+                  36,
+                )
                 return (
                   <div
                     key={slot.key}
-                    className={`flex flex-col rounded-2xl border overflow-hidden transition-opacity ${
-                      slot.selected ? 'border-white/14 bg-black/25' : 'border-white/[0.08] bg-black/15 opacity-60'
-                    }`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (sceneBatchGenerating) return
+                      toggleSceneSlotSelected(sceneRunBoard.id, sidx)
+                    }}
+                    onKeyDown={(e) => {
+                      if (sceneBatchGenerating) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        toggleSceneSlotSelected(sceneRunBoard.id, sidx)
+                      }
+                    }}
+                    className={`flex flex-col overflow-hidden rounded-2xl border text-left transition-[opacity,box-shadow] ${
+                      slot.selected
+                        ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
+                        : 'border-white/[0.07] bg-black/12 opacity-55'
+                    } ${sceneBatchGenerating ? 'cursor-default' : 'cursor-pointer'}`}
                   >
-                    <div className="flex items-start gap-2 p-2.5 border-b border-white/[0.08]">
-                      <label className="flex items-center gap-2 cursor-pointer shrink-0 mt-0.5">
-                        <input
-                          type="checkbox"
-                          checked={slot.selected}
-                          disabled={sceneBatchGenerating}
-                          onChange={() => toggleSceneSlotSelected(sceneRunBoard.id, sidx)}
-                          className="rounded border-white/30 w-3.5 h-3.5"
-                        />
-                      </label>
-                      <div className="min-w-0 flex-1">
-                        <span className="inline-block rounded-full bg-white/88 text-zinc-900 text-[10px] font-semibold px-2 py-0.5 max-w-full truncate">
-                          {slot.title}
-                        </span>
-                        <p className="text-[10px] text-white/45 leading-snug line-clamp-2 mt-1">{summary}</p>
+                    <div className="border-b border-white/[0.07] px-2.5 pb-2 pt-2.5">
+                      <div className="min-w-0">
+                        <span className={SCENE_TAG_CLASS}>{slot.title}</span>
+                        <p className="mt-1.5 h-[2rem] text-[10px] leading-snug text-white/42 overflow-hidden">
+                          {summary || '\u00a0'}
+                        </p>
                       </div>
                     </div>
-                    <div className="relative group/sc aspect-square w-full bg-black/35">
+                    <div className="group/sc relative aspect-square w-full bg-black/40">
                       {slot.status === 'done' && slot.imageUrl ? (
-                        <button
-                          type="button"
-                          className="absolute inset-0 z-[1] block"
-                          onClick={() => handleSceneSlotCardActivate(sceneRunBoard.id, sidx)}
-                        >
-                          <img src={slot.imageUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
-                        </button>
+                        <img
+                          src={slot.imageUrl}
+                          alt=""
+                          className="h-full w-full object-cover pointer-events-none select-none"
+                          draggable={false}
+                        />
                       ) : slot.status === 'generating' ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70 text-[11px]">
                           <RefreshCw className="w-7 h-7 animate-spin opacity-80" />
@@ -4751,8 +4801,11 @@ function ImageGenerator({
                           <button
                             type="button"
                             disabled={sceneBatchGenerating}
-                            onClick={() => void handleGenerateSceneSlot(sceneRunBoard.id, sidx)}
-                            className="mt-1 text-violet-300 underline text-xs disabled:opacity-40"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleGenerateSceneSlot(sceneRunBoard.id, sidx)
+                            }}
+                            className="mt-1 text-xs text-violet-300 underline disabled:opacity-40"
                           >
                             单张重试
                           </button>
@@ -4766,7 +4819,7 @@ function ImageGenerator({
                         <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/0 hover:bg-black/45 opacity-0 group-hover/sc:opacity-100 transition-opacity pointer-events-none group-hover/sc:pointer-events-auto">
                           <button
                             type="button"
-                            className="p-2.5 rounded-full bg-white/15 text-white border border-white/25 hover:bg-white/25 pointer-events-auto"
+                            className="pointer-events-auto rounded-full border border-white/25 bg-white/15 p-2.5 text-white hover:bg-white/25"
                             title="预览"
                             onClick={(e) => {
                               e.stopPropagation()
@@ -4776,12 +4829,12 @@ function ImageGenerator({
                               })
                             }}
                           >
-                            <Eye className="w-6 h-6" />
+                            <Eye className="h-6 w-6" />
                           </button>
-                          <div className="absolute top-2 right-2 flex gap-1">
+                          <div className="absolute right-2 top-2 flex gap-1">
                             <button
                               type="button"
-                              className="p-1.5 rounded-full bg-black/65 text-white border border-white/20 hover:bg-black/80 pointer-events-auto"
+                              className="pointer-events-auto rounded-full border border-white/20 bg-black/70 p-1.5 text-white hover:bg-black/85"
                               title="重新生成"
                               disabled={sceneBatchGenerating}
                               onClick={(e) => {
@@ -4789,18 +4842,18 @@ function ImageGenerator({
                                 void handleRegenerateSceneSlot(sceneRunBoard.id, sidx)
                               }}
                             >
-                              <Wand2 className="w-3.5 h-3.5" />
+                              <Wand2 className="h-3.5 w-3.5" />
                             </button>
                             <a
                               href={slot.imageUrl}
                               download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-1.5 rounded-full bg-black/65 text-white border border-white/20 hover:bg-black/80 pointer-events-auto"
+                              className="pointer-events-auto rounded-full border border-white/20 bg-black/70 p-1.5 text-white hover:bg-black/85"
                               title="下载"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <Download className="w-3.5 h-3.5" />
+                              <Download className="h-3.5 w-3.5" />
                             </a>
                           </div>
                         </div>
@@ -4900,17 +4953,29 @@ function ImageGenerator({
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {task.outputUrls.map((url, idx) => {
                               const label = task.sceneLabels?.[idx] || `图 ${idx + 1}`
+                              const teaser =
+                                task.sceneTeasers?.[idx] ||
+                                styleCardTeaser(
+                                  String(task.prompt || '')
+                                    .split(/\n────────\n/)[1]
+                                    ?.replace(/\s+/g, ' ')
+                                    .trim() || '',
+                                  40,
+                                )
                               return (
                                 <div
                                   key={`${task.id}_out_${idx}`}
-                                  className="flex flex-col rounded-2xl border border-white/12 bg-black/25 overflow-hidden group/out"
+                                  className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 group/out"
                                 >
-                                  <div className="p-2 space-y-1">
-                                    <span className="inline-block rounded-full bg-white/85 text-zinc-900 text-[10px] font-semibold px-2 py-0.5 max-w-full truncate">
+                                  <div className="space-y-1 px-2.5 pb-2 pt-2.5">
+                                    <span className={`${SCENE_TAG_CLASS} max-w-full truncate`} title={label}>
                                       {label}
                                     </span>
+                                    <p className="h-[2rem] text-[10px] leading-snug text-white/42 overflow-hidden">
+                                      {teaser || '\u00a0'}
+                                    </p>
                                   </div>
-                                  <div className="relative aspect-square w-full border-t border-white/10">
+                                  <div className="relative aspect-square w-full border-t border-white/[0.08] bg-black/35">
                                     <button
                                       type="button"
                                       className="absolute inset-0 z-[1] block"
@@ -4968,35 +5033,17 @@ function ImageGenerator({
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-white/55 mb-1">标题</label>
-              <input
-                value={customStyleDraft.title}
-                onChange={(e) => setCustomStyleDraft((d) => ({ ...d, title: e.target.value }))}
-                className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-white/55 mb-1">短说明</label>
-              <textarea
-                value={customStyleDraft.description}
-                onChange={(e) => setCustomStyleDraft((d) => ({ ...d, description: e.target.value }))}
-                rows={3}
-                className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-white/55 mb-1">出图主描述</label>
-              <textarea
-                value={customStyleDraft.imagePrompt}
-                onChange={(e) => setCustomStyleDraft((d) => ({ ...d, imagePrompt: e.target.value }))}
-                rows={8}
-                className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm resize-y min-h-[160px]"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-5">
+          <p className="mb-3 text-[11px] leading-relaxed text-white/48">
+            用自然语言写清画面即可：背景与光线、商品位置与占比、是否需要人物或道具、整体风格与氛围。保存后会写入「出图主描述」并自动选用该方案。
+          </p>
+          <textarea
+            value={customStylePromptOnly}
+            onChange={(e) => setCustomStylePromptOnly(e.target.value)}
+            rows={10}
+            className="min-h-[200px] w-full resize-y rounded-xl border border-white/12 bg-black/30 px-3 py-2.5 text-sm leading-relaxed text-white/90 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+            placeholder="例如：纯白摄影棚顶光，商品居中略偏下约占画面 65%，轻微倒影；背景干净无杂物，偏电商主图、高对比清晰质感……"
+          />
+          <div className="mt-5 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setCustomStyleModalOpen(false)}
@@ -5006,11 +5053,14 @@ function ImageGenerator({
             </button>
             <button
               type="button"
+              disabled={!customStylePromptOnly.trim()}
               onClick={() => {
+                const prompt = customStylePromptOnly.trim()
+                if (!prompt) return
                 const row: ImageWorkbenchStyleRow = {
-                  title: customStyleDraft.title.trim() || '自定义方案',
-                  description: customStyleDraft.description.trim(),
-                  imagePrompt: customStyleDraft.imagePrompt.trim(),
+                  title: '自定义方案',
+                  description: '',
+                  imagePrompt: prompt,
                   isCustom: true,
                 }
                 const i = hotStyles.findIndex((s) => s.isCustom)
@@ -5021,9 +5071,9 @@ function ImageGenerator({
                 setSelectedHotStyleIndex(sel >= 0 ? sel : 0)
                 setCustomStyleModalOpen(false)
                 const jobId = ++aiJobRef.current
-                if (row.imagePrompt) applyStyleCardAsMainPrompt(jobId, row)
+                applyStyleCardAsMainPrompt(jobId, row)
               }}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
             >
               保存并选用
             </button>
@@ -5561,7 +5611,7 @@ function Assets() {
       </div>
       {!!error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>}
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-lg">
+      <div className="bg-white rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">本地上传</h3>
             <div className="flex items-center gap-1">
@@ -5604,8 +5654,8 @@ function Assets() {
               <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无素材</div>
             )}
           </div>
-        </div>
-        <div className="bg-white rounded-2xl p-6 shadow-lg">
+      </div>
+      <div className="bg-white rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">AI生成</h3>
             <div className="flex items-center gap-1">
@@ -5618,7 +5668,7 @@ function Assets() {
                   {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
                 </button>
               ))}
-            </div>
+      </div>
           </div>
           <p className="text-sm text-gray-500">包含：视频生成、图片生成成功后的结果，自动归档到当前账号。</p>
           <div className="mt-4">
