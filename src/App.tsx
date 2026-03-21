@@ -3104,7 +3104,7 @@ function ImageGenerator({
       setSelectedHotStyleIndex(0)
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
-      setAiError(e?.message || '一键填充失败')
+      setAiError(e?.message || '分析失败')
       setIsAiBusy(false)
       return
     }
@@ -3799,7 +3799,7 @@ function ImageGenerator({
       return
     }
     if (!prompt.trim()) {
-      alert('请先用「一键填充」或「AI 生成」/「重新分析」生成出图描述，再点击一键生成图片')
+      alert('请先用「重新分析」或「AI 生成」生成出图描述，再点击一键生成图片')
       return
     }
     setGenErrorText('')
@@ -4489,7 +4489,7 @@ function ImageGenerator({
           <div className="rounded-lg border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200/95">{aiError}</div>
         ) : null}
 
-        {!productStylePanelOpen ? (
+        {!productStylePanelOpen && refImages.length > 0 ? (
           <div className="flex flex-col gap-2">
             {oneClickNeedRefHint ? (
               <span className="text-center text-xs text-amber-400/95" role="status">
@@ -4499,10 +4499,10 @@ function ImageGenerator({
             <button
               type="button"
               onClick={() => void handleOneClickFill()}
-              disabled={!refImages.length || isAiBusy || promptRegenBusy}
-              title={refImages.length ? '分析商品信息并生成 4 套画面方案' : '请先上传至少一张参考图'}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold transition-opacity ${
-                !refImages.length || isAiBusy || promptRegenBusy
+              disabled={isAiBusy || promptRegenBusy}
+              title="分析商品信息并生成 4 套画面方案"
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold ${
+                isAiBusy || promptRegenBusy
                   ? 'cursor-not-allowed bg-white/[0.06] text-white/40 ring-1 ring-inset ring-white/10'
                   : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-900/30 hover:from-violet-500 hover:to-fuchsia-500'
               }`}
@@ -4515,10 +4515,12 @@ function ImageGenerator({
               {isAiBusy ? '分析中…' : promptRegenBusy ? '生成描述中…' : '一键分析商品及爆款风格'}
             </button>
             <p className="text-center text-[11px] leading-relaxed text-white/38">
-              上传参考图后点击，将展示商品分析与画面方案，并同步生成主提示词
+              点击后将展示商品分析与画面方案，并同步生成主提示词
             </p>
           </div>
-        ) : (
+        ) : null}
+
+        {productStylePanelOpen ? (
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -4526,7 +4528,7 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「一键填充」会同时刷新商品分析与 4 套画面方案。
+                text={`「重新分析」会同时刷新商品分析与 4 套画面方案。
 
 点左侧「一键生成图片」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
@@ -4536,7 +4538,7 @@ function ImageGenerator({
                 type="button"
                 onClick={() => void handleOneClickFill()}
                 disabled={isAiBusy || promptRegenBusy}
-                title={refImages.length ? '重新分析并填充商品与画面方案' : '需先上传参考图'}
+                title={refImages.length ? '重新分析商品与画面方案' : '需先上传参考图'}
                 className={`flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors ${
                   isAiBusy || promptRegenBusy
                     ? 'cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 opacity-45'
@@ -4546,7 +4548,7 @@ function ImageGenerator({
                 }`}
               >
                 {isAiBusy ? <RefreshCw className="mr-1 h-4 w-4 shrink-0 animate-spin opacity-90" /> : <Wand2 className="mr-1 h-4 w-4 shrink-0 opacity-90" />}
-                {isAiBusy ? '分析中…' : '一键填充'}
+                {isAiBusy ? '分析中…' : '重新分析'}
               </button>
             </div>
           </div>
@@ -4575,7 +4577,7 @@ function ImageGenerator({
           <div>
             <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm font-medium text-white/88">画面方案（风格 + 出图描述）</span>
+                <span className="text-sm font-medium text-white/88">画面方案</span>
                 <ImageFormTip
                   wide
                   label="操作说明"
@@ -4595,7 +4597,7 @@ function ImageGenerator({
             {hotStyles.length === 0 ? (
               <div className="space-y-2">
                 <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
-                  上传主参考图后，使用上方「一键填充」或「重新分析」生成画面方案（标题建议 4 字）
+                  上传主参考图后，点击顶部或本行右侧「重新分析」生成画面方案（标题建议 4 字）
                 </div>
                 <button
                   type="button"
@@ -4603,14 +4605,14 @@ function ImageGenerator({
                     setCustomStylePromptOnly('')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="flex min-h-[100px] w-full flex-col items-center justify-center rounded-xl bg-black/15 p-3 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-black/25 hover:ring-violet-400/25"
+                  className="flex min-h-0 w-full flex-col items-center justify-center rounded-2xl bg-black/15 px-3.5 py-6 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-[#1e1e26] hover:ring-violet-400/25"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
                   <span className="text-[10px] text-white/45 mt-1">用一段话描述你想要的画面与商品关系</span>
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 items-stretch gap-3">
                 {hotStyles.map((st, idx) => (
                   <div
                     key={`${st.title}_${idx}`}
@@ -4624,11 +4626,11 @@ function ImageGenerator({
                         selectHotStyleCard(idx)
                       }
                     }}
-                    className={`group/scard relative z-0 rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                    className={`group/scard relative z-0 rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-[background-color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
                       selectedHotStyleIndex === idx
-                        ? 'bg-gradient-to-b from-violet-500/[0.16] to-white/[0.03] ring-2 ring-violet-400/35'
-                        : 'bg-black/20 ring-1 ring-inset ring-white/[0.08] hover:bg-black/28 hover:ring-white/14'
-                    } ${promptRegenBusy ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
+                        ? 'bg-gradient-to-b from-violet-500/[0.2] to-[#1a1528] ring-2 ring-violet-400/35'
+                        : 'bg-[#16161c] ring-1 ring-inset ring-white/[0.1] hover:z-20 hover:bg-[#1f1f28] hover:ring-white/16'
+                    } ${promptRegenBusy ? 'pointer-events-none brightness-[0.85] saturate-75' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold text-white/95 leading-tight line-clamp-1 pr-1">{st.title}</h3>
@@ -4652,8 +4654,8 @@ function ImageGenerator({
                     <p className="mt-2 min-h-[4.5rem] text-[11px] leading-[1.45] text-white/55 line-clamp-4">
                       {styleCardSummary(st.description) || '\u00a0'}
                     </p>
-                    <div className="pointer-events-none invisible absolute left-0 right-0 top-full z-[100] mt-2 opacity-0 transition-opacity duration-150 group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100">
-                      <div className="max-h-72 overflow-y-auto rounded-xl border border-white/20 bg-[#0a0a0c] p-3.5 text-[11px] leading-relaxed text-white/90 shadow-[0_20px_60px_rgba(0,0,0,0.85)] ring-1 ring-black/40">
+                    <div className="pointer-events-none invisible absolute left-0 right-0 top-full z-[120] mt-2 opacity-0 transition-none group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100">
+                      <div className="max-h-72 overflow-y-auto rounded-xl border border-white/22 bg-[#121218] p-3.5 text-[11px] leading-relaxed text-white shadow-[0_24px_64px_rgba(0,0,0,0.92)] ring-2 ring-black/50">
                         <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-300">
                           出图主描述
                         </div>
@@ -4671,10 +4673,10 @@ function ImageGenerator({
                     setCustomStylePromptOnly(i >= 0 ? hotStyles[i].imagePrompt || '' : '')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="flex min-h-[168px] flex-col items-center justify-center rounded-xl bg-black/15 p-3 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-black/25 hover:ring-violet-400/25"
+                  className="flex h-full min-h-0 flex-col items-center justify-center self-stretch rounded-2xl bg-[#16161c] px-3.5 py-3 text-center ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-[#1f1f28] hover:ring-violet-400/25"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                  <span className="mt-1 text-[10px] text-white/45">一段话描述想要的画面、风格与卖点呈现</span>
+                  <span className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-white/45">一段话描述画面、风格与卖点</span>
                 </button>
               </div>
             )}
@@ -4704,37 +4706,35 @@ function ImageGenerator({
             </div>
           ) : null}
         </section>
-        )}
-
-        {productStylePanelOpen ? (
-        <div className="mt-1 pt-4">
-        <div className="mb-1.5 text-center text-xs text-white/50 sm:text-left">
-          <span className="text-white/75 font-medium">{currentModelLabel}</span>
-          <span className="mx-1.5 text-white/20">·</span>
-          {size}
-          <span className="mx-1.5 text-white/20">·</span>
-          {formatImageResLabel(resolution)}
-        </div>
-        <button
-          type="button"
-          onClick={() => void handlePrepareSceneBoard()}
-          disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
-          className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
-        >
-          {sceneBoardPreparing ? (
-            <>
-              <RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />
-              正在规划场景…
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5 mr-2 inline opacity-95" />
-              一键生成图片
-            </>
-          )}
-        </button>
-        </div>
         ) : null}
+
+        <div className={`pt-4 ${productStylePanelOpen ? 'mt-1' : 'mt-6'}`}>
+          <div className="mb-1.5 text-center text-xs text-white/50 sm:text-left">
+            <span className="font-medium text-white/75">{currentModelLabel}</span>
+            <span className="mx-1.5 text-white/20">·</span>
+            {size}
+            <span className="mx-1.5 text-white/20">·</span>
+            {formatImageResLabel(resolution)}
+          </div>
+          <button
+            type="button"
+            onClick={() => void handlePrepareSceneBoard()}
+            disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
+            className="w-full rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 py-4 font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {sceneBoardPreparing ? (
+              <>
+                <RefreshCw className="mr-2 inline h-5 w-5 animate-spin" />
+                正在规划场景…
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 inline h-5 w-5 opacity-95" />
+                一键生成图片
+              </>
+            )}
+          </button>
+        </div>
         </div>
       </div>
       <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
