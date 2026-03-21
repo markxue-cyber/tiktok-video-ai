@@ -1,6 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, Circle, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
+import {
+  Video,
+  Image,
+  Zap,
+  LogOut,
+  User,
+  Play,
+  Download,
+  RefreshCw,
+  Sparkles,
+  X,
+  Upload,
+  Wand2,
+  Folder,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronDown,
+  Check,
+  Circle,
+  Crown,
+  WandSparkles,
+  ShieldCheck,
+  Library,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  Bell,
+  Info,
+  Clock,
+  Box,
+  Maximize2,
+  Pencil,
+  ListTodo,
+  Languages,
+  Eraser,
+  BarChart2,
+  Clapperboard,
+} from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
   beautifyScript,
@@ -835,9 +873,11 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [authResendBusy, setAuthResendBusy] = useState(false)
-  const [mainNav, setMainNav] = useState<'create' | 'templates' | 'tasks' | 'tools' | 'assets' | 'benefits' | 'developer'>('create')
-  const [createNav, setCreateNav] = useState<'video' | 'image'>('video')
-  const [toolNav, setToolNav] = useState<'subtitle' | 'watermark' | 'upscale'>('subtitle')
+  const [mainNav, setMainNav] = useState<
+    'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
+  >('image')
+  const [imageSubNav, setImageSubNav] = useState<'generate' | 'removeBg' | 'upscale' | 'translate'>('generate')
+  const [videoSubNav, setVideoSubNav] = useState<'generate' | 'analyze'>('generate')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
   const [packageCatalog, setPackageCatalog] = useState<PackageConfigItem[]>(DEFAULT_PACKAGES)
@@ -972,8 +1012,8 @@ function App() {
 
   useEffect(() => {
     if (!isDevAdmin && mainNav === 'developer') {
-      setMainNav('create')
-      setCreateNav('video')
+      setMainNav('image')
+      setImageSubNav('generate')
     }
   }, [isDevAdmin, mainNav])
 
@@ -1016,15 +1056,23 @@ function App() {
   }, [page])
 
   const currentPageLabel = useMemo(() => {
-    if (mainNav === 'create') return createNav === 'video' ? '视频生成' : '图片生成'
+    if (mainNav === 'image') {
+      if (imageSubNav === 'generate') return '图片生成'
+      if (imageSubNav === 'removeBg') return '去除背景'
+      if (imageSubNav === 'upscale') return '高清放大'
+      return '图片翻译'
+    }
+    if (mainNav === 'video') {
+      if (videoSubNav === 'generate') return '视频生成'
+      return '视频分析'
+    }
     if (mainNav === 'templates') return '模板与案例库'
     if (mainNav === 'tasks') return '任务中心'
-    if (mainNav === 'tools') return toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升'
     if (mainNav === 'assets') return '资产库'
     if (mainNav === 'benefits') return '个人权益'
     if (mainNav === 'developer' && isDevAdmin) return '开发者后台'
-    return '视频生成'
-  }, [mainNav, createNav, toolNav, isDevAdmin])
+    return '图片生成'
+  }, [mainNav, imageSubNav, videoSubNav, isDevAdmin])
 
   const ANN_READ_KEY = user?.id ? `tikgen.ann.read.${user.id}` : 'tikgen.ann.read.guest'
 
@@ -1479,78 +1527,153 @@ function App() {
             <>
               <NavPrimary
                 collapsed
-                icon={<Video className="w-5 h-5" />}
-                label="视频生成"
-                active={mainNav === 'create' && createNav === 'video'}
+                icon={<Image className="w-5 h-5" />}
+                label="图片生成"
+                active={mainNav === 'image' && imageSubNav === 'generate'}
                 onClick={() => {
-                  setMainNav('create')
-                  setCreateNav('video')
+                  setMainNav('image')
+                  setImageSubNav('generate')
                 }}
               />
               <NavPrimary
                 collapsed
-                icon={<Image className="w-5 h-5" />}
-                label="图片生成"
-                active={mainNav === 'create' && createNav === 'image'}
+                icon={<Video className="w-5 h-5" />}
+                label="视频生成"
+                active={mainNav === 'video' && videoSubNav === 'generate'}
                 onClick={() => {
-                  setMainNav('create')
-                  setCreateNav('image')
+                  setMainNav('video')
+                  setVideoSubNav('generate')
                 }}
               />
+              <NavPrimary collapsed icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+              <NavPrimary collapsed icon={<ListTodo className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
+              <NavPrimary
+                collapsed
+                icon={<Folder className="w-5 h-5" />}
+                label="资产库"
+                active={mainNav === 'assets'}
+                onMouseEnter={() => {
+                  void prefetchAssetsCacheIfNeeded()
+                }}
+                onClick={() => setMainNav('assets')}
+              />
+              <NavPrimary collapsed icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
+              {isDevAdmin ? (
+                <NavPrimary
+                  collapsed
+                  icon={<ShieldCheck className="w-5 h-5" />}
+                  label="开发者后台"
+                  active={mainNav === 'developer'}
+                  onClick={() => setMainNav('developer')}
+                />
+              ) : null}
             </>
           ) : (
-            <NavPrimary collapsed={false} icon={<Wand2 className="w-5 h-5" />} label="创作" active={mainNav === 'create'} clickable={false} />
-          )}
-          {!navCollapsed && (
-            <div className="pl-3 space-y-1">
-              <NavSecondary
+            <>
+              <NavPrimary
                 collapsed={false}
-                icon={<Video className="w-4.5 h-4.5" />}
-                label="视频生成"
-                active={mainNav === 'create' && createNav === 'video'}
-                onClick={() => {
-                  setMainNav('create')
-                  setCreateNav('video')
-                }}
-                className="text-base font-semibold py-2.5"
+                icon={<Image className="w-5 h-5" />}
+                label="图片创作"
+                active={mainNav === 'image'}
+                clickable={false}
               />
-              <NavSecondary
+              <div className="pl-3 space-y-1">
+                <NavSecondary
+                  collapsed={false}
+                  icon={<Sparkles className="w-4 h-4" />}
+                  label="图片生成"
+                  active={mainNav === 'image' && imageSubNav === 'generate'}
+                  onClick={() => {
+                    setMainNav('image')
+                    setImageSubNav('generate')
+                  }}
+                />
+                <NavSecondary
+                  collapsed={false}
+                  icon={<Eraser className="w-4 h-4" />}
+                  label="去除背景"
+                  active={mainNav === 'image' && imageSubNav === 'removeBg'}
+                  onClick={() => {
+                    setMainNav('image')
+                    setImageSubNav('removeBg')
+                  }}
+                />
+                <NavSecondary
+                  collapsed={false}
+                  icon={<Maximize2 className="w-4 h-4" />}
+                  label="高清放大"
+                  active={mainNav === 'image' && imageSubNav === 'upscale'}
+                  onClick={() => {
+                    setMainNav('image')
+                    setImageSubNav('upscale')
+                  }}
+                />
+                <NavSecondary
+                  collapsed={false}
+                  icon={<Languages className="w-4 h-4" />}
+                  label="图片翻译"
+                  active={mainNav === 'image' && imageSubNav === 'translate'}
+                  onClick={() => {
+                    setMainNav('image')
+                    setImageSubNav('translate')
+                  }}
+                />
+              </div>
+
+              <NavPrimary
                 collapsed={false}
-                icon={<Image className="w-4.5 h-4.5" />}
-                label="图片生成"
-                active={mainNav === 'create' && createNav === 'image'}
-                onClick={() => {
-                  setMainNav('create')
-                  setCreateNav('image')
-                }}
-                className="text-base font-semibold py-2.5"
+                icon={<Clapperboard className="w-5 h-5" />}
+                label="视频创作"
+                active={mainNav === 'video'}
+                clickable={false}
               />
-            </div>
-          )}
+              <div className="pl-3 space-y-1">
+                <NavSecondary
+                  collapsed={false}
+                  icon={<Video className="w-4 h-4" />}
+                  label="视频生成"
+                  active={mainNav === 'video' && videoSubNav === 'generate'}
+                  onClick={() => {
+                    setMainNav('video')
+                    setVideoSubNav('generate')
+                  }}
+                />
+                <NavSecondary
+                  collapsed={false}
+                  icon={<BarChart2 className="w-4 h-4" />}
+                  label="视频分析"
+                  active={mainNav === 'video' && videoSubNav === 'analyze'}
+                  onClick={() => {
+                    setMainNav('video')
+                    setVideoSubNav('analyze')
+                  }}
+                />
+              </div>
 
-          <NavPrimary collapsed={navCollapsed} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
-          <NavPrimary collapsed={navCollapsed} icon={<Library className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
-          <NavPrimary collapsed={navCollapsed} icon={<Settings2 className="w-5 h-5" />} label="工具" active={mainNav === 'tools'} clickable={false} />
-          {!navCollapsed && mainNav === 'tools' && (
-            <div className="pl-3 space-y-1">
-              <NavSecondary collapsed={false} icon={<Scissors className="w-4 h-4" />} label="去字幕" active={toolNav === 'subtitle'} onClick={() => setToolNav('subtitle')} />
-              <NavSecondary collapsed={false} icon={<Eraser className="w-4 h-4" />} label="去水印" active={toolNav === 'watermark'} onClick={() => setToolNav('watermark')} />
-              <NavSecondary collapsed={false} icon={<WandSparkles className="w-4 h-4" />} label="画质提升" active={toolNav === 'upscale'} onClick={() => setToolNav('upscale')} />
-            </div>
+              <NavPrimary collapsed={false} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+              <NavPrimary collapsed={false} icon={<ListTodo className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
+              <NavPrimary
+                collapsed={false}
+                icon={<Folder className="w-5 h-5" />}
+                label="资产库"
+                active={mainNav === 'assets'}
+                onMouseEnter={() => {
+                  void prefetchAssetsCacheIfNeeded()
+                }}
+                onClick={() => setMainNav('assets')}
+              />
+              <NavPrimary collapsed={false} icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
+              {isDevAdmin ? (
+                <NavPrimary
+                  collapsed={false}
+                  icon={<ShieldCheck className="w-5 h-5" />}
+                  label="开发者后台"
+                  active={mainNav === 'developer'}
+                  onClick={() => setMainNav('developer')}
+                />
+              ) : null}
+            </>
           )}
-
-          <NavPrimary
-            collapsed={navCollapsed}
-            icon={<Folder className="w-5 h-5" />}
-            label="资产库"
-            active={mainNav === 'assets'}
-            onMouseEnter={() => {
-              void prefetchAssetsCacheIfNeeded()
-            }}
-            onClick={() => setMainNav('assets')}
-          />
-          <NavPrimary collapsed={navCollapsed} icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
-          {isDevAdmin && <NavPrimary collapsed={navCollapsed} icon={<ShieldCheck className="w-5 h-5" />} label="开发者后台" active={mainNav === 'developer'} onClick={() => setMainNav('developer')} />}
         </nav>
       </aside>
       <main className={`flex-1 ${navCollapsed ? 'ml-20' : 'ml-64'} transition-all`}>
@@ -1558,11 +1681,14 @@ function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">
-                {mainNav === 'create' && createNav === 'video' && '视频生成'}
-                {mainNav === 'create' && createNav === 'image' && '图片生成'}
+                {mainNav === 'image' && imageSubNav === 'generate' && '图片生成'}
+                {mainNav === 'image' && imageSubNav === 'removeBg' && '去除背景'}
+                {mainNav === 'image' && imageSubNav === 'upscale' && '高清放大'}
+                {mainNav === 'image' && imageSubNav === 'translate' && '图片翻译'}
+                {mainNav === 'video' && videoSubNav === 'generate' && '视频生成'}
+                {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
                 {mainNav === 'templates' && '模板与案例库'}
                 {mainNav === 'tasks' && '任务中心'}
-                {mainNav === 'tools' && (toolNav === 'subtitle' ? '去字幕' : toolNav === 'watermark' ? '去水印' : '画质提升')}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
                 {mainNav === 'developer' && isDevAdmin && '开发者后台'}
@@ -1651,30 +1777,33 @@ function App() {
         </header>
         <div className="p-6">
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
-          <div className={mainNav === 'create' && createNav === 'video' ? '' : 'hidden'}>
+          <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
             <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
           </div>
-          <div className={mainNav === 'create' && createNav === 'image' ? '' : 'hidden'}>
+          <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
             <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
           </div>
+          {mainNav === 'image' && imageSubNav === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
+          {mainNav === 'image' && imageSubNav === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
+          {mainNav === 'image' && imageSubNav === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
+          {mainNav === 'video' && videoSubNav === 'analyze' ? <WorkbenchComingSoon title="视频分析" /> : null}
           {mainNav === 'templates' && (
             <TemplatesLibrary
               onApplyVideo={(preset) => {
                 setVideoTemplatePreset(preset)
-                setCreateNav('video')
-                setMainNav('create')
+                setMainNav('video')
+                setVideoSubNav('generate')
               }}
               onApplyImage={(preset) => {
                 setImageTemplatePreset(preset)
-                setCreateNav('image')
-                setMainNav('create')
+                setMainNav('image')
+                setImageSubNav('generate')
               }}
             />
           )}
           {mainNav === 'assets' && <Assets />}
           {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} packages={packageCatalog} />}
           {mainNav === 'tasks' && <TaskCenter />}
-          {mainNav === 'tools' && <div className="text-center py-20 text-gray-500">工具功能下一版推出</div>}
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
         </div>
       </main>
@@ -1690,6 +1819,17 @@ function App() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function WorkbenchComingSoon({ title }: { title: string }) {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center px-6">
+      <div className="max-w-md rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-8 py-10 text-center shadow-sm">
+        <p className="text-lg font-semibold text-gray-800">{title}</p>
+        <p className="mt-2 text-sm text-gray-500">功能开发中，敬请期待。</p>
+      </div>
     </div>
   )
 }
