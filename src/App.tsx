@@ -302,7 +302,7 @@ function filterProductAnalysisText(raw: string): string {
   return out.join('\n')
 }
 
-/** 画面方案卡片外露文案：约 4 行内（超出由 line-clamp 截断） */
+/** 爆款风格卡片外露文案：约 4 行内（超出由 line-clamp 截断） */
 function styleCardSummary(text: string, maxChars = 220): string {
   const s = String(text || '')
     .replace(/\s+/g, ' ')
@@ -317,7 +317,7 @@ function hotStyleCardPreviewText(st: { isCustom?: boolean; description?: string;
   return String(st.description || '').trim() || String(st.imagePrompt || '').trim()
 }
 
-/** 收集画面方案网格内其它卡片矩形（不含当前悬停卡片），用于浮层避让 */
+/** 收集爆款风格网格内其它卡片矩形（不含当前悬停卡片），用于浮层避让 */
 function getHotStyleSchemeObstacleRects(grid: HTMLElement | null, anchor: HTMLElement | null): DOMRect[] {
   if (!grid || !anchor) return []
   return Array.from(grid.querySelectorAll<HTMLElement>('[data-hot-style-scheme-card]'))
@@ -357,7 +357,7 @@ function popoverOverlapsAnyObstacle(
 }
 
 /**
- * 出图主描述悬停浮层：贴在卡片外侧，避让其它画面方案卡片（含下一行、相邻列），避免挡点击。
+ * 出图主描述悬停浮层：贴在卡片外侧，避让其它爆款风格卡片（含下一行、相邻列），避免挡点击。
  */
 function computeWorkbenchStylePromptPopoverPosition(
   cardRect: DOMRect,
@@ -444,9 +444,11 @@ const IMAGE_RES_OPTIONS = ['1024', '1536', '2048', '4096'] as const // 通用档
 type ImageAspect = (typeof IMAGE_ASPECT_OPTIONS)[number]
 type ImageRes = (typeof IMAGE_RES_OPTIONS)[number]
 
-const IMAGE_GEN_HISTORY_PLAN_LABEL = '画面方案：'
+const IMAGE_GEN_HISTORY_PLAN_LABEL = '爆款风格：'
+/** 旧版生成历史正文前缀，展示时统一换成爆款风格： */
+const IMAGE_GEN_HISTORY_PLAN_LABEL_LEGACY = '画面方案：'
 
-/** 生成历史列表/悬停全文：分隔线后为画面方案，统一带「画面方案：」前缀（兼容旧存档无前缀） */
+/** 生成历史列表/悬停全文：分隔线后为爆款风格说明，统一带「爆款风格：」前缀（兼容旧「画面方案：」与无前缀） */
 function formatImageGenHistoryPromptDisplay(prompt: string): string {
   const p = String(prompt || '')
   const sep = '\n────────\n'
@@ -454,7 +456,9 @@ function formatImageGenHistoryPromptDisplay(prompt: string): string {
   if (idx < 0) return p || '（无提示词）'
   const head = p.slice(0, idx + sep.length)
   let body = p.slice(idx + sep.length)
-  if (body && !body.startsWith(IMAGE_GEN_HISTORY_PLAN_LABEL)) {
+  if (body.startsWith(IMAGE_GEN_HISTORY_PLAN_LABEL_LEGACY)) {
+    body = IMAGE_GEN_HISTORY_PLAN_LABEL + body.slice(IMAGE_GEN_HISTORY_PLAN_LABEL_LEGACY.length)
+  } else if (body && !body.startsWith(IMAGE_GEN_HISTORY_PLAN_LABEL)) {
     body = IMAGE_GEN_HISTORY_PLAN_LABEL + body
   }
   return head + body
@@ -2857,11 +2861,11 @@ function ImageGenerator({
   const [workbenchFullAnalysisBusy, setWorkbenchFullAnalysisBusy] = useState(false)
   /** 仅商品区「AI 生成」第一步 */
   const [productAnalysisOnlyBusy, setProductAnalysisOnlyBusy] = useState(false)
-  /** 仅画面方案行「重新分析」第一步 */
+  /** 仅爆款风格行「重新分析」第一步 */
   const [hotStylesReanalyzeBusy, setHotStylesReanalyzeBusy] = useState(false)
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
   const oneClickHintTimerRef = useRef(0)
-  /** 商品分析 + 画面方案：默认折叠，上传参考图并点击「一键分析」后展开 */
+  /** 商品分析 + 爆款风格：默认折叠，上传参考图并点击「一键分析」后展开 */
   const [productStylePanelOpen, setProductStylePanelOpen] = useState(false)
   const [productAnalysisText, setProductAnalysisText] = useState('')
   const [hotStyles, setHotStyles] = useState<ImageWorkbenchStyleRow[]>([])
@@ -2877,7 +2881,7 @@ function ImageGenerator({
   const [customStylePromptOnly, setCustomStylePromptOnly] = useState('')
   const [styleCardEditIndex, setStyleCardEditIndex] = useState<number | null>(null)
   const [styleCardEditDraft, setStyleCardEditDraft] = useState({ title: '', description: '', imagePrompt: '' })
-  /** 画面方案「出图主描述」悬停浮层：挂到 body + fixed，避免被下方卡片 / 层叠上下文挡住 */
+  /** 爆款风格「出图主描述」悬停浮层：挂到 body + fixed，避免被下方卡片 / 层叠上下文挡住 */
   const [stylePromptHoverIdx, setStylePromptHoverIdx] = useState<number | null>(null)
   const [stylePromptPopBox, setStylePromptPopBox] = useState<{ top: number; left: number; width: number } | null>(null)
   const stylePromptAnchorRef = useRef<HTMLDivElement | null>(null)
@@ -3306,7 +3310,7 @@ function ImageGenerator({
       hotStyles.length > 0 || productAnalysisText.trim() !== '' || sceneRunBoard != null
     if (isMain && hasAnalysisOrBoard) {
       const ok = window.confirm(
-        '删除主参考图后，当前页面内的商品分析、画面方案与场景看板等内容将被清空。是否继续删除？',
+        '删除主参考图后，当前页面内的商品分析、爆款风格与场景看板等内容将被清空。是否继续删除？',
       )
       if (!ok) return
       clearImageGenPageAfterMainRefRemoved()
@@ -5059,7 +5063,7 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「重新分析」会同时刷新商品分析与 4 套画面方案。
+                text={`「重新分析」会同时刷新商品分析与 4 套爆款风格。
 
 点左侧「免费生成预览」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
@@ -5069,7 +5073,7 @@ function ImageGenerator({
                 type="button"
                 onClick={() => void handleOneClickFill()}
                 disabled={workbenchOpsLocked}
-                title={refImages.length ? '重新分析商品与画面方案' : '需先上传参考图'}
+                title={refImages.length ? '重新分析商品与爆款风格' : '需先上传参考图'}
                 className={`flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors ${
                   workbenchOpsLocked
                     ? 'cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 opacity-45'
@@ -5124,11 +5128,11 @@ function ImageGenerator({
           <div className="overflow-visible">
             <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm font-medium text-white/88">画面方案</span>
+                <span className="text-sm font-medium text-white/88">爆款风格</span>
                 <ImageFormTip
                   wide
                   label="操作说明"
-                  text="点卡片切换方案；鼠标悬停卡片可查看完整「出图主描述」浮层；点铅笔在弹窗中编辑。可添加「自定义方案」。"
+                  text="点卡片切换爆款风格；鼠标悬停卡片可查看完整「出图主描述」浮层；点铅笔在弹窗中编辑。可添加「自定义方案」。"
                 />
               </div>
               <button
@@ -5152,7 +5156,7 @@ function ImageGenerator({
             {hotStyles.length === 0 ? (
               <div className="space-y-2">
                 <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
-                  上传主参考图后，点击顶部或本行右侧「重新分析」生成画面方案（标题建议 4 字）
+                  上传主参考图后，点击顶部或本行右侧「重新分析」生成爆款风格（标题建议 4 字）
                 </div>
                 <button
                   type="button"
@@ -5292,13 +5296,13 @@ function ImageGenerator({
               <p className="text-[11px] leading-relaxed text-white/42">
                 <span className="text-white/55">先分析商品</span>
                 <span className="text-white/30"> · </span>
-                <span className="text-white/38">生成主提示词与 4 套画面方案</span>
+                <span className="text-white/38">生成主提示词与 4 套爆款风格</span>
               </p>
               <button
                 type="button"
                 onClick={() => void handleOneClickFill()}
                 disabled={workbenchOpsLocked}
-                title="分析商品信息并生成 4 套画面方案"
+                title="分析商品信息并生成 4 套爆款风格"
                 className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold transition-colors ${
                   workbenchOpsLocked
                     ? 'cursor-not-allowed bg-white/[0.05] text-white/32'
@@ -5740,7 +5744,7 @@ function ImageGenerator({
                                 styleCardTeaser(
                                   String(task.prompt || '')
                                     .split(/\n────────\n/)[1]
-                                    ?.replace(/^\s*画面方案：/, '')
+                                    ?.replace(/^\s*(画面方案|爆款风格)：/, '')
                                     .replace(/\s+/g, ' ')
                                     .trim() || '',
                                   40,
@@ -5921,7 +5925,7 @@ function ImageGenerator({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">编辑画面方案</h3>
+            <h3 className="text-lg font-semibold text-white">编辑爆款风格</h3>
             <button
               type="button"
               onClick={() => setStyleCardEditIndex(null)}
