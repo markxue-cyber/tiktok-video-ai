@@ -373,14 +373,32 @@
   outline: none !important;
 }
 
-/* Image generator: ℹ️ popover (hover) */
+/* Image generator: ℹ️ popover (hover) — 必须实底，否则与下层文案叠字无法阅读 */
 .workbench-root .image-form-tip-pop {
-  background: rgba(12, 14, 32, 0.97) !important;
-  border-color: rgba(167, 139, 250, 0.28) !important;
-  backdrop-filter: blur(12px);
+  background-color: rgb(14, 14, 20) !important;
+  background-image: linear-gradient(180deg, rgb(22, 22, 30) 0%, rgb(12, 12, 18) 100%) !important;
+  border-color: rgba(167, 139, 250, 0.35) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  isolation: isolate;
   box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 20px 56px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* 生成历史场景名等：与 .image-form-tip-pop 同款实底（部分浮层未挂该 class） */
+.workbench-root .workbench-solid-hover-pop {
+  background-color: rgb(14, 14, 20) !important;
+  background-image: linear-gradient(180deg, rgb(22, 22, 30) 0%, rgb(12, 12, 18) 100%) !important;
+  border-color: rgba(167, 139, 250, 0.35) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  isolation: isolate;
+  box-shadow:
+    0 20px 56px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 /* Replace ugly dashed placeholders with premium glass frames. */

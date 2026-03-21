@@ -2851,11 +2851,11 @@ function ImageFormTip({ text, wide, label = '查看说明' }: { text: string; wi
         <Info className="w-[15px] h-[15px]" strokeWidth={1.5} aria-hidden />
       </span>
       {open ? (
-        <div className="absolute left-0 top-full z-[80] -mt-1.5 pt-1.5" role="tooltip">
+        <div className="absolute left-0 top-full z-[300] -mt-1.5 pt-1.5" role="tooltip">
           <div
-            className={`image-form-tip-pop rounded-xl border px-3 py-2.5 text-xs leading-relaxed shadow-2xl max-h-[min(70vh,24rem)] overflow-y-auto ${wide ? 'w-[min(22rem,calc(100vw-2rem))]' : 'w-[min(19rem,calc(100vw-2rem))]'}`}
+            className={`image-form-tip-pop rounded-xl border px-3 py-2.5 text-xs leading-relaxed max-h-[min(70vh,24rem)] overflow-y-auto ${wide ? 'w-[min(22rem,calc(100vw-2rem))]' : 'w-[min(19rem,calc(100vw-2rem))]'}`}
           >
-            <div className="whitespace-pre-wrap text-white/88">{text}</div>
+            <div className="whitespace-pre-wrap text-white">{text}</div>
           </div>
         </div>
       ) : null}
@@ -5642,7 +5642,7 @@ function ImageGenerator({
                         </p>
                         {rawDesc ? (
                           <div
-                            className="pointer-events-none absolute left-1/2 z-[100] min-w-[13rem] max-w-[min(26rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full mb-1.5 rounded-xl border border-white/18 bg-[#14141c]/98 px-3 py-2 text-[11px] leading-relaxed text-white/92 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md whitespace-normal opacity-0 translate-y-1 transition-[opacity,transform] duration-100 ease-out group-hover/desc:opacity-100 group-hover/desc:translate-y-0"
+                            className="workbench-solid-hover-pop pointer-events-none absolute left-1/2 z-[300] min-w-[13rem] max-w-[min(26rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full mb-1.5 rounded-xl border px-3 py-2 text-[11px] leading-relaxed text-white shadow-2xl whitespace-normal opacity-0 translate-y-1 transition-[opacity,transform] duration-100 ease-out group-hover/desc:opacity-100 group-hover/desc:translate-y-0"
                             role="tooltip"
                           >
                             {hoverFull}
@@ -5652,12 +5652,27 @@ function ImageGenerator({
                     </div>
                     <div className="group/sc relative aspect-square w-full overflow-hidden rounded-b-2xl bg-zinc-900/30">
                       {slot.status === 'done' && slot.imageUrl ? (
-                        <img
-                          src={slot.imageUrl}
-                          alt=""
-                          className="h-full w-full object-cover pointer-events-none select-none"
-                          draggable={false}
-                        />
+                        <>
+                          <img
+                            src={slot.imageUrl}
+                            alt=""
+                            className="h-full w-full object-cover pointer-events-none select-none"
+                            draggable={false}
+                          />
+                          <button
+                            type="button"
+                            className="absolute inset-0 z-[1] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/55 focus-visible:ring-inset"
+                            title="点击放大预览"
+                            aria-label="放大预览图片"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setHistoryLightbox({
+                                url: slot.imageUrl!,
+                                downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
+                              })
+                            }}
+                          />
+                        </>
                       ) : slot.status === 'generating' ? (
                         <div className="absolute inset-0">
                           {mosaicBase}
@@ -5700,35 +5715,41 @@ function ImageGenerator({
                         </div>
                       )}
                       {slot.status === 'done' && slot.imageUrl ? (
-                        <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/0 hover:bg-black/45 opacity-0 group-hover/sc:opacity-100 transition-opacity pointer-events-none group-hover/sc:pointer-events-auto">
-                          <button
-                            type="button"
-                            className="pointer-events-auto rounded-full border border-white/25 bg-white/15 p-2.5 text-white hover:bg-white/25"
-                            title="预览"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setHistoryLightbox({
-                                url: slot.imageUrl!,
-                                downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
-                              })
-                            }}
-                          >
-                            <Eye className="h-6 w-6" />
-                          </button>
-                          <div className="absolute right-2 top-2 flex gap-1">
+                        <>
+                          <div
+                            className="pointer-events-none absolute inset-0 z-[2] bg-black/0 opacity-0 transition-opacity group-hover/sc:bg-black/45 group-hover/sc:opacity-100"
+                            aria-hidden
+                          />
+                          <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center">
+                            <button
+                              type="button"
+                              className="pointer-events-none rounded-full border border-white/25 bg-white/15 p-2.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-white/25"
+                              title="预览"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setHistoryLightbox({
+                                  url: slot.imageUrl!,
+                                  downloadName: `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`,
+                                })
+                              }}
+                            >
+                              <Eye className="h-6 w-6" />
+                            </button>
+                          </div>
+                          <div className="pointer-events-none absolute right-2 top-2 z-[3] flex gap-1 group-hover/sc:pointer-events-auto">
                             <a
                               href={slot.imageUrl}
                               download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
                               target="_blank"
                               rel="noreferrer"
-                              className="pointer-events-auto rounded-full border border-white/20 bg-black/70 p-1.5 text-white hover:bg-black/85"
+                              className="pointer-events-none rounded-full border border-white/20 bg-black/70 p-1.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-black/85"
                               title="下载"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Download className="h-3.5 w-3.5" />
                             </a>
                           </div>
-                        </div>
+                        </>
                       ) : null}
                     </div>
                   </div>
@@ -5807,8 +5828,8 @@ function ImageGenerator({
                           <p className="image-history-prompt-clamp text-xs text-white/78 leading-relaxed text-left cursor-help break-words">
                             {formatImageGenHistoryPromptDisplay(task.prompt)}
                           </p>
-                          <div className="pointer-events-none absolute left-0 top-full z-40 -mt-1 w-full max-w-[min(100%,22rem)] pt-1 opacity-0 transition-opacity duration-75 ease-out group-hover/prompt:pointer-events-auto group-hover/prompt:opacity-100">
-                            <div className="image-form-tip-pop rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed text-white/92 shadow-2xl max-h-52 overflow-y-auto whitespace-pre-wrap break-words">
+                          <div className="pointer-events-none absolute left-0 top-full z-[280] -mt-1 w-full max-w-[min(100%,22rem)] pt-1 opacity-0 transition-opacity duration-75 ease-out group-hover/prompt:pointer-events-auto group-hover/prompt:opacity-100">
+                            <div className="image-form-tip-pop rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed text-white max-h-52 overflow-y-auto whitespace-pre-wrap break-words">
                               {formatImageGenHistoryPromptDisplay(task.prompt)}
                             </div>
                           </div>
@@ -5861,7 +5882,7 @@ function ImageGenerator({
                                       </span>
                                       {descFull ? (
                                         <div
-                                          className="pointer-events-none absolute left-1/2 z-[60] min-w-[13rem] max-w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full translate-y-2 rounded-xl border border-white/18 bg-[#14141c]/98 px-3 py-2 text-[11px] leading-relaxed text-white/90 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md max-h-[min(12rem,40vh)] overflow-y-auto whitespace-pre-wrap break-words opacity-0 transition-[opacity] duration-100 ease-out group-hover/histscene:pointer-events-auto group-hover/histscene:opacity-100"
+                                          className="image-form-tip-pop pointer-events-none absolute left-1/2 z-[300] min-w-[13rem] max-w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full translate-y-2 rounded-xl border px-3 py-2 text-[11px] leading-relaxed text-white max-h-[min(12rem,40vh)] overflow-y-auto whitespace-pre-wrap break-words opacity-0 transition-[opacity] duration-100 ease-out group-hover/histscene:pointer-events-auto group-hover/histscene:opacity-100"
                                           role="tooltip"
                                         >
                                           {descFull}
