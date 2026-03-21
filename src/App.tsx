@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, Circle, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
   beautifyScript,
@@ -128,6 +128,7 @@ function getImageModelUnavailableReason(id: string): string {
 }
 
 const IMAGE_GEN_HISTORY_STORAGE_KEY = 'tikgen.imageGenHistory.v1'
+const SCENE_BOARD_STORAGE_KEY = 'tikgen.sceneRunBoard.v1'
 const IMAGE_GEN_HISTORY_MAX = 100
 
 type ImageGenHistoryTask = {
@@ -140,13 +141,35 @@ type ImageGenHistoryTask = {
   aspect: string
   resolutionLabel: string
   requestedCount: number
-  status: 'completed' | 'failed'
+  /** active：进行中；完成后为 completed / failed */
+  status: 'active' | 'completed' | 'failed'
   outputUrls: string[]
   /** 多场景批量出图时各张对应的场景标题 */
   sceneLabels?: string[]
   /** 与各 outputUrls 对齐的短说明（卡片外露一行） */
   sceneTeasers?: string[]
   errorMessage?: string
+}
+
+function loadImageGenHistoryFromStorage(): ImageGenHistoryTask[] {
+  try {
+    const raw = localStorage.getItem(IMAGE_GEN_HISTORY_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((x: any) => x && typeof x.id === 'string' && typeof x.ts === 'number')
+      .map((t: any) => ({
+        ...t,
+        status:
+          t.status === 'active' || t.status === 'failed' || t.status === 'completed'
+            ? t.status
+            : 'completed',
+      }))
+      .slice(0, IMAGE_GEN_HISTORY_MAX) as ImageGenHistoryTask[]
+  } catch {
+    return []
+  }
 }
 
 type ImageSceneRow = {
@@ -183,8 +206,16 @@ type SceneRunBoard = {
   refThumb: string
   basePrompt: string
   slots: SceneRunSlot[]
-  /** 本批已全部结束且已写入「生成历史」摘要 */
-  historyWritten?: boolean
+}
+
+/** 是否允许点「一键生成图片」：有待出图的已选槽，或已选槽全部已结束且可整批重出 */
+function sceneBoardAllowsBatchGenerate(board: SceneRunBoard | null, batchBusy: boolean): boolean {
+  if (!board || batchBusy) return false
+  if (board.slots.some((s) => s.selected && s.status === 'generating')) return false
+  const sel = board.slots.filter((s) => s.selected)
+  if (!sel.length) return false
+  if (sel.some((s) => s.status === 'pending' || s.status === 'failed')) return true
+  return sel.every((s) => s.status === 'done' || s.status === 'failed')
 }
 
 const IMAGE_SCENE_BLUEPRINT = [
@@ -381,6 +412,65 @@ const IMAGE_RES_OPTIONS = ['1024', '1536', '2048', '4096'] as const // 通用档
 
 type ImageAspect = (typeof IMAGE_ASPECT_OPTIONS)[number]
 type ImageRes = (typeof IMAGE_RES_OPTIONS)[number]
+
+/** 由当前场景看板同步到「生成历史」的一条记录（支持进行中 / 增量更新） */
+function buildHistoryTaskFromSceneBoard(
+  board: SceneRunBoard,
+  modelId: string,
+  modelLabel: string,
+  aspect: ImageAspect,
+  resolutionLabel: string,
+): ImageGenHistoryTask {
+  const slots = board.slots
+  const selected = slots.filter((s) => s.selected)
+  const anySelected = selected.length > 0
+  const doneSlots = selected.filter((s) => s.status === 'done' && s.imageUrl)
+  const failedSelected = selected.filter((s) => s.status === 'failed')
+  const generating = selected.some((s) => s.status === 'generating')
+  const pending = selected.some((s) => s.status === 'pending')
+
+  const outputUrls = doneSlots.map((s) => s.imageUrl!)
+  const sceneLabels = doneSlots.map((s) => s.title)
+  const sceneTeasers = doneSlots.map((s) =>
+    styleCardTeaser((s.description || s.imagePrompt || '').replace(/\s+/g, ' ').trim(), 42),
+  )
+
+  const basePrompt = board.basePrompt || ''
+  const titlesLine = (anySelected ? selected : slots).map((s) => s.title).join('、')
+
+  let status: 'active' | 'completed' | 'failed'
+  if (!anySelected) {
+    status = 'completed'
+  } else if (generating || pending) {
+    status = 'active'
+  } else if (!outputUrls.length && failedSelected.length) {
+    status = 'failed'
+  } else {
+    status = 'completed'
+  }
+
+  const errors = failedSelected.map((s) => `${s.title}：${s.error || '失败'}`)
+  const errMsg =
+    errors.length && status === 'completed' ? `部分失败：${errors.join('；')}` : undefined
+  const failMsg = status === 'failed' ? errors.join('\n') || '生成失败' : errMsg
+
+  return {
+    id: board.id,
+    ts: board.ts,
+    refThumb: board.refThumb,
+    prompt: `多场景：${titlesLine}\n────────\n${basePrompt.slice(0, 2000)}`,
+    modelId,
+    modelLabel,
+    aspect,
+    resolutionLabel,
+    requestedCount: selected.length,
+    status,
+    outputUrls,
+    sceneLabels,
+    sceneTeasers,
+    errorMessage: failMsg,
+  }
+}
 
 type ImageModelCaps = {
   aspectRatios: ImageAspect[]
@@ -2687,7 +2777,7 @@ function ImageGenerator({
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
-  const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>([])
+  const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>(() => loadImageGenHistoryFromStorage())
   const [historyLightbox, setHistoryLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
@@ -2713,7 +2803,25 @@ function ImageGenerator({
   const [productAnalysisText, setProductAnalysisText] = useState('')
   const [hotStyles, setHotStyles] = useState<ImageWorkbenchStyleRow[]>([])
   const [selectedHotStyleIndex, setSelectedHotStyleIndex] = useState(0)
-  const [sceneRunBoard, setSceneRunBoard] = useState<SceneRunBoard | null>(null)
+  const [sceneRunBoard, setSceneRunBoard] = useState<SceneRunBoard | null>(() => {
+    try {
+      const raw = localStorage.getItem(SCENE_BOARD_STORAGE_KEY)
+      if (!raw) return null
+      const p = JSON.parse(raw)
+      if (p && typeof p.id === 'string' && typeof p.ts === 'number' && Array.isArray(p.slots)) {
+        return {
+          id: p.id,
+          ts: p.ts,
+          refThumb: String(p.refThumb || ''),
+          basePrompt: String(p.basePrompt || ''),
+          slots: p.slots as SceneRunSlot[],
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null
+  })
   const sceneRunBoardRef = useRef<SceneRunBoard | null>(null)
   const [sceneBoardPreparing, setSceneBoardPreparing] = useState(false)
   const [customStyleModalOpen, setCustomStyleModalOpen] = useState(false)
@@ -2796,21 +2904,11 @@ function ImageGenerator({
     }
   }, [hotStyles, stylePromptHoverIdx])
 
-  const historyGrouped = useMemo(() => groupImageHistoryByDay(imageGenHistory), [imageGenHistory])
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(IMAGE_GEN_HISTORY_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) {
-        const valid = parsed.filter((x: any) => x && typeof x.id === 'string' && typeof x.ts === 'number') as ImageGenHistoryTask[]
-        setImageGenHistory(valid.slice(0, IMAGE_GEN_HISTORY_MAX))
-      }
-    } catch {
-      // ignore
-    }
-  }, [])
+  const historyGrouped = useMemo(() => {
+    const list =
+      sceneRunBoard == null ? imageGenHistory : imageGenHistory.filter((t) => t.id !== sceneRunBoard.id)
+    return groupImageHistoryByDay(list)
+  }, [imageGenHistory, sceneRunBoard])
 
   useEffect(() => {
     try {
@@ -2824,94 +2922,57 @@ function ImageGenerator({
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
 
-  /** 六场景：已选中的全部进入终态后写入「生成历史」；未勾选的不参与出图与归档 */
   useEffect(() => {
-    if (!sceneRunBoard || sceneRunBoard.historyWritten) return
-    const slots = sceneRunBoard.slots
-    if (!slots.length) return
-    const slotTerminal = (s: SceneRunSlot) =>
-      !s.selected || s.status === 'done' || s.status === 'failed'
-    if (!slots.every(slotTerminal)) return
-
-    const bid = sceneRunBoard.id
-    const refThumb = sceneRunBoard.refThumb
-    const basePrompt = sceneRunBoard.basePrompt
-    const anySelected = slots.some((s) => s.selected)
-    if (!anySelected) {
-      setSceneRunBoard((b) => (b && b.id === bid ? { ...b, historyWritten: true } : b))
-      return
+    try {
+      if (sceneRunBoard) localStorage.setItem(SCENE_BOARD_STORAGE_KEY, JSON.stringify(sceneRunBoard))
+      else localStorage.removeItem(SCENE_BOARD_STORAGE_KEY)
+    } catch {
+      // ignore
     }
+  }, [sceneRunBoard])
 
-    const doneSlots = slots.filter((s) => s.selected && s.status === 'done' && s.imageUrl)
-    const outputUrls = doneSlots.map((s) => s.imageUrl!)
-    const sceneLabels = doneSlots.map((s) => s.title)
-    const sceneTeasers = doneSlots.map((s) =>
-      styleCardTeaser((s.description || s.imagePrompt || '').replace(/\s+/g, ' ').trim(), 42),
-    )
-    const failedSelected = slots.filter((s) => s.selected && s.status === 'failed')
-    const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
+  const sceneHistorySentryLoggedRef = useRef<Set<string>>(new Set())
+
+  /** 场景看板 ⇄ 生成历史：实时同步（进行中增量、多轮合并同一 id、刷新后可从 localStorage 恢复看板） */
+  useEffect(() => {
+    if (!sceneRunBoard || !sceneRunBoard.slots.length) return
     const resLb =
       resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
+    const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
+    const built = buildHistoryTaskFromSceneBoard(sceneRunBoard, model, modelLabel, size, resLb)
+    setImageGenHistory((prev) => {
+      const i = prev.findIndex((t) => t.id === built.id)
+      if (i < 0) return [built, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)
+      const old = prev[i]
+      return [{ ...built, ts: old.ts }, ...prev.filter((_, j) => j !== i)].slice(0, IMAGE_GEN_HISTORY_MAX)
+    })
 
-    if (!outputUrls.length) {
-      const errMsg =
-        failedSelected.map((s) => `${s.title}：${s.error || '失败'}`).join('\n') || '生成失败'
-      setGenErrorText(
-        failedSelected.map((s) => `${s.title}：${s.error || '失败'}`).join('；') || '全部场景生成失败',
-      )
+    if (built.status === 'failed') {
+      setGenErrorText(built.errorMessage || '生成失败')
       setGenErrorCode('UNKNOWN')
-      setImageGenHistory((prev) =>
-        prev.some((t) => t.id === bid)
-          ? prev
-          : [
-              {
-                id: bid,
-                ts: Date.now(),
-                refThumb,
-                prompt: `多场景：${slots.filter((s) => s.selected).map((s) => s.title).join('、')}\n────────\n${basePrompt.slice(0, 800)}`,
-                modelId: model,
-                modelLabel,
-                aspect: size,
-                resolutionLabel: resLb,
-                requestedCount: slots.filter((s) => s.selected).length,
-                status: 'failed' as const,
-                outputUrls: [],
-                errorMessage: errMsg,
-              },
-              ...prev,
-            ].slice(0, IMAGE_GEN_HISTORY_MAX),
-      )
-      setSceneRunBoard((b) => (b && b.id === bid ? { ...b, historyWritten: true } : b))
-      return
-    }
-
-    const errors = failedSelected.map((s) => `${s.title}：${s.error || '失败'}`)
-    const task: ImageGenHistoryTask = {
-      id: bid,
-      ts: Date.now(),
-      refThumb,
-      prompt: `多场景：${sceneLabels.join('、')}\n────────\n${basePrompt}`,
-      modelId: model,
-      modelLabel,
-      aspect: size,
-      resolutionLabel: resLb,
-      requestedCount: outputUrls.length,
-      status: 'completed',
-      outputUrls,
-      sceneLabels,
-      sceneTeasers,
-      errorMessage: errors.length ? `部分失败：${errors.join('；')}` : undefined,
-    }
-    setImageGenHistory((prev) => (prev.some((t) => t.id === bid) ? prev : [task, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)))
-    if (errors.length) {
-      setGenErrorText(`部分场景未生成：${errors.join('；')}`)
+    } else if (built.status === 'completed' && built.errorMessage) {
+      setGenErrorText(built.errorMessage)
       setGenErrorCode('PARTIAL')
+    } else if (built.status === 'completed') {
+      setGenErrorText('')
+      setGenErrorCode('UNKNOWN')
+      const selDone = sceneRunBoard.slots.filter((s) => s.selected)
+      const allTerminal = selDone.length > 0 && selDone.every((s) => s.status === 'done' || s.status === 'failed')
+      if (
+        built.outputUrls.length > 0 &&
+        allTerminal &&
+        !sceneHistorySentryLoggedRef.current.has(built.id)
+      ) {
+        sceneHistorySentryLoggedRef.current.add(built.id)
+        Sentry.captureMessage('image_generation_success', {
+          level: 'info',
+          extra: { model, size, resolution, scenes: built.outputUrls.length },
+        })
+      }
     } else {
       setGenErrorText('')
       setGenErrorCode('UNKNOWN')
-      Sentry.captureMessage('image_generation_success', { level: 'info', extra: { model, size, resolution, scenes: outputUrls.length } })
     }
-    setSceneRunBoard((b) => (b && b.id === bid ? { ...b, historyWritten: true } : b))
   }, [sceneRunBoard, model, size, resolution, imageModelOptions])
 
   useEffect(() => {
@@ -3945,7 +4006,7 @@ function ImageGenerator({
       return
     }
     if (!prompt.trim()) {
-      alert('请先用「重新分析」或「AI 生成」生成出图描述，再点击一键生成图片')
+      alert('请先用「重新分析」或「AI 生成」生成出图描述，再点击「免费生成预览」')
       return
     }
     setGenErrorText('')
@@ -3975,7 +4036,6 @@ function ImageGenerator({
           selected: true,
           status: 'pending' as const,
         })),
-        historyWritten: false,
       })
       stopProgress()
       await completeGenProgress()
@@ -4068,12 +4128,10 @@ function ImageGenerator({
   }
 
   const handleRegenerateSceneSlot = async (boardId: string, slotIndex: number) => {
-    setImageGenHistory((prev) => prev.filter((t) => t.id !== boardId))
     setSceneRunBoard((b) => {
       if (!b || b.id !== boardId) return b
       return {
         ...b,
-        historyWritten: false,
         slots: b.slots.map((s, i) =>
           i === slotIndex ? { ...s, status: 'pending' as const, imageUrl: undefined, error: undefined } : s,
         ),
@@ -4089,7 +4147,6 @@ function ImageGenerator({
       if (!b || b.id !== boardId) return b
       return {
         ...b,
-        historyWritten: false,
         slots: b.slots.map((s, i) => (i === slotIndex ? { ...s, selected: !s.selected } : s)),
       }
     })
@@ -4098,11 +4155,29 @@ function ImageGenerator({
   const handleBatchGenerateSelectedScenes = async () => {
     const board = sceneRunBoardRef.current
     if (!board || !refImages.length || !board.basePrompt.trim()) return
+    const selEntries = board.slots.map((s, i) => ({ s, i })).filter(({ s }) => s.selected)
+    if (!selEntries.length) return
+
+    const hasIncomplete = selEntries.some(
+      ({ s }) => s.status === 'pending' || s.status === 'failed',
+    )
+    const allSelectedTerminal = selEntries.every(
+      ({ s }) => s.status === 'done' || s.status === 'failed',
+    )
+
     const indices: number[] = []
-    board.slots.forEach((s, i) => {
-      if (s.selected && (s.status === 'pending' || s.status === 'failed')) indices.push(i)
-    })
+    if (hasIncomplete) {
+      selEntries.forEach(({ s, i }) => {
+        if (s.status === 'pending' || s.status === 'failed') indices.push(i)
+      })
+    } else if (allSelectedTerminal) {
+      // 已选全部已结束（通常为全 done）：整批重出，新图仍写入同一 board.id → 生成历史同一条记录增量更新
+      selEntries.forEach(({ s, i }) => {
+        if (s.status === 'done' || s.status === 'failed') indices.push(i)
+      })
+    }
     if (!indices.length) return
+
     const snap = board
     const basePrompt = snap.basePrompt
     const slotSnap = indices.map((i) => ({ i, slot: { ...snap.slots[i] } }))
@@ -4114,7 +4189,9 @@ function ImageGenerator({
       return {
         ...b,
         slots: b.slots.map((s, i) =>
-          indices.includes(i) ? { ...s, status: 'generating' as const, error: undefined } : s,
+          indices.includes(i)
+            ? { ...s, status: 'generating' as const, error: undefined, imageUrl: undefined }
+            : s,
         ),
       }
     })
@@ -4644,7 +4721,7 @@ function ImageGenerator({
                 label="说明"
                 text={`「重新分析」会同时刷新商品分析与 4 套画面方案。
 
-点左侧「一键生成图片」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
+点左侧「免费生成预览」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
             </div>
             <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
@@ -4874,7 +4951,7 @@ function ImageGenerator({
             </div>
           ) : null}
 
-          {/* 已传图但未完成「一键分析」前只露出分析按钮；未传图或已展开模块后仍显示一键生成图片 */}
+          {/* 已传图但未完成「一键分析」前只露出分析按钮；未传图或已展开模块后仍显示免费生成预览 */}
           {productStylePanelOpen || refImages.length === 0 ? (
             <div>
               <button
@@ -4901,7 +4978,7 @@ function ImageGenerator({
                 ) : (
                   <>
                     <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
-                    <span className="relative">一键生成图片</span>
+                    <span className="relative">免费生成预览</span>
                   </>
                 )}
               </button>
@@ -4934,7 +5011,7 @@ function ImageGenerator({
           <div className="mb-6">
             <GenerationLoadingCard
               title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
-              subtitle="正在规划 6 组场景，完成后可勾选并批量生成"
+              subtitle="正在规划 6 组场景，完成后可在右侧用「一键生成图片」批量出图"
               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
               progressText={`准备进度：${Math.max(1, Math.min(99, genProgress))}%`}
             />
@@ -4943,22 +5020,30 @@ function ImageGenerator({
         {sceneRunBoard ? (
           <div className="mb-8 rounded-xl bg-black/20 p-4 ring-1 ring-inset ring-white/[0.07]">
             <div className="flex flex-col gap-3 mb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-white/90">场景出图</h3>
-                  <p className="text-[11px] text-white/45 mt-0.5">
-                    默认全选。点击卡片任意区域可勾选/取消；点「生成已选」并行出图；完成后可「下载全部」。已出图请用悬停层上的「预览」看图。
-                  </p>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3
+                    className="text-base font-semibold text-white/95 leading-snug truncate"
+                    title={productInfo.name?.trim() || undefined}
+                  >
+                    {productInfo.name?.trim() || '商品场景'}
+                  </h3>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex rounded-full border border-white/12 bg-black/35 px-2 py-0.5 text-[10px] text-white/75">
+                      {imageModelOptions.find((m) => m.id === model)?.name || model}
+                    </span>
+                    <span className="inline-flex rounded-full border border-white/12 bg-black/35 px-2 py-0.5 text-[10px] text-white/75">
+                      {size}
+                    </span>
+                    <span className="inline-flex rounded-full border border-white/12 bg-black/35 px-2 py-0.5 text-[10px] text-white/75 uppercase tracking-wide">
+                      {formatImageResLabel(resolution)}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    disabled={
-                      sceneBatchGenerating ||
-                      !sceneRunBoard.slots.some(
-                        (s) => s.selected && (s.status === 'pending' || s.status === 'failed'),
-                      )
-                    }
+                    disabled={!sceneBoardAllowsBatchGenerate(sceneRunBoard, sceneBatchGenerating)}
                     onClick={() => void handleBatchGenerateSelectedScenes()}
                     className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -4968,15 +5053,7 @@ function ImageGenerator({
                         生成中…
                       </>
                     ) : (
-                      <>
-                        生成已选（
-                        {
-                          sceneRunBoard.slots.filter(
-                            (s) => s.selected && (s.status === 'pending' || s.status === 'failed'),
-                          ).length
-                        }
-                        ）
-                      </>
+                      '一键生成图片'
                     )}
                   </button>
                   <button
@@ -4993,9 +5070,42 @@ function ImageGenerator({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {sceneRunBoard.slots.map((slot, sidx) => {
-                const summary = styleCardSummary(
-                  (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim(),
-                  200,
+                const rawDesc = (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim()
+                const lineTeaser = styleCardTeaser(rawDesc, 48)
+                const hoverFull = styleCardSummary(rawDesc, 400)
+                const mosaicThumb = sceneRunBoard.refThumb || refImageDataUrl || ''
+                const mosaicBase = (
+                  <>
+                    {mosaicThumb ? (
+                      <>
+                        <img
+                          src={mosaicThumb}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover scale-[1.15] blur-2xl opacity-75"
+                          draggable={false}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.14] via-violet-950/25 to-zinc-950/35" />
+                        <div
+                          className="absolute inset-0 opacity-[0.42] mix-blend-soft-light"
+                          style={{
+                            backgroundImage: `linear-gradient(90deg, rgba(255,255,255,0.14) 1px, transparent 1px), linear-gradient(rgba(255,255,255,0.11) 1px, transparent 1px)`,
+                            backgroundSize: '12px 12px',
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/45 via-zinc-600/35 to-zinc-900/55" />
+                    )}
+                  </>
+                )
+                const selectionMark = (
+                  <div className="absolute inset-0 z-[0] flex items-center justify-center pointer-events-none">
+                    {slot.selected ? (
+                      <Check className="w-7 h-7 text-emerald-400/95 drop-shadow-md" strokeWidth={2.5} aria-hidden />
+                    ) : (
+                      <Circle className="w-7 h-7 text-white/30" strokeWidth={2} aria-hidden />
+                    )}
+                  </div>
                 )
                 return (
                   <div
@@ -5013,21 +5123,24 @@ function ImageGenerator({
                         toggleSceneSlotSelected(sceneRunBoard.id, sidx)
                       }
                     }}
-                    className={`flex flex-col overflow-hidden rounded-2xl border text-left transition-[opacity,box-shadow] ${
+                    className={`flex flex-col overflow-hidden rounded-2xl border text-center transition-[opacity,box-shadow] ${
                       slot.selected
                         ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
                         : 'border-white/[0.07] bg-black/12 opacity-55'
                     } ${sceneBatchGenerating ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <div className="px-2.5 pb-2 pt-2.5">
-                      <div className="min-w-0">
-                        <span className={SCENE_TAG_CLASS}>{slot.title}</span>
-                        <p className="mt-1.5 min-h-[3.6rem] text-[10px] leading-[1.45] text-white/48 line-clamp-4">
-                          {summary || '\u00a0'}
-                        </p>
+                      <div className="flex justify-center">
+                        <span className={`${SCENE_TAG_CLASS} max-w-full justify-center text-center`}>{slot.title}</span>
                       </div>
+                      <p
+                        className="mt-1.5 min-h-[1.25rem] text-[10px] leading-snug text-white/48 line-clamp-1"
+                        title={hoverFull || undefined}
+                      >
+                        {lineTeaser || '\u00a0'}
+                      </p>
                     </div>
-                    <div className="group/sc relative aspect-square w-full bg-black/40">
+                    <div className="group/sc relative aspect-square w-full overflow-hidden bg-zinc-900/30">
                       {slot.status === 'done' && slot.imageUrl ? (
                         <img
                           src={slot.imageUrl}
@@ -5036,30 +5149,39 @@ function ImageGenerator({
                           draggable={false}
                         />
                       ) : slot.status === 'generating' ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70 text-[11px]">
-                          <RefreshCw className="w-7 h-7 animate-spin opacity-80" />
-                          生成中…
+                        <div className="absolute inset-0">
+                          {mosaicBase}
+                          {selectionMark}
+                          <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-black/30 text-white/90 text-[11px] backdrop-blur-[3px]">
+                            <RefreshCw className="w-7 h-7 animate-spin opacity-90" />
+                            <span>生成中…</span>
+                          </div>
                         </div>
                       ) : slot.status === 'failed' && slot.selected ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-2 text-center text-[11px] text-red-200/95">
-                          <span>生成失败</span>
-                          <span className="text-[10px] text-white/45 line-clamp-2">{slot.error}</span>
-                          <button
-                            type="button"
-                            disabled={sceneBatchGenerating}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void handleGenerateSceneSlot(sceneRunBoard.id, sidx)
-                            }}
-                            className="mt-1 text-xs text-violet-300 underline disabled:opacity-40"
-                          >
-                            单张重试
-                          </button>
+                        <div className="absolute inset-0">
+                          {mosaicBase}
+                          {selectionMark}
+                          <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-1.5 px-2 text-center text-[11px] text-red-100/95 bg-red-950/35 backdrop-blur-[2px]">
+                            <span>生成失败</span>
+                            <span className="text-[10px] text-white/50 line-clamp-2">{slot.error}</span>
+                            <button
+                              type="button"
+                              disabled={sceneBatchGenerating}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleGenerateSceneSlot(sceneRunBoard.id, sidx)
+                              }}
+                              className="mt-1 text-xs text-violet-200 underline disabled:opacity-40"
+                            >
+                              单张重试
+                            </button>
+                          </div>
                         </div>
-                      ) : !slot.selected ? (
-                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/35">不生成</div>
                       ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/40">待批量生成</div>
+                        <div className="absolute inset-0">
+                          {mosaicBase}
+                          {selectionMark}
+                        </div>
                       )}
                       {slot.status === 'done' && slot.imageUrl ? (
                         <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/0 hover:bg-black/45 opacity-0 group-hover/sc:opacity-100 transition-opacity pointer-events-none group-hover/sc:pointer-events-auto">
@@ -5111,12 +5233,12 @@ function ImageGenerator({
             </div>
           </div>
         ) : null}
-        {historyGrouped.length === 0 && !sceneBoardPreparing && !sceneRunBoard ? (
+        {imageGenHistory.length === 0 && !sceneBoardPreparing && !sceneRunBoard ? (
           <div className="min-h-[200px] flex flex-col items-center justify-center text-center text-white/45 border border-white/12 rounded-xl bg-white/[0.02] px-6 mb-6">
             <Image className="w-14 h-14 mb-3 opacity-35" />
             <p className="text-sm text-white/55">暂无归档记录</p>
             <p className="text-xs text-white/40 mt-1 max-w-xs">
-              左侧「一键生成图片」加载 6 场景后，在此勾选并批量生成；完成后会归档一条历史，并可下载全部图片。
+              左侧「免费生成预览」加载 6 场景后，在此点击「一键生成图片」批量出图；进度与结果会保存在生成历史中，刷新页面仍可继续。
             </p>
           </div>
         ) : null}
@@ -5151,10 +5273,12 @@ function ImageGenerator({
                           className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
                             task.status === 'completed'
                               ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
-                              : 'bg-red-500/15 text-red-100 border-red-400/25'
+                              : task.status === 'active'
+                                ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
+                                : 'bg-red-500/15 text-red-100 border-red-400/25'
                           }`}
                         >
-                          {task.status === 'completed' ? '已完成' : '失败'}
+                          {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
                         </span>
                       </div>
                       <div className="flex gap-3 items-start mb-3">
@@ -5251,7 +5375,9 @@ function ImageGenerator({
                             })}
                           </div>
                         </div>
-                      ) : task.status === 'completed' ? (
+                      ) : task.status === 'active' ? (
+                        <p className="text-[11px] text-white/45 mb-1">出图进行中，首张完成后将显示在下面…</p>
+                      ) : task.status === 'completed' || task.status === 'failed' ? (
                         <p className="text-[11px] text-white/40">未返回图片地址</p>
                       ) : null}
                     </div>
