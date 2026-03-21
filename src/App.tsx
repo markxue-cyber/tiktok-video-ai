@@ -39,6 +39,19 @@ import { listAnnouncementsPublic } from './api/announcements'
 import { createSupportTicket, listMySupportTickets, type SupportTicketItem } from './api/support'
 import { IMAGE_TEMPLATES, VIDEO_TEMPLATES, type ImageTemplatePreset, type VideoTemplatePreset } from './config/templates'
 import { Sentry } from './sentry'
+import {
+  TIKGEN_IG_IDB,
+  TIKGEN_IG_LS_BOARD,
+  TIKGEN_IG_LS_HISTORY,
+  loadSceneRunBoardFromLocalStorage,
+  stripBoardForLocalStorage,
+  stripHistoryForLocalStorage,
+  tikgenIgIdbDelete,
+  tikgenIgIdbGet,
+  tikgenIgIdbSet,
+  tryLocalStorageSetJson,
+  type TikgenWorkspaceSnapshotV1,
+} from './tikgenImageGenPersistence'
 import './workbench-theme.css'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -127,8 +140,6 @@ function getImageModelUnavailableReason(id: string): string {
   return ''
 }
 
-const IMAGE_GEN_HISTORY_STORAGE_KEY = 'tikgen.imageGenHistory.v1'
-const SCENE_BOARD_STORAGE_KEY = 'tikgen.sceneRunBoard.v1'
 const IMAGE_GEN_HISTORY_MAX = 100
 
 type ImageGenHistoryTask = {
@@ -153,7 +164,7 @@ type ImageGenHistoryTask = {
 
 function loadImageGenHistoryFromStorage(): ImageGenHistoryTask[] {
   try {
-    const raw = localStorage.getItem(IMAGE_GEN_HISTORY_STORAGE_KEY)
+    const raw = localStorage.getItem(TIKGEN_IG_LS_HISTORY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
@@ -2777,7 +2788,7 @@ function ImageGenerator({
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
-  const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>(() => loadImageGenHistoryFromStorage())
+  const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>([])
   const [historyLightbox, setHistoryLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
@@ -2803,25 +2814,9 @@ function ImageGenerator({
   const [productAnalysisText, setProductAnalysisText] = useState('')
   const [hotStyles, setHotStyles] = useState<ImageWorkbenchStyleRow[]>([])
   const [selectedHotStyleIndex, setSelectedHotStyleIndex] = useState(0)
-  const [sceneRunBoard, setSceneRunBoard] = useState<SceneRunBoard | null>(() => {
-    try {
-      const raw = localStorage.getItem(SCENE_BOARD_STORAGE_KEY)
-      if (!raw) return null
-      const p = JSON.parse(raw)
-      if (p && typeof p.id === 'string' && typeof p.ts === 'number' && Array.isArray(p.slots)) {
-        return {
-          id: p.id,
-          ts: p.ts,
-          refThumb: String(p.refThumb || ''),
-          basePrompt: String(p.basePrompt || ''),
-          slots: p.slots as SceneRunSlot[],
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return null
-  })
+  const [sceneRunBoard, setSceneRunBoard] = useState<SceneRunBoard | null>(null)
+  /** IndexedDB / localStorage 恢复完成前禁止写入，避免用空状态覆盖已保存数据 */
+  const [imageGenPersistenceReady, setImageGenPersistenceReady] = useState(false)
   const sceneRunBoardRef = useRef<SceneRunBoard | null>(null)
   const [sceneBoardPreparing, setSceneBoardPreparing] = useState(false)
   const [customStyleModalOpen, setCustomStyleModalOpen] = useState(false)
@@ -2856,6 +2851,78 @@ function ImageGenerator({
     [imageModels, unavailableImageMap],
   )
   const MAX_REF_IMAGES = 5
+
+  useEffect(() => {
+    let cancelled = false
+    const boardFromRaw = (p: Record<string, unknown> | null): SceneRunBoard | null => {
+      if (!p || typeof p.id !== 'string' || typeof p.ts !== 'number' || !Array.isArray(p.slots)) return null
+      return {
+        id: p.id,
+        ts: p.ts,
+        refThumb: String(p.refThumb || ''),
+        basePrompt: String(p.basePrompt || ''),
+        slots: p.slots as SceneRunSlot[],
+      }
+    }
+    void (async () => {
+      const [hIdb, bIdb, refsIdb, wsIdb] = await Promise.all([
+        tikgenIgIdbGet<ImageGenHistoryTask[]>(TIKGEN_IG_IDB.history),
+        tikgenIgIdbGet<SceneRunBoard>(TIKGEN_IG_IDB.board),
+        tikgenIgIdbGet<Array<{ id: string; url: string; name?: string; source: 'local' | 'asset' }>>(TIKGEN_IG_IDB.refs),
+        tikgenIgIdbGet<TikgenWorkspaceSnapshotV1>(TIKGEN_IG_IDB.workspace),
+      ])
+      if (cancelled) return
+
+      const hLs = loadImageGenHistoryFromStorage()
+      const hMerge = hIdb && Array.isArray(hIdb) && hIdb.length > 0 ? hIdb : hLs
+      setImageGenHistory(hMerge)
+
+      const bLs = boardFromRaw(loadSceneRunBoardFromLocalStorage())
+      const bMerge = bIdb && bIdb.id && Array.isArray(bIdb.slots) && bIdb.slots.length > 0 ? bIdb : bLs
+      if (bMerge) setSceneRunBoard(bMerge)
+
+      if (refsIdb && Array.isArray(refsIdb) && refsIdb.length) setRefImages(refsIdb)
+
+      if (wsIdb && wsIdb.v === 1) {
+        setPrompt(String(wsIdb.prompt ?? ''))
+        setOptimizedPrompt(String(wsIdb.optimizedPrompt ?? ''))
+        setOptimizedNegativePrompt(String(wsIdb.optimizedNegativePrompt ?? ''))
+        setProductAnalysisText(String(wsIdb.productAnalysisText ?? ''))
+        const pi = wsIdb.productInfo
+        if (pi && typeof pi === 'object') {
+          setProductInfo({
+            name: String((pi as { name?: string }).name ?? ''),
+            category: String((pi as { category?: string }).category ?? ''),
+            sellingPoints: String((pi as { sellingPoints?: string }).sellingPoints ?? ''),
+            targetAudience: String((pi as { targetAudience?: string }).targetAudience ?? ''),
+            language: String((pi as { language?: string }).language ?? '简体中文'),
+          })
+        }
+        if (Array.isArray(wsIdb.hotStyles)) setHotStyles(wsIdb.hotStyles as ImageWorkbenchStyleRow[])
+        setSelectedHotStyleIndex(Number(wsIdb.selectedHotStyleIndex) || 0)
+        setProductStylePanelOpen(Boolean(wsIdb.productStylePanelOpen))
+        if (wsIdb.model) setModel(String(wsIdb.model))
+        if (wsIdb.size && IMAGE_ASPECT_OPTIONS.includes(wsIdb.size as ImageAspect)) setSize(wsIdb.size as ImageAspect)
+        if (wsIdb.resolution && IMAGE_RES_OPTIONS.includes(wsIdb.resolution as ImageRes))
+          setResolution(wsIdb.resolution as ImageRes)
+        if (wsIdb.sceneMode === 'clean' || wsIdb.sceneMode === 'lite') setSceneMode(wsIdb.sceneMode)
+        if (wsIdb.promptGenOutputSettings?.aspect && wsIdb.promptGenOutputSettings?.resolution) {
+          const a = wsIdb.promptGenOutputSettings.aspect
+          const r = wsIdb.promptGenOutputSettings.resolution
+          if (IMAGE_ASPECT_OPTIONS.includes(a as ImageAspect) && IMAGE_RES_OPTIONS.includes(r as ImageRes)) {
+            setPromptGenOutputSettings({ aspect: a as ImageAspect, resolution: r as ImageRes })
+          }
+        }
+        if (Array.isArray(wsIdb.imageScenes) && wsIdb.imageScenes.length)
+          setImageScenes(wsIdb.imageScenes as ImageSceneRow[])
+      }
+
+      setImageGenPersistenceReady(true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (stylePromptHoverIdx === null) return
@@ -2911,25 +2978,83 @@ function ImageGenerator({
   }, [imageGenHistory, sceneRunBoard])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(IMAGE_GEN_HISTORY_STORAGE_KEY, JSON.stringify(imageGenHistory.slice(0, IMAGE_GEN_HISTORY_MAX)))
-    } catch {
-      // ignore
-    }
-  }, [imageGenHistory])
+    if (!imageGenPersistenceReady) return
+    const slice = imageGenHistory.slice(0, IMAGE_GEN_HISTORY_MAX)
+    void tikgenIgIdbSet(TIKGEN_IG_IDB.history, slice)
+    tryLocalStorageSetJson(TIKGEN_IG_LS_HISTORY, stripHistoryForLocalStorage(slice))
+  }, [imageGenHistory, imageGenPersistenceReady])
 
   useEffect(() => {
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
 
   useEffect(() => {
-    try {
-      if (sceneRunBoard) localStorage.setItem(SCENE_BOARD_STORAGE_KEY, JSON.stringify(sceneRunBoard))
-      else localStorage.removeItem(SCENE_BOARD_STORAGE_KEY)
-    } catch {
-      // ignore
+    if (!imageGenPersistenceReady) return
+    void (async () => {
+      if (sceneRunBoard) {
+        await tikgenIgIdbSet(TIKGEN_IG_IDB.board, sceneRunBoard)
+        tryLocalStorageSetJson(
+          TIKGEN_IG_LS_BOARD,
+          stripBoardForLocalStorage(sceneRunBoard as unknown as Record<string, unknown>),
+        )
+      } else {
+        await tikgenIgIdbDelete(TIKGEN_IG_IDB.board)
+        try {
+          localStorage.removeItem(TIKGEN_IG_LS_BOARD)
+        } catch {
+          // ignore
+        }
+      }
+    })()
+  }, [sceneRunBoard, imageGenPersistenceReady])
+
+  useEffect(() => {
+    if (!imageGenPersistenceReady) return
+    void tikgenIgIdbSet(TIKGEN_IG_IDB.refs, refImages)
+  }, [refImages, imageGenPersistenceReady])
+
+  useEffect(() => {
+    if (!imageGenPersistenceReady) return
+    const ws: TikgenWorkspaceSnapshotV1 = {
+      v: 1,
+      prompt,
+      optimizedPrompt,
+      optimizedNegativePrompt,
+      productAnalysisText,
+      productInfo: { ...productInfo },
+      hotStyles,
+      selectedHotStyleIndex,
+      productStylePanelOpen,
+      model,
+      size,
+      resolution,
+      sceneMode,
+      promptGenOutputSettings: promptGenOutputSettings
+        ? { aspect: promptGenOutputSettings.aspect, resolution: promptGenOutputSettings.resolution }
+        : null,
+      imageScenes,
     }
-  }, [sceneRunBoard])
+    const t = window.setTimeout(() => {
+      void tikgenIgIdbSet(TIKGEN_IG_IDB.workspace, ws)
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [
+    imageGenPersistenceReady,
+    prompt,
+    optimizedPrompt,
+    optimizedNegativePrompt,
+    productAnalysisText,
+    productInfo,
+    hotStyles,
+    selectedHotStyleIndex,
+    productStylePanelOpen,
+    model,
+    size,
+    resolution,
+    sceneMode,
+    promptGenOutputSettings,
+    imageScenes,
+  ])
 
   const sceneHistorySentryLoggedRef = useRef<Set<string>>(new Set())
 
