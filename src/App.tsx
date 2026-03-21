@@ -4040,7 +4040,6 @@ function ImageGenerator({
 
   const formatImageResLabel = (r: ImageRes) =>
     r === '1024' ? '1k' : r === '1536' ? '1.5k' : r === '2048' ? '2k' : r === '4096' ? '4k' : String(r)
-  const currentModelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
   const outputSpecsMismatch =
     !!promptGenOutputSettings &&
     (promptGenOutputSettings.aspect !== size || promptGenOutputSettings.resolution !== resolution)
@@ -4708,23 +4707,10 @@ function ImageGenerator({
                 )}
                 {isAiBusy ? '分析中…' : promptRegenBusy ? '生成描述中…' : '一键分析商品及爆款风格'}
               </button>
-              <p className="text-center text-[10px] leading-relaxed text-white/32">
-                完成后展开下方模块，再点「一键生成图片」规划 6 场景
-              </p>
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <p className="flex flex-col gap-0.5 text-[11px] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <span>规划 6 场景并出图</span>
-              <span className="tabular-nums text-white/45">
-                <span className="text-white/65">{currentModelLabel}</span>
-                <span className="mx-1 text-white/20">·</span>
-                {size}
-                <span className="mx-1 text-white/20">·</span>
-                {formatImageResLabel(resolution)}
-              </span>
-            </p>
+          <div>
             <button
               type="button"
               onClick={() => void handlePrepareSceneBoard()}
