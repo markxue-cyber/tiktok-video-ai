@@ -29,6 +29,26 @@ function looksLikeAuthInvalid(err: any): boolean {
   return s.includes('登录已失效') || s.includes('请重新登录') || s.includes('missing authorization') || s.includes('invalid token') || s.includes('jwt')
 }
 
+/** 浏览器 / 代理 / 冷启动等导致的瞬时失败，适合自动重试（每次请求使用新的 Idempotency-Key） */
+function isTransientNetworkError(err: any): boolean {
+  const msg = String(err?.message || err || '').toLowerCase()
+  const name = String(err?.name || '')
+  if (name === 'TypeError' && (msg.includes('fetch') || msg.includes('failed') || msg.includes('network')))
+    return true
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    msg.includes('network request failed') ||
+    msg.includes('load failed') ||
+    msg.includes('econnreset')
+  )
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms))
+}
+
 export async function generateImageAPI(params: {
   prompt: string
   negativePrompt?: string
@@ -80,15 +100,33 @@ export async function generateImageAPI(params: {
 
   let token = localStorage.getItem('tikgen.accessToken') || ''
   if (!token) throw new Error('请先登录再生成图片')
+
+  const maxAttempts = 4
   let data: any
-  try {
-    data = await callOnce(token)
-  } catch (e: any) {
-    if (!looksLikeAuthInvalid(e)) throw e
-    const refreshed = await refreshAccessTokenIfPossible()
-    if (!refreshed) throw e
-    data = await callOnce(refreshed)
+  let lastErr: any
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      data = await callOnce(token)
+      lastErr = null
+      break
+    } catch (e: any) {
+      lastErr = e
+      if (looksLikeAuthInvalid(e)) {
+        const refreshed = await refreshAccessTokenIfPossible()
+        if (!refreshed) throw e
+        token = refreshed
+        continue
+      }
+      if (attempt < maxAttempts - 1 && isTransientNetworkError(e)) {
+        await sleep(500 + attempt * 1200)
+        continue
+      }
+      throw e
+    }
   }
+
+  if (lastErr) throw lastErr
 
   if (!data?.imageUrl) throw new Error('生成成功但未返回图片地址')
   return { imageUrl: data.imageUrl, size: data.size }
