@@ -243,13 +243,40 @@ function filterProductAnalysisText(raw: string): string {
   return out.join('\n')
 }
 
-/** 画面方案卡片外露短文案（控制篇幅，避免卡片内出现截断省略号） */
+/** 画面方案卡片外露文案：约 4 行内（超出由 line-clamp 截断） */
+function styleCardSummary(text: string, maxChars = 220): string {
+  const s = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (s.length <= maxChars) return s
+  return s.slice(0, maxChars)
+}
+
+/** 生成历史等窄卡片用的一行级摘要 */
 function styleCardTeaser(text: string, maxChars = 40): string {
   const s = String(text || '')
     .replace(/\s+/g, ' ')
     .trim()
   if (s.length <= maxChars) return s
   return s.slice(0, maxChars)
+}
+
+/** 旧版 API 不足 4 条时曾用「请上传图」补齐；已传图用户会误解，收到后统一替换 */
+function sanitizeWorkbenchStylesFromApi<T extends { title: string; description: string; imagePrompt?: string }>(
+  styles: T[],
+): T[] {
+  const legacyNeedle = '请上传清晰的商品主参考图后重新分析，以生成更贴合类目的风格建议'
+  const descFallback =
+    '偏电商主图向的备选构图与光感，强调主体清晰与背景层次，可在编辑中按卖点继续细化。'
+  const promptSnippet = '背景简洁、光影干净，突出商品材质与轮廓，适合主图与投放延展。'
+  const legacyPattern = /请上传清晰的商品主参考图后重新分析，以生成更贴合类目的风格建议。?/g
+  return styles.map((s) => {
+    let description = String(s.description || '').trim()
+    let imagePrompt = String(s.imagePrompt || '').trim()
+    if (description.includes(legacyNeedle)) description = descFallback
+    if (imagePrompt.includes(legacyNeedle)) imagePrompt = imagePrompt.replace(legacyPattern, promptSnippet)
+    return { ...s, description, imagePrompt }
+  })
 }
 
 const SCENE_TAG_CLASS =
@@ -3064,7 +3091,7 @@ function ImageGenerator({
         language: w.product?.language || productInfo.language || '简体中文',
       }
       analysisText = filterProductAnalysisText(w.productAnalysisText || '')
-      styles = w.styles || []
+      styles = sanitizeWorkbenchStylesFromApi(w.styles || [])
       setProductAnalysisText(analysisText)
       setProductInfo(nextProduct)
       setHotStyles(styles)
@@ -3208,7 +3235,7 @@ function ImageGenerator({
         mode: 'styles',
       })
       if (jobId !== aiJobRef.current) return
-      styles = w.styles || []
+      styles = sanitizeWorkbenchStylesFromApi(w.styles || [])
       nextIdx = Math.min(selectedHotStyleIndex, Math.max(0, styles.length - 1))
       setHotStyles(styles)
       setSelectedHotStyleIndex(nextIdx)
@@ -4579,15 +4606,15 @@ function ImageGenerator({
                         <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
                       </button>
                     </div>
-                    <p className="mt-2 h-[2.35rem] text-[11px] leading-snug text-white/48 overflow-hidden">
-                      {styleCardTeaser(st.description, 44) || '\u00a0'}
+                    <p className="mt-2 min-h-[4.5rem] text-[11px] leading-[1.45] text-white/55 line-clamp-4">
+                      {styleCardSummary(st.description) || '\u00a0'}
                     </p>
-                    <div className="pointer-events-none invisible absolute left-0 right-0 top-full z-[90] mt-2 opacity-0 transition-opacity duration-150 group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100">
-                      <div className="max-h-64 overflow-y-auto rounded-xl border border-white/14 bg-zinc-950/98 p-3 text-[11px] leading-relaxed text-white/82 shadow-[0_16px_50px_rgba(0,0,0,0.55)] backdrop-blur-md">
-                        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/95">
+                    <div className="pointer-events-none invisible absolute left-0 right-0 top-full z-[100] mt-2 opacity-0 transition-opacity duration-150 group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100">
+                      <div className="max-h-72 overflow-y-auto rounded-xl border border-white/20 bg-[#0a0a0c] p-3.5 text-[11px] leading-relaxed text-white/90 shadow-[0_20px_60px_rgba(0,0,0,0.85)] ring-1 ring-black/40">
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-300">
                           出图主描述
                         </div>
-                        <div className="whitespace-pre-wrap break-words">
+                        <div className="whitespace-pre-wrap break-words text-white/88">
                           {String(st.imagePrompt || '').trim() || '（暂无，可点击铅笔编辑后填写）'}
                         </div>
                       </div>
@@ -4601,7 +4628,7 @@ function ImageGenerator({
                     setCustomStylePromptOnly(i >= 0 ? hotStyles[i].imagePrompt || '' : '')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border border-dashed border-white/18 bg-white/[0.02] p-3 text-center transition-colors hover:border-violet-400/35 hover:bg-white/[0.05]"
+                  className="flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed border-white/18 bg-white/[0.02] p-3 text-center transition-colors hover:border-violet-400/35 hover:bg-white/[0.05]"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
                   <span className="mt-1 text-[10px] text-white/45">一段话描述想要的画面、风格与卖点呈现</span>
@@ -4747,9 +4774,9 @@ function ImageGenerator({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {sceneRunBoard.slots.map((slot, sidx) => {
-                const summary = styleCardTeaser(
+                const summary = styleCardSummary(
                   (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim(),
-                  36,
+                  200,
                 )
                 return (
                   <div
@@ -4776,7 +4803,7 @@ function ImageGenerator({
                     <div className="border-b border-white/[0.07] px-2.5 pb-2 pt-2.5">
                       <div className="min-w-0">
                         <span className={SCENE_TAG_CLASS}>{slot.title}</span>
-                        <p className="mt-1.5 h-[2rem] text-[10px] leading-snug text-white/42 overflow-hidden">
+                        <p className="mt-1.5 min-h-[3.6rem] text-[10px] leading-[1.45] text-white/48 line-clamp-4">
                           {summary || '\u00a0'}
                         </p>
                       </div>

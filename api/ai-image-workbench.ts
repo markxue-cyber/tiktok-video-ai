@@ -97,9 +97,19 @@ function normalizeStyles(styles: any): WorkbenchStyleRow[] {
     }
     return { title, description, imagePrompt }
   })
+  /** 模型偶尔返回不足 4 条时补齐；不得使用「请上传图」类文案（用户已传图也会触发补齐） */
+  const PAD_DESCRIPTIONS = [
+    '偏暖色家居光感，主体居中略俯拍，背景轻虚化突出商品轮廓与材质，适合主图延展与投放测试。',
+    '冷灰棚拍高光，对称构图强调工业质感与细节，留白充足便于后期加卖点与价格条。',
+    '自然侧光生活场景，低对比柔和阴影，加入弱化环境道具增强使用联想，仍保持主体清晰。',
+    '高饱和点缀色与大面积中性底形成对比，动感斜构图，适合活动页与信息流吸睛版本。',
+  ] as const
   while (mapped.length < 4) {
-    const title = ['温馨治愈', '极简科技', '深夜守护', '多变生活'][mapped.length] || '风格备选'
-    const description = '请上传清晰的商品主参考图后重新分析，以生成更贴合类目的风格建议。'
+    const i = mapped.length
+    const title = ['温馨治愈', '极简科技', '深夜守护', '多变生活'][i] || '风格备选'
+    const description =
+      PAD_DESCRIPTIONS[i % PAD_DESCRIPTIONS.length] ||
+      '适合电商主图与投放素材的爆款视觉方向，可在编辑中细化光线、构图与卖点呈现。'
     mapped.push({
       title,
       description,
