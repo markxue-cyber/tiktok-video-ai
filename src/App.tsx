@@ -436,6 +436,10 @@ function sanitizeWorkbenchStylesFromApi<T extends { title: string; description: 
 const SCENE_TAG_CLASS =
   'inline-flex max-w-full items-center rounded-full border border-white/12 bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white/95 shadow-sm backdrop-blur-sm'
 
+/** 生成历史结果卡片：场景名（无椭圆标签底，居中、略大） */
+const IMAGE_HISTORY_SCENE_TITLE_CLASS =
+  'block w-full text-center text-[13px] sm:text-sm font-semibold leading-snug tracking-wide text-violet-100/95 drop-shadow-[0_1px_8px_rgba(139,92,246,0.25)] line-clamp-2 break-words'
+
 /** 场景占位：SVG 噪点贴图，叠在强模糊层上模拟胶片颗粒、减轻「纯 CSS 渐变」塑料感 */
 const SCENE_SLOT_PLACEHOLDER_GRAIN_TILE =
   'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 512 512\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\' x=\'-20%25\' y=\'-20%25\' width=\'140%25\' height=\'140%25\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.72\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3CfeColorMatrix type=\'saturate\' values=\'0\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.55\'/%3E%3C/svg%3E")'
@@ -5785,9 +5789,11 @@ function ImageGenerator({
                                 >
                                   <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
                                     <div
-                                      className={`relative group/histscene max-w-full ${descFull ? 'cursor-help' : ''}`}
+                                      className={`relative group/histscene mx-auto max-w-full ${descFull ? 'cursor-help' : ''}`}
                                     >
-                                      <span className={`${SCENE_TAG_CLASS} max-w-full truncate block`}>{label}</span>
+                                      <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS} title={label}>
+                                        {label}
+                                      </span>
                                       {descFull ? (
                                         <div
                                           className="pointer-events-none absolute left-1/2 z-[60] min-w-[13rem] max-w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full translate-y-2 rounded-xl border border-white/18 bg-[#14141c]/98 px-3 py-2 text-[11px] leading-relaxed text-white/90 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md max-h-[min(12rem,40vh)] overflow-y-auto whitespace-pre-wrap break-words opacity-0 transition-[opacity] duration-100 ease-out group-hover/histscene:pointer-events-auto group-hover/histscene:opacity-100"
@@ -5801,13 +5807,14 @@ function ImageGenerator({
                                   <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35">
                                     <button
                                       type="button"
-                                      className="absolute inset-0 z-[1] block"
+                                      className="absolute inset-0 z-[1] block cursor-zoom-in touch-manipulation select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
                                       onClick={() =>
                                         setHistoryLightbox({ url, downloadName: `tikgen-${task.id}-${idx + 1}.png` })
                                       }
-                                      title="点击放大"
+                                      title="点击放大预览"
+                                      aria-label="放大预览图片"
                                     >
-                                      <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
+                                      <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" draggable={false} />
                                     </button>
                                     <div className="absolute inset-0 z-[2] flex items-start justify-end p-2 opacity-0 group-hover/out:opacity-100 transition-opacity pointer-events-none group-hover/out:pointer-events-auto">
                                       <a
@@ -6111,10 +6118,17 @@ function ImageGenerator({
     )}
     {historyLightbox && (
       <div
-        className="fixed inset-0 z-[90] bg-black/82 backdrop-blur-sm flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10060] bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
         onClick={() => setHistoryLightbox(null)}
+        role="presentation"
       >
-        <div className="relative max-w-5xl w-full flex flex-col items-stretch gap-3" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="relative max-w-5xl w-full flex flex-col items-stretch gap-3"
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="图片预览"
+        >
           <div className="flex items-center justify-end gap-2">
             <a
               href={historyLightbox.url}
