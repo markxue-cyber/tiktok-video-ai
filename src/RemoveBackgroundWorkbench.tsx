@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Clock, Download, Eraser, Image as ImageIcon, Maximize2, RefreshCw, Upload, X } from 'lucide-react'
+import {
+  Box,
+  ChevronDown,
+  Clock,
+  Download,
+  Eraser,
+  Image as ImageIcon,
+  Maximize2,
+  RefreshCw,
+  Upload,
+  X,
+} from 'lucide-react'
 import { createAssetAPI } from './api/assets'
 import { removeBackgroundAPI } from './api/removeBackground'
 
@@ -85,6 +96,36 @@ async function safeArchiveUpload(file: File, dataUrl: string) {
     })
   } catch {
     // optional
+  }
+}
+
+/** 去除背景结果写入资产库（AI 生成），与图片生成一致；失败不阻断主流程 */
+async function safeArchiveRemoveBgOutput(params: {
+  url: string
+  taskId: string
+  index: number
+  resolution: '1024' | '2048'
+  outputFormat: 'png' | 'webp'
+}) {
+  try {
+    if (!params.url) return
+    const ext = params.outputFormat === 'webp' ? 'webp' : 'png'
+    await createAssetAPI({
+      source: 'ai_generated',
+      type: 'image',
+      url: params.url,
+      name: `remove-bg-${params.index + 1}-${params.taskId.slice(-10)}.${ext}`,
+      metadata: {
+        from: 'image_tool_remove_background',
+        tool: 'remove_background',
+        task_id: params.taskId,
+        index: params.index,
+        resolution: params.resolution,
+        format: params.outputFormat,
+      },
+    })
+  } catch (e) {
+    console.error('[assets] remove-bg output archive failed:', e)
   }
 }
 
@@ -236,6 +277,13 @@ export function RemoveBackgroundWorkbench() {
             out = await maybeToWebp(imageUrl)
           }
           outputs.push(out)
+          void safeArchiveRemoveBgOutput({
+            url: out,
+            taskId,
+            index: i,
+            resolution,
+            outputFormat,
+          })
           const doneChunk = Math.round(((i + 1) / list.length) * 100)
           setHistory((prev) =>
             prev.map((x) =>
@@ -306,7 +354,7 @@ export function RemoveBackgroundWorkbench() {
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
           <div className="flex flex-col gap-6">
-            <section>
+            <section className="w-full min-w-0">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">上传图片</div>
@@ -403,43 +451,62 @@ export function RemoveBackgroundWorkbench() {
               </div>
             </section>
 
-            <section>
+            <section className="w-full min-w-0">
               <div className="mb-2 flex items-center gap-1.5">
                 <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
-                <div className="min-w-0 flex-1 sm:max-w-[12rem]">
-                  <label htmlFor="rb-resolution" className="sr-only">
-                    处理分辨率
-                  </label>
-                  <div className="relative">
-                    <Maximize2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/85" strokeWidth={2} />
-                    <select
-                      id="rb-resolution"
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
-                      className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
-                    >
-                      <option value="1024">1024px</option>
-                      <option value="2048">2048px</option>
-                    </select>
+              {/* 与上方上传区同宽：整行拉满，两列等分，右缘与 tikgen-ref-dropzone 对齐 */}
+              <div className="rounded-xl border border-white/[0.12] bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-inset ring-white/[0.06]">
+                <div className="grid grid-cols-2 gap-3 w-full min-w-0">
+                  <div className="min-w-0">
+                    <label htmlFor="rb-resolution" className="sr-only">
+                      处理分辨率
+                    </label>
+                    <div className="relative">
+                      <Maximize2
+                        className="pointer-events-none absolute left-3 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/90"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                      <ChevronDown
+                        className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/40"
+                        aria-hidden
+                      />
+                      <select
+                        id="rb-resolution"
+                        value={resolution}
+                        onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
+                        className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/40 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.12] transition-[box-shadow,background-color] duration-150 hover:bg-black/45 hover:ring-white/20 focus:ring-2 focus:ring-violet-400/40"
+                      >
+                        <option value="1024">1024px</option>
+                        <option value="2048">2048px</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div className="min-w-0 flex-1 sm:max-w-[12rem]">
-                  <label htmlFor="rb-format" className="sr-only">
-                    输出格式
-                  </label>
-                  <div className="relative">
-                    <Box className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" strokeWidth={1.75} />
-                    <select
-                      id="rb-format"
-                      value={outputFormat}
-                      onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
-                      className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
-                    >
-                      <option value="png">PNG</option>
-                      <option value="webp">WEBP</option>
-                    </select>
+                  <div className="min-w-0">
+                    <label htmlFor="rb-format" className="sr-only">
+                      输出格式
+                    </label>
+                    <div className="relative">
+                      <Box
+                        className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-violet-300/75"
+                        strokeWidth={1.75}
+                        aria-hidden
+                      />
+                      <ChevronDown
+                        className="pointer-events-none absolute right-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-white/40"
+                        aria-hidden
+                      />
+                      <select
+                        id="rb-format"
+                        value={outputFormat}
+                        onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
+                        className="tikgen-spec-select h-11 w-full min-w-0 appearance-none rounded-xl border-0 bg-black/40 py-2.5 pl-9 pr-10 text-sm font-medium text-white/92 outline-none ring-1 ring-inset ring-white/[0.12] transition-[box-shadow,background-color] duration-150 hover:bg-black/45 hover:ring-white/20 focus:ring-2 focus:ring-violet-400/40"
+                      >
+                        <option value="png">PNG</option>
+                        <option value="webp">WEBP</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
