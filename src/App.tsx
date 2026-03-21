@@ -287,6 +287,44 @@ function groupImageHistoryByDay(tasks: ImageGenHistoryTask[]) {
   return order.map((day) => ({ day, tasks: byDay[day] }))
 }
 
+/** 生成历史场景名：去掉全角/半角括号及其中内容；括号内文案收集后用于悬停浮层 */
+function splitSceneHistoryTitleForDisplay(raw: string): { display: string; parenHints: string } {
+  const s = String(raw || '').trim()
+  if (!s) return { display: '', parenHints: '' }
+  const inner: string[] = []
+  const re = /[（(]([^)）]*)[)）]/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(s)) !== null) {
+    const g = String(m[1] || '').trim()
+    if (g) inner.push(g)
+  }
+  const display = s.replace(/[（(][^)）]*[)）]/g, ' ').replace(/\s+/g, ' ').trim()
+  return { display, parenHints: inner.join('；') }
+}
+
+/** 从商品分析笔记中解析「产品名称」等行，供历史卡片标题等兜底 */
+function extractProductNameFromAnalysisNotes(text: string): string {
+  const lines = String(text || '').split(/\n/)
+  const patterns = [
+    /^产品名称\s*[：:]\s*(.+)$/,
+    /^商品名称\s*[：:]\s*(.+)$/,
+    /^品名\s*[：:]\s*(.+)$/,
+    /^名称\s*[：:]\s*(.+)$/,
+    /^Product\s*name\s*[：:]\s*(.+)$/i,
+  ]
+  for (const line of lines) {
+    const t = line.trim()
+    for (const re of patterns) {
+      const m = t.match(re)
+      if (m) {
+        const v = String(m[1] || '').trim()
+        if (v && v !== '未知' && v !== '未标注') return v
+      }
+    }
+  }
+  return ''
+}
+
 /** 商品分析：不展示值为「未知」「未标注」的行 */
 function filterProductAnalysisText(raw: string): string {
   const lines = String(raw || '').split(/\n/)
@@ -478,6 +516,7 @@ function buildHistoryTaskFromSceneBoard(
   aspect: ImageAspect,
   resolutionLabel: string,
   productName?: string,
+  productAnalysisNotes?: string,
 ): ImageGenHistoryTask {
   const slots = board.slots
   const selected = slots.filter((s) => s.selected)
@@ -521,7 +560,9 @@ function buildHistoryTaskFromSceneBoard(
     errors.length && status === 'completed' ? `部分失败：${errors.join('；')}` : undefined
   const failMsg = status === 'failed' ? errors.join('\n') || '生成失败' : errMsg
 
-  const pn = String(productName || '').trim()
+  const pn =
+    String(productName || '').trim() ||
+    extractProductNameFromAnalysisNotes(String(productAnalysisNotes || ''))
   return {
     id: board.id,
     ts: board.ts,
@@ -3051,6 +3092,15 @@ function ImageGenerator({
     return groupImageHistoryByDay(list)
   }, [imageGenHistory, sceneRunBoard])
 
+  /** 场景看板 / 生成历史大标题：优先结构化「产品名称」，否则从商品分析笔记解析 */
+  const imageWorkbenchCardTitle = useMemo(
+    () =>
+      (productInfo.name || '').trim() ||
+      extractProductNameFromAnalysisNotes(productAnalysisText) ||
+      '商品场景',
+    [productInfo.name, productAnalysisText],
+  )
+
   useEffect(() => {
     if (!imageGenPersistenceReady) return
     const slice = imageGenHistory.slice(0, IMAGE_GEN_HISTORY_MAX)
@@ -3206,6 +3256,7 @@ function ImageGenerator({
       size,
       resLb,
       productInfo.name?.trim(),
+      productAnalysisText,
     )
     setImageGenHistory((prev) => {
       const i = prev.findIndex((t) => t.id === built.id)
@@ -3244,7 +3295,7 @@ function ImageGenerator({
       setGenErrorText('')
       setGenErrorCode('UNKNOWN')
     }
-  }, [sceneRunBoard, model, size, resolution, imageModelOptions, productInfo.name])
+  }, [sceneRunBoard, model, size, resolution, imageModelOptions, productInfo.name, productAnalysisText])
 
   useEffect(() => {
     const first = refImages[0]?.url || ''
@@ -3280,7 +3331,15 @@ function ImageGenerator({
         resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
       const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
       const normalized = sceneBoardForgetInflightSlots(snap)
-      const built = buildHistoryTaskFromSceneBoard(normalized, model, modelLabel, size, resLb, productNameSnap)
+      const built = buildHistoryTaskFromSceneBoard(
+        normalized,
+        model,
+        modelLabel,
+        size,
+        resLb,
+        productNameSnap,
+        productAnalysisText,
+      )
       setImageGenHistory((prev) => {
         const i = prev.findIndex((t) => t.id === built.id)
         const keepTs = i >= 0 ? prev[i].ts : built.ts
@@ -5423,9 +5482,9 @@ function ImageGenerator({
                 <div className="min-w-0 flex-1">
                   <h3
                     className="text-base font-semibold text-white/95 leading-snug truncate"
-                    title={productInfo.name?.trim() || undefined}
+                    title={imageWorkbenchCardTitle !== '商品场景' ? imageWorkbenchCardTitle : undefined}
                   >
-                    {productInfo.name?.trim() || '商品场景'}
+                    {imageWorkbenchCardTitle}
                   </h3>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="inline-flex rounded-full border border-white/12 bg-black/35 px-2 py-0.5 text-[10px] text-white/75">
@@ -5770,8 +5829,10 @@ function ImageGenerator({
                           </button>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {task.outputUrls.map((url, idx) => {
-                              const label = task.sceneLabels?.[idx] || `图 ${idx + 1}`
-                              const descFull =
+                              const rawLabel = task.sceneLabels?.[idx] || `图 ${idx + 1}`
+                              const { display: titleSansParen, parenHints } = splitSceneHistoryTitleForDisplay(rawLabel)
+                              const labelDisplay = titleSansParen || `图 ${idx + 1}`
+                              const descTail =
                                 (task.sceneDescriptions?.[idx] || '').trim() ||
                                 (task.sceneTeasers?.[idx] || '').trim() ||
                                 styleCardTeaser(
@@ -5782,6 +5843,10 @@ function ImageGenerator({
                                     .trim() || '',
                                   400,
                                 )
+                              const descParts: string[] = []
+                              if (parenHints) descParts.push(`【标题补充】${parenHints}`)
+                              if (descTail) descParts.push(descTail)
+                              const descFull = descParts.join('\n\n').trim()
                               return (
                                 <div
                                   key={`${task.id}_out_${idx}`}
@@ -5791,8 +5856,8 @@ function ImageGenerator({
                                     <div
                                       className={`relative group/histscene mx-auto max-w-full ${descFull ? 'cursor-help' : ''}`}
                                     >
-                                      <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS} title={label}>
-                                        {label}
+                                      <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS} title={rawLabel}>
+                                        {labelDisplay}
                                       </span>
                                       {descFull ? (
                                         <div
