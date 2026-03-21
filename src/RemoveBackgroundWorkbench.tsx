@@ -74,23 +74,6 @@ function relativeZh(ts: number) {
   return dayKey(ts)
 }
 
-function groupByDay(tasks: RemoveBgHistoryTask[]) {
-  const sorted = [...tasks].sort((a, b) => b.ts - a.ts)
-  const order: string[] = []
-  const seen = new Set<string>()
-  const byDay: Record<string, RemoveBgHistoryTask[]> = {}
-  for (const t of sorted) {
-    const k = dayKey(t.ts)
-    if (!seen.has(k)) {
-      seen.add(k)
-      order.push(k)
-    }
-    if (!byDay[k]) byDay[k] = []
-    byDay[k].push(t)
-  }
-  return order.map((day) => ({ day, tasks: byDay[day] }))
-}
-
 async function safeArchiveUpload(file: File, dataUrl: string) {
   try {
     await createAssetAPI({
@@ -154,7 +137,7 @@ export function RemoveBackgroundWorkbench() {
     saveHistory(history)
   }, [history])
 
-  const grouped = useMemo(() => groupByDay(history), [history])
+  const sortedHistory = useMemo(() => [...history].sort((a, b) => b.ts - a.ts), [history])
 
   const stopProgressTicker = useCallback((taskId: string) => {
     const t = progressTimersRef.current[taskId]
@@ -221,7 +204,7 @@ export function RemoveBackgroundWorkbench() {
       id: taskId,
       ts: Date.now(),
       refThumb: list[0]?.url || '',
-      prompt: `去除背景 · 共 ${list.length} 张 · Nano Banana 2`,
+      prompt: `共 ${list.length} 张`,
       modelLabel: 'Nano Banana 2',
       resolutionLabel: `${resolution}px`,
       formatLabel: outputFormat.toUpperCase(),
@@ -324,48 +307,6 @@ export function RemoveBackgroundWorkbench() {
         <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
           <div className="flex flex-col gap-6">
             <section>
-              <div className="mb-2 flex items-center gap-1.5">
-                <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
-                <div className="min-w-0 flex-1 sm:max-w-[12rem]">
-                  <label htmlFor="rb-resolution" className="sr-only">
-                    处理分辨率
-                  </label>
-                  <div className="relative">
-                    <Maximize2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/85" strokeWidth={2} />
-                    <select
-                      id="rb-resolution"
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
-                      className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
-                    >
-                      <option value="1024">1024px</option>
-                      <option value="2048">2048px</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1 sm:max-w-[12rem]">
-                  <label htmlFor="rb-format" className="sr-only">
-                    输出格式
-                  </label>
-                  <div className="relative">
-                    <Box className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" strokeWidth={1.75} />
-                    <select
-                      id="rb-format"
-                      value={outputFormat}
-                      onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
-                      className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
-                    >
-                      <option value="png">PNG</option>
-                      <option value="webp">WEBP</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">上传图片</div>
@@ -462,12 +403,54 @@ export function RemoveBackgroundWorkbench() {
               </div>
             </section>
 
-            <div className="pt-1">
+            <section>
+              <div className="mb-2 flex items-center gap-1.5">
+                <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+                <div className="min-w-0 flex-1 sm:max-w-[12rem]">
+                  <label htmlFor="rb-resolution" className="sr-only">
+                    处理分辨率
+                  </label>
+                  <div className="relative">
+                    <Maximize2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/85" strokeWidth={2} />
+                    <select
+                      id="rb-resolution"
+                      value={resolution}
+                      onChange={(e) => setResolution(e.target.value as '1024' | '2048')}
+                      className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
+                    >
+                      <option value="1024">1024px</option>
+                      <option value="2048">2048px</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 sm:max-w-[12rem]">
+                  <label htmlFor="rb-format" className="sr-only">
+                    输出格式
+                  </label>
+                  <div className="relative">
+                    <Box className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" strokeWidth={1.75} />
+                    <select
+                      id="rb-format"
+                      value={outputFormat}
+                      onChange={(e) => setOutputFormat(e.target.value as 'png' | 'webp')}
+                      className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
+                    >
+                      <option value="png">PNG</option>
+                      <option value="webp">WEBP</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div className="pt-1 flex w-full justify-center">
               <button
                 type="button"
                 disabled={!images.length || submitBusy}
                 onClick={() => void handleSubmit()}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-900/30 disabled:opacity-45 disabled:cursor-not-allowed"
+                className="w-full max-w-lg inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/30 disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {submitBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eraser className="w-4 h-4" />}
                 去除背景
@@ -489,154 +472,144 @@ export function RemoveBackgroundWorkbench() {
             </div>
           ) : null}
 
-          {grouped.length > 0 ? (
-            <div className="space-y-10 pb-2">
-              {grouped.map(({ day, tasks }) => (
-                <div key={day}>
-                  <div className="text-sm font-semibold text-white/90 mb-3">{day}</div>
-                  <div className="flex flex-col gap-4">
-                    {tasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
-                      >
-                        <h3 className="text-lg sm:text-xl font-bold text-white/95 leading-snug mb-2.5 pr-1">去除背景</h3>
-                        <div className="flex flex-wrap items-center gap-2 mb-3">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                            <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                            {relativeZh(task.ts)}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                            <Box className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                            {task.modelLabel}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
-                            <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
-                            {task.resolutionLabel}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
-                            {task.formatLabel}
-                          </span>
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
-                              task.status === 'completed'
-                                ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
-                                : task.status === 'active'
-                                  ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
-                                  : 'bg-red-500/15 text-red-100 border-red-400/25'
-                            }`}
-                          >
-                            {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
-                          </span>
-                        </div>
-
-                        <div className="flex gap-3 items-start mb-3">
-                          <button
-                            type="button"
-                            className="shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-white/15 bg-white/[0.04]"
-                            onClick={() => {
-                              if (task.refThumb) setLightbox({ url: task.refThumb, downloadName: `reference-${task.id}.png` })
-                            }}
-                          >
-                            {task.refThumb ? (
-                              <img src={task.refThumb} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] text-white/30">无</div>
-                            )}
-                          </button>
-                          <p className="text-xs text-white/78 leading-relaxed flex-1 min-w-0 break-words">{task.prompt}</p>
-                        </div>
-
-                        {task.status === 'active' ? (
-                          <div className="mb-4">
-                            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-pink-500 transition-[width] duration-300 ease-out"
-                                style={{ width: `${Math.max(1, Math.min(100, task.progress))}%` }}
-                              />
-                            </div>
-                            <p className="text-[11px] text-white/55 mt-1.5 tabular-nums">
-                              处理进度 {Math.max(1, Math.min(99, task.progress))}%
-                            </p>
-                          </div>
-                        ) : null}
-
-                        {task.status === 'failed' && task.errorMessage ? (
-                          <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
-                        ) : null}
-
-                        {task.outputUrls.length > 0 ? (
-                          <div className="space-y-2">
-                            <button
-                              type="button"
-                              onClick={() => downloadAll(task)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08]"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              下载全部（{task.outputUrls.length}）
-                            </button>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                              {task.outputUrls.map((url, idx) => {
-                                const ext = task.formatLabel.toLowerCase() === 'webp' ? 'webp' : 'png'
-                                return (
-                                  <div
-                                    key={`${task.id}_out_${idx}`}
-                                    className="flex flex-col overflow-visible rounded-2xl border border-white/12 bg-black/30 group/out"
-                                  >
-                                    <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
-                                      <span className="block w-full text-center text-[13px] sm:text-sm font-semibold leading-snug text-violet-100/95">
-                                        结果 {idx + 1}
-                                      </span>
-                                    </div>
-                                    <div
-                                      className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35"
-                                      style={{
-                                        backgroundImage:
-                                          'linear-gradient(45deg, #2a2a35 25%, transparent 25%), linear-gradient(-45deg, #2a2a35 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #2a2a35 75%), linear-gradient(-45deg, transparent 75%, #2a2a35 75%)',
-                                        backgroundSize: '12px 12px',
-                                        backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0',
-                                      }}
-                                    >
-                                      <img
-                                        src={url}
-                                        alt=""
-                                        className="absolute inset-0 h-full w-full object-contain pointer-events-none select-none"
-                                        draggable={false}
-                                      />
-                                      <a
-                                        href={url}
-                                        download={`remove-bg-${task.id}-${idx + 1}.${ext}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
-                                        title="下载"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <Download className="w-4 h-4" />
-                                      </a>
-                                      <button
-                                        type="button"
-                                        className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setLightbox({ url, downloadName: `remove-bg-${task.id}-${idx + 1}.${ext}` })
-                                        }}
-                                        title="点击放大预览"
-                                      />
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        ) : task.status === 'active' ? (
-                          <p className="text-[11px] text-white/45 mb-1">处理进行中，完成后将显示在下面…</p>
-                        ) : task.status === 'completed' ? (
-                          <p className="text-[11px] text-white/40">未返回图片</p>
-                        ) : null}
-                      </div>
-                    ))}
+          {sortedHistory.length > 0 ? (
+            <div className="flex flex-col gap-4 pb-2">
+              {sortedHistory.map((task) => (
+                <div
+                  key={task.id}
+                  className="image-history-card rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                      <Clock className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                      {relativeZh(task.ts)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75">
+                      <Maximize2 className="w-3 h-3 text-violet-300/85 shrink-0" strokeWidth={2} />
+                      {task.resolutionLabel}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.07] border border-white/12 px-2.5 py-1 text-[10px] text-white/75 uppercase tracking-wide">
+                      {task.formatLabel}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium border ${
+                        task.status === 'completed'
+                          ? 'bg-emerald-500/18 text-emerald-100 border-emerald-400/28'
+                          : task.status === 'active'
+                            ? 'bg-amber-500/18 text-amber-100 border-amber-400/30'
+                            : 'bg-red-500/15 text-red-100 border-red-400/25'
+                      }`}
+                    >
+                      {task.status === 'completed' ? '已完成' : task.status === 'active' ? '生成中' : '失败'}
+                    </span>
                   </div>
+
+                  <div className="flex gap-3 items-start mb-3">
+                    <button
+                      type="button"
+                      className="shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-white/15 bg-white/[0.04]"
+                      onClick={() => {
+                        if (task.refThumb) setLightbox({ url: task.refThumb, downloadName: `reference-${task.id}.png` })
+                      }}
+                    >
+                      {task.refThumb ? (
+                        <img src={task.refThumb} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-white/30">无</div>
+                      )}
+                    </button>
+                    <p className="text-xs text-white/78 leading-relaxed flex-1 min-w-0 break-words">
+                      共 {task.requestedCount || task.outputUrls.length || 1} 张
+                    </p>
+                  </div>
+
+                  {task.status === 'active' ? (
+                    <div className="mb-4">
+                      <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-violet-500 to-pink-500 transition-[width] duration-300 ease-out"
+                          style={{ width: `${Math.max(1, Math.min(100, task.progress))}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-white/55 mt-1.5 tabular-nums">
+                        处理进度 {Math.max(1, Math.min(99, task.progress))}%
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {task.status === 'failed' && task.errorMessage ? (
+                    <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
+                  ) : null}
+
+                  {task.outputUrls.length > 0 ? (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => downloadAll(task)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08]"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        下载全部（{task.outputUrls.length}）
+                      </button>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {task.outputUrls.map((url, idx) => {
+                          const ext = task.formatLabel.toLowerCase() === 'webp' ? 'webp' : 'png'
+                          return (
+                            <div
+                              key={`${task.id}_out_${idx}`}
+                              className="flex flex-col overflow-visible rounded-2xl border border-white/12 bg-black/30 group/out"
+                            >
+                              <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
+                                <span className="block w-full text-center text-[13px] sm:text-sm font-semibold leading-snug text-violet-100/95">
+                                  结果 {idx + 1}
+                                </span>
+                              </div>
+                              <div
+                                className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35"
+                                style={{
+                                  backgroundImage:
+                                    'linear-gradient(45deg, #2a2a35 25%, transparent 25%), linear-gradient(-45deg, #2a2a35 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #2a2a35 75%), linear-gradient(-45deg, transparent 75%, #2a2a35 75%)',
+                                  backgroundSize: '12px 12px',
+                                  backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0',
+                                }}
+                              >
+                                <img
+                                  src={url}
+                                  alt=""
+                                  className="absolute inset-0 h-full w-full object-contain pointer-events-none select-none"
+                                  draggable={false}
+                                />
+                                <a
+                                  href={url}
+                                  download={`remove-bg-${task.id}-${idx + 1}.${ext}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
+                                  title="下载"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                                <button
+                                  type="button"
+                                  className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setLightbox({ url, downloadName: `remove-bg-${task.id}-${idx + 1}.${ext}` })
+                                  }}
+                                  title="点击放大预览"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : task.status === 'active' ? (
+                    <p className="text-[11px] text-white/45 mb-1">处理进行中，完成后将显示在下面…</p>
+                  ) : task.status === 'completed' ? (
+                    <p className="text-[11px] text-white/40">未返回图片</p>
+                  ) : null}
                 </div>
               ))}
             </div>
