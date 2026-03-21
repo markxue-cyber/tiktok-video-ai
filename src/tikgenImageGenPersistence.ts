@@ -15,6 +15,10 @@ export const TIKGEN_IG_IDB = {
   board: 'sceneRunBoard.v1',
   refs: 'refImages.v1',
   workspace: 'workspace.v1',
+  /** 去除背景：待上传图 + 分辨率/格式（data URL 较大，放 IDB） */
+  removeBgWorkspace: 'removeBg.workspace.v1',
+  /** 去除背景：进行中的批量任务，用于刷新后续传 */
+  removeBgJob: 'removeBg.job.v1',
 } as const
 
 export type TikgenWorkspaceSnapshotV1 = {

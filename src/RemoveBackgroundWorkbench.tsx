@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Clock, Download, Eraser, Image as ImageIcon, Maximize2, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { createAssetAPI } from './api/assets'
 import { removeBackgroundAPI } from './api/removeBackground'
+import { tikgenIgIdbDelete, tikgenIgIdbGet, tikgenIgIdbSet, TIKGEN_IG_IDB } from './tikgenImageGenPersistence'
 
 const MAX_IMAGES = 5
 const HISTORY_KEY = 'tikgen.removeBg.history'
@@ -21,6 +22,22 @@ export type RemoveBgHistoryTask = {
   progress: number
   outputUrls: string[]
   errorMessage?: string
+}
+
+type RemoveBgWorkspaceV1 = {
+  v: 1
+  images: Array<{ id: string; url: string; name?: string }>
+  resolution: '1024' | '2048'
+  outputFormat: 'png' | 'webp'
+}
+
+type RemoveBgJobV1 = {
+  v: 1
+  taskId: string
+  refUrls: string[]
+  resolution: '1024' | '2048'
+  outputFormat: 'png' | 'webp'
+  outputs: string[]
 }
 
 async function fileToDataUrl(file: File): Promise<string> {
@@ -147,6 +164,17 @@ async function maybeToWebp(imageUrl: string): Promise<string> {
   })
 }
 
+type RunRemoveBgPipelineOpts = {
+  taskId: string
+  refUrls: string[]
+  resolution: '1024' | '2048'
+  outputFormat: 'png' | 'webp'
+  startIndex: number
+  initialOutputs: string[]
+  clearImagesOnComplete: boolean
+  isCancelled: () => boolean
+}
+
 export function RemoveBackgroundWorkbench() {
   const [images, setImages] = useState<Array<{ id: string; url: string; name?: string }>>([])
   const [resolution, setResolution] = useState<'1024' | '2048'>('1024')
@@ -156,11 +184,17 @@ export function RemoveBackgroundWorkbench() {
   const [submitBusy, setSubmitBusy] = useState(false)
   const [history, setHistory] = useState<RemoveBgHistoryTask[]>([])
   const [lightbox, setLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
+  const [persistenceReady, setPersistenceReady] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const progressTimersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  const mountedRef = useRef(true)
+  const runRemoveBgPipelineRef = useRef<(opts: RunRemoveBgPipelineOpts) => Promise<void>>(async () => {})
 
   useEffect(() => {
-    setHistory(loadHistory())
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
   useEffect(() => {
@@ -180,6 +214,10 @@ export function RemoveBackgroundWorkbench() {
   const removeHistoryTask = useCallback(
     (taskId: string) => {
       stopProgressTicker(taskId)
+      void (async () => {
+        const job = await tikgenIgIdbGet<RemoveBgJobV1>(TIKGEN_IG_IDB.removeBgJob)
+        if (job?.v === 1 && job.taskId === taskId) await tikgenIgIdbDelete(TIKGEN_IG_IDB.removeBgJob)
+      })()
       setHistory((prev) => prev.filter((t) => t.id !== taskId))
     },
     [stopProgressTicker],
@@ -200,6 +238,175 @@ export function RemoveBackgroundWorkbench() {
     },
     [stopProgressTicker],
   )
+
+  const runRemoveBgPipeline = useCallback(
+    async (opts: RunRemoveBgPipelineOpts) => {
+      const {
+        taskId,
+        refUrls,
+        resolution: res,
+        outputFormat: fmt,
+        startIndex,
+        initialOutputs,
+        clearImagesOnComplete,
+        isCancelled,
+      } = opts
+      const outputs = [...initialOutputs]
+      setSubmitBusy(true)
+      try {
+        for (let i = startIndex; i < refUrls.length; i++) {
+          if (isCancelled()) return
+          const base = Math.round((i / refUrls.length) * 100)
+          const span = Math.round(100 / refUrls.length)
+          startProgressTicker(taskId, base, span - 1)
+          try {
+            const { imageUrl } = await removeBackgroundAPI({
+              refImage: refUrls[i],
+              resolution: res,
+              outputFormat: fmt,
+            })
+            let out = imageUrl
+            if (fmt === 'webp') out = await maybeToWebp(imageUrl)
+            outputs.push(out)
+            void safeArchiveRemoveBgOutput({
+              url: out,
+              taskId,
+              index: i,
+              resolution: res,
+              outputFormat: fmt,
+            })
+            await tikgenIgIdbSet(TIKGEN_IG_IDB.removeBgJob, {
+              v: 1,
+              taskId,
+              refUrls,
+              resolution: res,
+              outputFormat: fmt,
+              outputs,
+            })
+            const doneChunk = Math.round(((i + 1) / refUrls.length) * 100)
+            setHistory((prev) =>
+              prev.map((x) =>
+                x.id === taskId
+                  ? {
+                      ...x,
+                      outputUrls: [...outputs],
+                      progress: Math.max(x.progress, Math.min(99, doneChunk)),
+                    }
+                  : x,
+              ),
+            )
+          } catch (e: any) {
+            const failedMsg = String(e?.message || '处理失败')
+            stopProgressTicker(taskId)
+            await tikgenIgIdbDelete(TIKGEN_IG_IDB.removeBgJob)
+            setHistory((prev) =>
+              prev.map((x) =>
+                x.id === taskId
+                  ? {
+                      ...x,
+                      status: 'failed',
+                      progress: 100,
+                      outputUrls: outputs,
+                      errorMessage: failedMsg,
+                    }
+                  : x,
+              ),
+            )
+            return
+          }
+          stopProgressTicker(taskId)
+        }
+
+        if (isCancelled()) return
+
+        await tikgenIgIdbDelete(TIKGEN_IG_IDB.removeBgJob)
+        setHistory((prev) =>
+          prev.map((x) =>
+            x.id === taskId
+              ? {
+                  ...x,
+                  status: 'completed',
+                  progress: 100,
+                  outputUrls: outputs,
+                }
+              : x,
+          ),
+        )
+        if (clearImagesOnComplete) setImages([])
+      } finally {
+        stopProgressTicker(taskId)
+        setSubmitBusy(false)
+      }
+    },
+    [startProgressTicker, stopProgressTicker],
+  )
+
+  runRemoveBgPipelineRef.current = runRemoveBgPipeline
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const ws = await tikgenIgIdbGet<RemoveBgWorkspaceV1>(TIKGEN_IG_IDB.removeBgWorkspace)
+      const h0 = loadHistory()
+      if (cancelled) return
+      if (ws?.v === 1) {
+        if (Array.isArray(ws.images)) setImages(ws.images)
+        if (ws.resolution === '1024' || ws.resolution === '2048') setResolution(ws.resolution)
+        if (ws.outputFormat === 'png' || ws.outputFormat === 'webp') setOutputFormat(ws.outputFormat)
+      }
+      setHistory(h0)
+      setPersistenceReady(true)
+
+      const job = await tikgenIgIdbGet<RemoveBgJobV1>(TIKGEN_IG_IDB.removeBgJob)
+      if (cancelled || !job || job.v !== 1 || !Array.isArray(job.refUrls) || !job.refUrls.length) return
+
+      const task = h0.find((t) => t.id === job.taskId && t.status === 'active')
+      if (!task) {
+        await tikgenIgIdbDelete(TIKGEN_IG_IDB.removeBgJob)
+        return
+      }
+      const jobOut = Array.isArray(job.outputs) ? job.outputs : []
+      const taskOut = Array.isArray(task.outputUrls) ? task.outputUrls : []
+      const merged = taskOut.length >= jobOut.length ? [...taskOut] : [...jobOut]
+      const startIndex = merged.length
+      if (startIndex >= job.refUrls.length) {
+        await tikgenIgIdbDelete(TIKGEN_IG_IDB.removeBgJob)
+        if (cancelled) return
+        setHistory((prev) =>
+          prev.map((x) =>
+            x.id === job.taskId
+              ? { ...x, status: 'completed' as const, progress: 100, outputUrls: merged }
+              : x,
+          ),
+        )
+        return
+      }
+
+      if (cancelled || !mountedRef.current) return
+
+      const res = job.resolution === '2048' ? '2048' : '1024'
+      const fmt = job.outputFormat === 'webp' ? 'webp' : 'png'
+      await runRemoveBgPipelineRef.current({
+        taskId: job.taskId,
+        refUrls: job.refUrls,
+        resolution: res,
+        outputFormat: fmt,
+        startIndex,
+        initialOutputs: merged.slice(),
+        clearImagesOnComplete: false,
+        isCancelled: () => cancelled || !mountedRef.current,
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!persistenceReady) return
+    const snap: RemoveBgWorkspaceV1 = { v: 1, images, resolution, outputFormat }
+    void tikgenIgIdbSet(TIKGEN_IG_IDB.removeBgWorkspace, snap)
+  }, [images, resolution, outputFormat, persistenceReady])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
@@ -237,6 +444,7 @@ export function RemoveBackgroundWorkbench() {
   const handleSubmit = async () => {
     if (!images.length || submitBusy) return
     const list = [...images]
+    const refUrls = list.map((x) => x.url)
     const taskId = `rb_task_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const task: RemoveBgHistoryTask = {
       id: taskId,
@@ -251,87 +459,26 @@ export function RemoveBackgroundWorkbench() {
       progress: 1,
       outputUrls: [],
     }
+    await tikgenIgIdbSet(TIKGEN_IG_IDB.removeBgJob, {
+      v: 1,
+      taskId,
+      refUrls,
+      resolution,
+      outputFormat,
+      outputs: [],
+    })
     setHistory((prev) => [task, ...prev])
-    setSubmitBusy(true)
 
-    const outputs: string[] = []
-    let failedMsg = ''
-
-    try {
-      for (let i = 0; i < list.length; i++) {
-        const base = Math.round((i / list.length) * 100)
-        const span = Math.round(100 / list.length)
-        startProgressTicker(taskId, base, span - 1)
-
-        try {
-          const { imageUrl } = await removeBackgroundAPI({
-            refImage: list[i].url,
-            resolution,
-            outputFormat,
-          })
-          let out = imageUrl
-          if (outputFormat === 'webp') {
-            out = await maybeToWebp(imageUrl)
-          }
-          outputs.push(out)
-          void safeArchiveRemoveBgOutput({
-            url: out,
-            taskId,
-            index: i,
-            resolution,
-            outputFormat,
-          })
-          const doneChunk = Math.round(((i + 1) / list.length) * 100)
-          setHistory((prev) =>
-            prev.map((x) =>
-              x.id === taskId
-                ? {
-                    ...x,
-                    outputUrls: [...outputs],
-                    progress: Math.max(x.progress, Math.min(99, doneChunk)),
-                  }
-                : x,
-            ),
-          )
-        } catch (e: any) {
-          failedMsg = String(e?.message || '处理失败')
-          stopProgressTicker(taskId)
-          setHistory((prev) =>
-            prev.map((x) =>
-              x.id === taskId
-                ? {
-                    ...x,
-                    status: 'failed',
-                    progress: 100,
-                    outputUrls: outputs,
-                    errorMessage: failedMsg,
-                  }
-                : x,
-            ),
-          )
-          setSubmitBusy(false)
-          return
-        }
-        stopProgressTicker(taskId)
-      }
-
-      setHistory((prev) =>
-        prev.map((x) =>
-          x.id === taskId
-            ? {
-                ...x,
-                status: 'completed',
-                progress: 100,
-                outputUrls: outputs,
-              }
-            : x,
-        ),
-      )
-      setImages([])
-    } finally {
-      stopProgressTicker(taskId)
-      setSubmitBusy(false)
-    }
+    await runRemoveBgPipeline({
+      taskId,
+      refUrls,
+      resolution,
+      outputFormat,
+      startIndex: 0,
+      initialOutputs: [],
+      clearImagesOnComplete: true,
+      isCancelled: () => !mountedRef.current,
+    })
   }
 
   const downloadAll = (task: RemoveBgHistoryTask) => {
@@ -361,7 +508,7 @@ export function RemoveBackgroundWorkbench() {
                 </div>
               </div>
               <div
-                className="tikgen-ref-dropzone rounded-xl p-2.5 relative cursor-pointer"
+                className={`tikgen-ref-dropzone rounded-xl p-2.5 relative ${uploadBusy ? 'cursor-wait' : 'cursor-pointer'}`}
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -369,10 +516,24 @@ export function RemoveBackgroundWorkbench() {
                 onDrop={async (e) => {
                   e.preventDefault()
                   e.stopPropagation()
+                  if (uploadBusy) return
                   await handleFiles(e.dataTransfer?.files || null)
                 }}
-                onClick={() => fileRef.current?.click()}
+                onClick={() => {
+                  if (uploadBusy) return
+                  fileRef.current?.click()
+                }}
               >
+                {uploadBusy ? (
+                  <div
+                    className="absolute inset-0 z-[15] flex flex-col items-center justify-center gap-2.5 rounded-[inherit] bg-black/50 backdrop-blur-[3px]"
+                    aria-busy="true"
+                    aria-live="polite"
+                  >
+                    <RefreshCw className="h-7 w-7 shrink-0 animate-spin text-violet-300/90" strokeWidth={2} />
+                    <span className="text-xs font-medium text-white/75">读取图片中…</span>
+                  </div>
+                ) : null}
                 <input
                   ref={fileRef}
                   type="file"
