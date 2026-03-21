@@ -79,16 +79,31 @@ function normalizeFourCharTitle(raw: string): string {
   return out.slice(0, 4).join('') || '爆款风格'
 }
 
-function normalizeStyles(styles: any): { title: string; description: string }[] {
+function synthesizeImagePrompt(title: string, description: string): string {
+  return `参考图同款商品保持一致（外形/配色/结构/材质以图为准），${title}：${description}。电商主图/投放素材，主体占画面约60–80%，对焦清晰锐利，背景干净不抢戏，写实商业摄影，高清细节，留白便于后期贴标与标题。`
+}
+
+type WorkbenchStyleRow = { title: string; description: string; imagePrompt: string }
+
+function normalizeStyles(styles: any): WorkbenchStyleRow[] {
   const list = Array.isArray(styles) ? styles : []
-  const mapped = list.slice(0, 8).map((x: any) => ({
-    title: normalizeFourCharTitle(String(x?.title || x?.name || '')),
-    description: String(x?.description || x?.desc || '').trim() || '适合电商主图与投放素材的爆款视觉方向。',
-  }))
+  const mapped = list.slice(0, 8).map((x: any) => {
+    const title = normalizeFourCharTitle(String(x?.title || x?.name || ''))
+    const description =
+      String(x?.description || x?.desc || '').trim() || '适合电商主图与投放素材的爆款视觉方向。'
+    let imagePrompt = String(x?.imagePrompt || x?.image_prompt || x?.fullPrompt || x?.promptText || '').trim()
+    if (!imagePrompt) {
+      imagePrompt = synthesizeImagePrompt(title, description)
+    }
+    return { title, description, imagePrompt }
+  })
   while (mapped.length < 4) {
+    const title = ['温馨治愈', '极简科技', '深夜守护', '多变生活'][mapped.length] || '风格备选'
+    const description = '请上传清晰的商品主参考图后重新分析，以生成更贴合类目的风格建议。'
     mapped.push({
-      title: ['温馨治愈', '极简科技', '深夜守护', '多变生活'][mapped.length] || '风格备选',
-      description: '请上传清晰的商品主参考图后重新分析，以生成更贴合类目的风格建议。',
+      title,
+      description,
+      imagePrompt: synthesizeImagePrompt(title, description),
     })
   }
   return mapped.slice(0, 4)
@@ -103,26 +118,34 @@ const MOCK_PRODUCT_TEXT = [
   '尺寸参数：未标注（以参考图比例为准）',
 ].join('\n')
 
-const MOCK_STYLES: { title: string; description: string }[] = [
+const MOCK_STYLES: WorkbenchStyleRow[] = [
   {
     title: '温馨治愈',
     description:
       '暖黄与奶白色调，模拟黄昏窗边柔光，温馨卧室床头场景，对角线构图，营造宁静伴睡与喂奶的母婴亲和氛围。',
+    imagePrompt:
+      '参考图同款多功能床头氛围灯保持一致，温馨治愈：暖黄与奶白色调，黄昏窗边柔光，卧室床头轻场景背景虚化，对角线构图，母婴亲和氛围。电商主图，主体占画面约70%，写实商业摄影，高清细节，背景干净，留白贴标。',
   },
   {
     title: '极简科技',
     description:
       '冷灰与纯白背景，高亮漫反射柔光，展示触控感应细节，中心对称构图，强调产品工业设计感与耐用性。',
+    imagePrompt:
+      '参考图同款商品保持一致，极简科技：冷灰与纯白棚拍背景，高亮漫反射柔光，中心对称构图，突出触控与结构细节，工业设计质感。电商主图，主体清晰占比高，边缘锐利，无杂乱道具，写实商业摄影。',
   },
   {
     title: '深夜守护',
     description:
       '深蓝与暖橙强对比，局部聚光模拟起夜光效，走廊或床底低角度拍摄，沉浸式第一视角构图，突出不刺眼照明。',
+    imagePrompt:
+      '参考图同款商品保持一致，深夜守护：深蓝与暖橙对比，局部柔聚光模拟起夜灯效，走廊或床底低角度，第一视角沉浸构图，光线柔和不刺眼。电商投放素材，主体明确，背景弱化，高清写实。',
   },
   {
     title: '多变生活',
     description:
       '明亮高调美式家居色系，自然侧光，书桌与床头多场景拼贴构图，加入书籍、绿植等生活化道具，体现多用途适应性。',
+    imagePrompt:
+      '参考图同款商品保持一致，多变生活：明亮美式家居色调，自然侧光，书桌与床头轻场景拼贴感构图，书籍与绿植作弱化道具，多用途生活感。主体占画面60–80%，背景不抢戏，写实商业摄影，适合电商主图延展。',
   },
 ]
 
@@ -187,23 +210,26 @@ export default async function handler(req: any, res: any) {
     ].join('\n')
 
     const systemStyles = [
-      '你是电商主图「爆款风格」策划，根据参考图中的商品品类与视觉特征，给出 4 组可执行的拍摄/画面风格方案。',
+      '你是电商主图「爆款风格 + 出图提示词」策划，根据参考图中的商品做 4 套互不重复的方案。',
       '',
-      '输出 JSON：{"styles":[{"title": string, "description": string}, ...]}，styles 必须恰好 4 个。',
+      '输出 JSON：{"styles":[{"title": string, "description": string, "imagePrompt": string}, ...]}，styles 必须恰好 4 个。',
       'title：必须恰好 4 个汉字（不要英文、不要标点、不要空格）。',
-      'description：80–160 字，写清色调、光影、构图、氛围、道具倾向；要具体可拍，避免空泛形容词堆砌。',
+      'description：80–160 字，给运营看的短说明（色调、光影、构图、氛围）。',
+      'imagePrompt：单独一段完整的中文出图提示词（建议 180–420 字），可直接用于文生图/图生图；必须开头强调「参考图同款商品保持一致」；融合该风格与图中可见的商品信息；写清主体占比、光影、背景、镜头感；遵守电商主图规范；禁止编造未在图中出现的参数、功效、认证、续航数字等。',
+      '四套方案的 imagePrompt 必须在场景/光影/构图上有明显差异。',
       '不要输出 Markdown 或其它字段。',
     ].join('\n')
 
     const systemFull = [
-      '你是电商图片工作台助手，同时完成：商品结构化分析 + 4 组爆款主图风格推荐。',
+      '你是电商图片工作台助手，同时完成：商品结构化分析 + 4 组「风格说明 + 完整出图提示词」。',
       '仅依据参考图中清晰可见的信息；不确定写「未知」或「未标注」，禁止编造功效、认证与参数。',
       '',
       '输出 JSON：',
-      '{"productAnalysisText": string, "product": {"name": string, "category": string, "sellingPoints": string, "targetAudience": string}, "styles":[{"title": string, "description": string}, ...]}',
+      '{"productAnalysisText": string, "product": {"name": string, "category": string, "sellingPoints": string, "targetAudience": string}, "styles":[{"title": string, "description": string, "imagePrompt": string}, ...]}',
       '',
       'productAnalysisText 格式要求：多行中文，依次包含小节：产品名称 / 产品类目 / 产品卖点 / 目标人群 / 期望场景 / 尺寸参数（规则同单任务）。',
-      'styles：恰好 4 个；title 必须恰好 4 个汉字；description 80–160 字。',
+      'styles：恰好 4 个；title 必须恰好 4 个汉字；description 80–160 字（运营可读短说明）。',
+      '每个 style 必须包含 imagePrompt：完整一段中文出图提示词（180–420 字），用户选中该风格后可直接作为主提示词；须强调与参考图商品一致；须体现该 title/description 的差异化光影与构图；禁止编造图中没有的信息。',
       '不要输出 Markdown、代码块或解释。',
     ].join('\n')
 

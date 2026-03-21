@@ -2528,7 +2528,7 @@ function ImageGenerator({
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
   const oneClickHintTimerRef = useRef(0)
   const [productAnalysisText, setProductAnalysisText] = useState('')
-  const [hotStyles, setHotStyles] = useState<{ title: string; description: string }[]>([])
+  const [hotStyles, setHotStyles] = useState<{ title: string; description: string; imagePrompt?: string }[]>([])
   const [selectedHotStyleIndex, setSelectedHotStyleIndex] = useState(0)
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
     IMAGE_SCENE_BLUEPRINT.map((b) => ({
@@ -2835,31 +2835,48 @@ function ImageGenerator({
     setModalStep(productAnalysisText.trim() || productInfo.name || productInfo.category ? 2 : 1)
   }
 
-  const selectHotStyleAndRegeneratePrompt = async (idx: number) => {
+  /** 卡片上已有完整 imagePrompt 时直接应用；否则走 image-prompt 接口兜底 */
+  const regeneratePromptFromStyleApi = async (idx: number) => {
     if (!hotStyles[idx]) return
-    setSelectedHotStyleIndex(idx)
     const jobId = ++aiJobRef.current
     setPromptRegenBusy(true)
     setAiError('')
     try {
       const aspectRatio = size
       const res = resolution
+      const st = hotStyles[idx]
       const r = await generateImagePrompt({
         product: productInfo,
         language: productInfo.language || '简体中文',
         aspectRatio,
         resolution: res,
         sceneMode,
-        hotSellingStyle: hotStyles[idx],
+        hotSellingStyle: { title: st.title, description: st.description },
         productAnalysisNotes: productAnalysisText.trim() || undefined,
       })
-      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, hotStyles[idx])
+      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, { title: st.title, description: st.description })
+      const merged = String(r.prompt || '').trim()
+      if (merged) {
+        setHotStyles((prev) => prev.map((s, i) => (i === idx ? { ...s, imagePrompt: merged } : s)))
+      }
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       alert(e?.message || '更新画面描述失败')
     } finally {
       if (jobId === aiJobRef.current) setPromptRegenBusy(false)
     }
+  }
+
+  const selectHotStyleCard = (idx: number) => {
+    if (!hotStyles[idx]) return
+    setSelectedHotStyleIndex(idx)
+    const st = hotStyles[idx]
+    if (String(st.imagePrompt || '').trim()) {
+      const jobId = ++aiJobRef.current
+      applyStyleCardAsMainPrompt(jobId, st)
+      return
+    }
+    void regeneratePromptFromStyleApi(idx)
   }
 
   const handleOneClickFill = async () => {
@@ -2875,7 +2892,7 @@ function ImageGenerator({
     setIsAiBusy(true)
     let nextProduct: ProductInfo = productInfo
     let analysisText = productAnalysisText
-    let styles: { title: string; description: string }[] = hotStyles
+    let styles: { title: string; description: string; imagePrompt?: string }[] = hotStyles
     try {
       const w = await imageWorkbenchAnalysis({
         refImage: refImageDataUrl,
@@ -2903,21 +2920,37 @@ function ImageGenerator({
       return
     }
     setIsAiBusy(false)
+    const style0 = styles[0]
+    const ip0 = String(style0?.imagePrompt || '').trim()
+    if (ip0 && jobId === aiJobRef.current) {
+      applyStyleCardAsMainPrompt(jobId, style0, nextProduct)
+      return
+    }
     setPromptRegenBusy(true)
     try {
       const aspectRatio = size
       const res = resolution
-      const style0 = styles[0]
       const r = await generateImagePrompt({
         product: nextProduct,
         language: nextProduct.language || '简体中文',
         aspectRatio,
         resolution: res,
         sceneMode,
-        hotSellingStyle: style0?.description ? style0 : undefined,
+        hotSellingStyle: style0?.description ? { title: style0.title, description: style0.description } : undefined,
         productAnalysisNotes: analysisText.trim() || undefined,
       })
-      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, style0?.description ? style0 : null, nextProduct)
+      applyGeneratedImagePrompt(
+        jobId,
+        r,
+        aspectRatio,
+        res,
+        style0?.description ? { title: style0.title, description: style0.description } : null,
+        nextProduct,
+      )
+      const merged0 = String(r.prompt || '').trim()
+      if (merged0) {
+        setHotStyles((prev) => prev.map((s, i) => (i === 0 ? { ...s, imagePrompt: merged0 } : s)))
+      }
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
@@ -2933,7 +2966,8 @@ function ImageGenerator({
       oneClickHintTimerRef.current = window.setTimeout(() => setOneClickNeedRefHint(false), 4500)
       return
     }
-    const stylePick = hotStyles[selectedHotStyleIndex]
+    const selStyleIdx = selectedHotStyleIndex
+    const stylePick = hotStyles[selStyleIdx]
     const jobId = ++aiJobRef.current
     setAiError('')
     setIsAiBusy(true)
@@ -2956,6 +2990,7 @@ function ImageGenerator({
       analysisText = w.productAnalysisText || ''
       setProductAnalysisText(analysisText)
       setProductInfo(nextProduct)
+      setHotStyles((prev) => prev.map((s) => ({ ...s, imagePrompt: '' })))
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '商品分析失败')
@@ -2973,10 +3008,23 @@ function ImageGenerator({
         aspectRatio,
         resolution: res,
         sceneMode,
-        hotSellingStyle: stylePick?.description ? stylePick : undefined,
+        hotSellingStyle: stylePick?.description
+          ? { title: stylePick.title, description: stylePick.description }
+          : undefined,
         productAnalysisNotes: analysisText.trim() || undefined,
       })
-      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, stylePick?.description ? stylePick : null, nextProduct)
+      applyGeneratedImagePrompt(
+        jobId,
+        r,
+        aspectRatio,
+        res,
+        stylePick?.description ? { title: stylePick.title, description: stylePick.description } : null,
+        nextProduct,
+      )
+      const mergedP = String(r.prompt || '').trim()
+      if (mergedP) {
+        setHotStyles((prev) => prev.map((s, i) => (i === selStyleIdx ? { ...s, imagePrompt: mergedP } : s)))
+      }
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
@@ -2995,7 +3043,7 @@ function ImageGenerator({
     const jobId = ++aiJobRef.current
     setAiError('')
     setIsAiBusy(true)
-    let styles: { title: string; description: string }[] = []
+    let styles: { title: string; description: string; imagePrompt?: string }[] = []
     let nextIdx = 0
     try {
       const w = await imageWorkbenchAnalysis({
@@ -3016,6 +3064,11 @@ function ImageGenerator({
     }
     setIsAiBusy(false)
     const pick = styles[nextIdx]
+    const ip = String(pick?.imagePrompt || '').trim()
+    if (ip && jobId === aiJobRef.current) {
+      applyStyleCardAsMainPrompt(jobId, pick)
+      return
+    }
     setPromptRegenBusy(true)
     try {
       const aspectRatio = size
@@ -3026,10 +3079,20 @@ function ImageGenerator({
         aspectRatio,
         resolution: res,
         sceneMode,
-        hotSellingStyle: pick?.description ? pick : undefined,
+        hotSellingStyle: pick?.description ? { title: pick.title, description: pick.description } : undefined,
         productAnalysisNotes: productAnalysisText.trim() || undefined,
       })
-      applyGeneratedImagePrompt(jobId, r, aspectRatio, res, pick?.description ? pick : null)
+      applyGeneratedImagePrompt(
+        jobId,
+        r,
+        aspectRatio,
+        res,
+        pick?.description ? { title: pick.title, description: pick.description } : null,
+      )
+      const mergedH = String(r.prompt || '').trim()
+      if (mergedH) {
+        setHotStyles((prev) => prev.map((s, i) => (i === nextIdx ? { ...s, imagePrompt: mergedH } : s)))
+      }
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
@@ -3057,11 +3120,24 @@ function ImageGenerator({
         aspectRatio,
         resolution: res,
         sceneMode,
-        hotSellingStyle: hotStyles[selectedHotStyleIndex]?.description ? hotStyles[selectedHotStyleIndex] : undefined,
+        hotSellingStyle:
+          hotStyles[selectedHotStyleIndex]?.description
+            ? {
+                title: hotStyles[selectedHotStyleIndex].title,
+                description: hotStyles[selectedHotStyleIndex].description,
+              }
+            : undefined,
         productAnalysisNotes: productAnalysisText.trim() || undefined,
       })
       if (jobId !== aiJobRef.current) return
-      applyGeneratedImagePrompt(jobId, r, aspectRatio, res)
+      const hs = hotStyles[selectedHotStyleIndex]
+      applyGeneratedImagePrompt(
+        jobId,
+        r,
+        aspectRatio,
+        res,
+        hs?.description ? { title: hs.title, description: hs.description } : null,
+      )
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       alert(e?.message || '重新生成失败')
@@ -3085,11 +3161,24 @@ function ImageGenerator({
           aspectRatio,
           resolution: res,
           sceneMode,
-          hotSellingStyle: hotStyles[selectedHotStyleIndex]?.description ? hotStyles[selectedHotStyleIndex] : undefined,
+          hotSellingStyle:
+            hotStyles[selectedHotStyleIndex]?.description
+              ? {
+                  title: hotStyles[selectedHotStyleIndex].title,
+                  description: hotStyles[selectedHotStyleIndex].description,
+                }
+              : undefined,
           productAnalysisNotes: productAnalysisText.trim() || undefined,
         })
         if (jobId !== aiJobRef.current) return
-        applyGeneratedImagePrompt(jobId, r, aspectRatio, res)
+        const hs = hotStyles[selectedHotStyleIndex]
+        applyGeneratedImagePrompt(
+          jobId,
+          r,
+          aspectRatio,
+          res,
+          hs?.description ? { title: hs.title, description: hs.description } : null,
+        )
       } catch (e: any) {
         if (jobId !== aiJobRef.current) return
         setAiError(e?.message || '提示词生成失败')
@@ -3403,12 +3492,16 @@ function ImageGenerator({
               ? hotStyles[selectedHotStyleIndex]
               : undefined
       const prod = productOverride || productInfo
+      const slimStyle =
+        stylePick && (stylePick.title || stylePick.description)
+          ? { title: stylePick.title, description: stylePick.description }
+          : undefined
       const r = await imageScenePlan({
         basePrompt: base,
         negativePrompt: optimizedNegativePrompt || undefined,
         product: prod,
         productAnalysisNotes: productAnalysisText.trim() || undefined,
-        hotSellingStyle: stylePick,
+        hotSellingStyle: slimStyle,
         language: prod.language || '简体中文',
       })
       if (jid !== scenePlanJobRef.current) return
@@ -3439,6 +3532,32 @@ function ImageGenerator({
     }
   }
 
+  const STYLE_CARD_DEFAULT_NEGATIVE =
+    '模糊，低清，畸形，水印，乱码文字，多余主体，杂乱背景，过曝，欠曝，噪点，塑料感，油腻感'
+
+  /** 方向 B：每条风格卡片自带完整出图主描述，选中即生效 */
+  const applyStyleCardAsMainPrompt = (
+    jobId: number,
+    style: { title: string; description: string; imagePrompt?: string },
+    productForScenes?: ProductInfo,
+  ) => {
+    if (jobId !== aiJobRef.current) return
+    const text = String(style.imagePrompt || '').trim()
+    if (!text) return
+    setPrompt(text)
+    setOptimizedPrompt(text)
+    setOptimizedNegativePrompt((prev) => (String(prev || '').trim() ? prev : STYLE_CARD_DEFAULT_NEGATIVE))
+    setPromptParts({})
+    setCategoryHint('other')
+    setPromptGenOutputSettings({ aspect: size, resolution })
+    const prod = productForScenes || productInfo
+    void refreshImageScenesPlanWithPrompt(
+      text,
+      { title: style.title, description: style.description },
+      prod,
+    )
+  }
+
   const applyGeneratedImagePrompt = (
     jobId: number,
     r: Awaited<ReturnType<typeof generateImagePrompt>>,
@@ -3458,7 +3577,11 @@ function ImageGenerator({
     setPrompt(nextP)
     setPromptParts(initialParts)
     setPromptGenOutputSettings({ aspect: aspectRatio, resolution: res })
-    void refreshImageScenesPlanWithPrompt(nextP, hotStyleForScenes, productForScenes)
+    const slimHot =
+      hotStyleForScenes === undefined || hotStyleForScenes === null
+        ? hotStyleForScenes
+        : { title: hotStyleForScenes.title, description: hotStyleForScenes.description }
+    void refreshImageScenesPlanWithPrompt(nextP, slimHot, productForScenes)
   }
 
   const toggleImageScene = (key: string) => {
@@ -3471,7 +3594,7 @@ function ImageGenerator({
       return
     }
     if (!prompt.trim()) {
-      alert('请先完成「出图基础描述」（可点「一键填充」或手动编辑）')
+      alert('请先用「一键填充」或「AI 生成」/「重新分析」生成出图描述，再点击「刷新场景方案」或生成图片')
       return
     }
     const selectedScenes = imageScenes.filter((s) => s.selected)
@@ -4042,26 +4165,35 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「一键填充」会以第一张主参考图调用 GPT-4o，同时生成商品分析与 4 组爆款风格。
+                text={`「一键填充」会以第一张主参考图调用 GPT-4o，生成商品分析与 4 组「画面方案」：每组包含短说明 + 一段完整出图主描述（已合并风格与商品信息）。
 
-也可分别点击「AI 生成」「重新分析」单独更新对应模块。出图基础描述会结合所选爆款风格与商品分析生成；之后 GPT-4o 再规划 6 组场景，您可勾选后由当前图片模型逐场景出图。`}
+点击卡片即选用该方案的出图描述；可在下方文本框继续微调。仅更新「商品分析」后，各卡片的完整描述会清空，需点「重新分析」或依赖系统自动合并（兜底接口）重新生成。
+
+之后在「场景出图」中勾选场景，由当前图片模型逐张出图。`}
               />
             </div>
-            <button
-              type="button"
-              onClick={() => void handleOneClickFill()}
-              disabled={isAiBusy || promptRegenBusy}
-              title={refImages.length ? '一键填充商品分析与爆款风格' : '需先上传参考图'}
-              className={`px-3 py-1.5 rounded-full text-sm flex items-center shrink-0 transition-colors ${
-                isAiBusy || promptRegenBusy
-                  ? 'opacity-45 cursor-not-allowed bg-white/[0.06] text-white/40 border border-white/10'
-                  : refImages.length
-                    ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-transparent'
-                    : 'cursor-pointer bg-white/[0.05] text-white/38 border border-white/[0.10] hover:bg-white/[0.08] hover:text-white/50'
-              }`}
-            >
-              <Wand2 className="w-4 h-4 mr-1 shrink-0 opacity-90" /> 一键填充
-            </button>
+            <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
+              {oneClickNeedRefHint ? (
+                <span className="text-xs text-amber-400/95 whitespace-nowrap" role="status">
+                  请先上传参考图
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleOneClickFill()}
+                disabled={isAiBusy || promptRegenBusy}
+                title={refImages.length ? '一键填充商品分析与爆款风格' : '需先上传参考图'}
+                className={`px-3 py-1.5 rounded-full text-sm flex items-center shrink-0 transition-colors ${
+                  isAiBusy || promptRegenBusy
+                    ? 'opacity-45 cursor-not-allowed bg-white/[0.06] text-white/40 border border-white/10'
+                    : refImages.length
+                      ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-transparent'
+                      : 'cursor-pointer bg-white/[0.05] text-white/38 border border-white/[0.10] hover:bg-white/[0.08] hover:text-white/50'
+                }`}
+              >
+                <Wand2 className="w-4 h-4 mr-1 shrink-0 opacity-90" /> 一键填充
+              </button>
+            </div>
           </div>
 
           <div className="rounded-xl border border-white/12 bg-white/[0.03] p-3 mb-4">
@@ -4087,9 +4219,9 @@ function ImageGenerator({
           <div className="rounded-xl border border-white/12 bg-white/[0.03] p-3 mb-4">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
               <div>
-                <div className="text-sm font-medium text-white/88">爆款风格选择</div>
+                <div className="text-sm font-medium text-white/88">画面方案（风格 + 出图描述）</div>
                 <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
-                  基于您选择的 Amazon 平台，为您推荐以下爆款图片风格
+                  每组已含完整出图主描述；点选卡片即切换当前方案。基于 Amazon 平台常见爆款视觉归纳。
                 </p>
               </div>
               <button
@@ -4103,7 +4235,7 @@ function ImageGenerator({
             </div>
             {hotStyles.length === 0 ? (
               <div className="text-center text-xs text-white/40 py-8 border border-dashed border-white/12 rounded-xl">
-                上传主参考图后，使用「一键填充」或「重新分析」生成 4 组风格（标题建议 4 字）
+                上传主参考图后，使用「一键填充」或「重新分析」生成 4 组画面方案（标题建议 4 字）
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2.5">
@@ -4111,7 +4243,7 @@ function ImageGenerator({
                   <button
                     key={`${st.title}_${idx}`}
                     type="button"
-                    onClick={() => void selectHotStyleAndRegeneratePrompt(idx)}
+                    onClick={() => selectHotStyleCard(idx)}
                     disabled={promptRegenBusy}
                     className={`text-left rounded-xl border p-3 transition-all disabled:opacity-50 ${
                       selectedHotStyleIndex === idx
@@ -4125,6 +4257,26 @@ function ImageGenerator({
                 ))}
               </div>
             )}
+            {hotStyles.length > 0 ? (
+              <div className="mt-3 space-y-1.5">
+                <label className="text-xs font-medium text-white/55" htmlFor="tikgen-style-card-prompt">
+                  当前方案 · 出图主描述（随选中卡片切换，可直接编辑）
+                </label>
+                <textarea
+                  id="tikgen-style-card-prompt"
+                  value={hotStyles[selectedHotStyleIndex]?.imagePrompt ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    const idx = selectedHotStyleIndex
+                    setHotStyles((prev) => prev.map((s, i) => (i === idx ? { ...s, imagePrompt: v } : s)))
+                    setPrompt(v)
+                    setOptimizedPrompt(v)
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl min-h-[128px] text-sm leading-relaxed bg-black/25 border border-white/10 text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                  placeholder="选中某一方案后在此修改；内容与该卡片绑定，切换卡片会切换为对应文案。"
+                />
+              </div>
+            ) : null}
           </div>
 
           {outputSpecsMismatch ? (
@@ -4144,31 +4296,6 @@ function ImageGenerator({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <label className="block text-sm font-medium text-white/88">出图基础描述</label>
-            <div className="flex items-center gap-2 flex-wrap justify-end min-w-0">
-              {oneClickNeedRefHint ? (
-                <span className="text-xs text-amber-400/95 whitespace-nowrap shrink-0" role="status">
-                  请先上传参考图
-                </span>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => openAdvancedPromptModal()}
-                disabled={isAiBusy}
-                className="text-xs px-2.5 py-1 rounded-lg border border-white/15 text-white/55 hover:text-white/80 hover:bg-white/[0.06] disabled:opacity-45"
-              >
-                结构化编辑（高级）
-              </button>
-            </div>
-          </div>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="w-full px-4 py-3 border border-white/12 rounded-xl min-h-[120px] text-sm bg-black/20 text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
-            placeholder="由 AI 根据商品分析与爆款风格生成，也可直接手写…"
-          />
-
           <div className="mt-5 pt-4 border-t border-white/10">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
               <div>
@@ -4177,15 +4304,25 @@ function ImageGenerator({
                   GPT-4o 规划 6 组场景，默认全选；取消勾选可跳过。点击下方按钮将用当前模型对所选场景逐张出图。
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void refreshImageScenesPlanWithPrompt(prompt)}
-                disabled={scenesPlanBusy || !prompt.trim() || isAiBusy}
-                className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 shrink-0 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
-              >
-                {scenesPlanBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                刷新场景方案
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => openAdvancedPromptModal()}
+                  disabled={isAiBusy}
+                  className="text-[11px] px-2 py-1 rounded-lg border border-white/12 text-white/45 hover:text-white/75 hover:bg-white/[0.06] disabled:opacity-45"
+                >
+                  结构化编辑（高级）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshImageScenesPlanWithPrompt(prompt)}
+                  disabled={scenesPlanBusy || !prompt.trim() || isAiBusy}
+                  className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 shrink-0 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
+                >
+                  {scenesPlanBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  刷新场景方案
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {imageScenes.map((sc) => (

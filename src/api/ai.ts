@@ -71,7 +71,7 @@ export async function beautifyScript(params: { script: string; tags: string[]; l
   return { optimized: data.optimized, _mock: data._mock }
 }
 
-export type HotSellingStylePayload = { title: string; description: string }
+export type HotSellingStylePayload = { title: string; description: string; imagePrompt?: string }
 
 /** 图片工作台：商品分析 + 爆款风格（视觉，主参考图） */
 export async function imageWorkbenchAnalysis(params: {
