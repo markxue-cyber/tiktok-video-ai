@@ -400,6 +400,32 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)) !important;
 }
 
+/* 图片生成页：单面板 + 模块分隔线，避免「框套框」 */
+.workbench-root .tikgen-panel {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 48px rgba(3, 6, 18, 0.35) !important;
+  backdrop-filter: blur(14px);
+}
+
+.workbench-root .tikgen-module-title {
+  color: rgba(196, 181, 253, 0.82) !important;
+  letter-spacing: 0.05em;
+}
+
+/* 参考图拖拽区：内阴影描边代替粗虚线外框 */
+.workbench-root .tikgen-ref-dropzone {
+  background: rgba(0, 0, 0, 0.22) !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07) !important;
+}
+
+.workbench-root .tikgen-ref-dropzone:hover {
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.22) !important;
+}
+
 /* 图片工作台：模型 / 分辨率 / 比例 一行三列下拉 */
 .workbench-root select.tikgen-spec-select {
   background-color: rgba(0, 0, 0, 0.32) !important;

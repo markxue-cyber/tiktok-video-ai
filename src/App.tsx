@@ -4226,10 +4226,11 @@ function ImageGenerator({
   return (
     <>
     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="bg-white rounded-2xl p-6 shadow-lg overflow-visible">
-        <div className="workbench-form-section p-4 mb-5">
+      <div className="tikgen-panel rounded-2xl p-5 sm:p-6 overflow-visible">
+        <div className="space-y-0">
+        <section className="pb-8">
           <div className="flex items-center gap-1.5 mb-3">
-            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">模型与规格</div>
+            <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">模型与规格</div>
             <ImageFormTip
               wide
               label="说明"
@@ -4250,7 +4251,7 @@ function ImageGenerator({
                   id="tikgen-image-model"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-9 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
                 >
                   {imageModelOptions.map((m) => (
                     <option key={m.id} value={m.id} disabled={!!m.unavailableReason}>
@@ -4272,7 +4273,7 @@ function ImageGenerator({
                   id="tikgen-image-resolution"
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value as ImageRes)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
                 >
                   {imageCaps.resolutions.map((r) => (
                     <option key={r} value={r}>
@@ -4292,7 +4293,7 @@ function ImageGenerator({
                   id="tikgen-image-aspect"
                   value={size}
                   onChange={(e) => setSize(e.target.value as ImageAspect)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border border-white/12 bg-black/30 py-2.5 pl-3 pr-9 text-sm text-white/92 shadow-sm outline-none transition-colors hover:border-white/18 focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/30"
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
                 >
                   {imageCaps.aspectRatios.map((ar) => (
                     <option key={ar} value={ar}>
@@ -4303,12 +4304,12 @@ function ImageGenerator({
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="workbench-form-section p-4 mb-5">
-          <div className="flex items-center justify-between gap-2 mb-2">
+        <section className="border-t border-white/[0.08] pt-8">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">参考图</div>
+              <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">参考图</div>
               <ImageFormTip
                 wide
                 label="参考图说明"
@@ -4322,7 +4323,7 @@ function ImageGenerator({
             <div className="text-xs text-white/50 shrink-0 tabular-nums">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
           <div
-            className="border-2 border-dashed border-gray-300 rounded-xl p-2.5 relative"
+            className="tikgen-ref-dropzone rounded-xl p-2.5 relative cursor-pointer"
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -4365,7 +4366,9 @@ function ImageGenerator({
                         moveRefImage(draggingRefId, img.id)
                         setDraggingRefId('')
                       }}
-                      className={`relative rounded-lg overflow-hidden border bg-gray-50 ${draggingRefId === img.id ? 'opacity-60 ring-1 ring-purple-300' : ''}`}
+                      className={`relative rounded-lg overflow-hidden bg-black/35 ring-1 ring-inset ring-white/[0.1] ${
+                        draggingRefId === img.id ? 'opacity-60 ring-violet-400/45' : ''
+                      }`}
                     >
                       <button
                         type="button"
@@ -4409,7 +4412,7 @@ function ImageGenerator({
                           e.stopPropagation()
                           refUploadInputRef.current?.click()
                         }}
-                        className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
+                        className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-white/[0.07] hover:text-white/65"
                       >
                         <Upload className="w-4 h-4" />
                         <span className="text-[11px]">上传</span>
@@ -4422,7 +4425,7 @@ function ImageGenerator({
                           setAssetSelectedIds(new Set())
                           setShowAssetPicker(true)
                         }}
-                        className="h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-50"
+                        className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-white/[0.07] hover:text-white/65"
                       >
                         <Folder className="w-4 h-4" />
                         <span className="text-[11px]">从资产库选择</span>
@@ -4437,7 +4440,7 @@ function ImageGenerator({
                 <div className="text-sm font-medium text-white/75">点击或拖拽上传</div>
                 <div className="flex items-center justify-center gap-2">
                   <label
-                    className="px-3 py-1.5 rounded-lg border text-xs cursor-pointer hover:bg-gray-50"
+                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white/[0.06] ring-1 ring-inset ring-white/[0.1] hover:bg-white/[0.1] text-white/75"
                     onClick={(e) => {
                       e.stopPropagation()
                       refUploadInputRef.current?.click()
@@ -4453,7 +4456,7 @@ function ImageGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.06] ring-1 ring-inset ring-white/[0.1] hover:bg-white/[0.1] text-white/75"
                   >
                     从资产库选择
                   </button>
@@ -4461,7 +4464,7 @@ function ImageGenerator({
               </div>
             )}
             {refUploadBusy && (
-              <div className="absolute inset-0 rounded-xl bg-black/30 backdrop-blur-[1px] flex items-center justify-center">
+              <div className="absolute inset-0 rounded-xl bg-black/40 backdrop-blur-sm flex items-center justify-center">
                 <div className="text-sm text-white/90 flex items-center">
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                   上传中...
@@ -4471,12 +4474,12 @@ function ImageGenerator({
           </div>
           {refUploadNotice ? <div className="mt-2 text-xs text-amber-500">{refUploadNotice}</div> : null}
           {refUploadBusy ? <div className="mt-1 text-xs text-white/45">上传中…</div> : null}
-        </div>
+        </section>
 
-        <div className="workbench-form-section p-4 mb-5">
+        <section className="border-t border-white/[0.08] pt-8 mt-2">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">商品分析与爆款风格</div>
+              <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">商品分析与爆款风格</div>
               <ImageFormTip
                 wide
                 label="说明"
@@ -4510,7 +4513,7 @@ function ImageGenerator({
             </div>
           </div>
 
-          <div className="border-b border-white/[0.09] pb-5 mb-5">
+          <div className="pb-6 mb-6 border-b border-white/[0.06]">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium text-white/88">商品分析</span>
               <button
@@ -4526,7 +4529,7 @@ function ImageGenerator({
             <textarea
               value={productAnalysisText}
               onChange={(e) => setProductAnalysisText(e.target.value)}
-              className="w-full resize-y min-h-[168px] rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/35"
+              className="w-full resize-y min-h-[168px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
           </div>
@@ -4551,7 +4554,7 @@ function ImageGenerator({
             </div>
             {hotStyles.length === 0 ? (
               <div className="space-y-2">
-                <div className="text-center text-xs text-white/40 py-6 border border-dashed border-white/14 rounded-xl bg-white/[0.02]">
+                <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
                   上传主参考图后，使用「一键填充」或「重新分析」生成画面方案（标题建议 4 字）
                 </div>
                 <button
@@ -4560,7 +4563,7 @@ function ImageGenerator({
                     setCustomStylePromptOnly('')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="w-full flex flex-col items-center justify-center min-h-[100px] rounded-xl border border-dashed border-white/18 bg-white/[0.02] hover:bg-white/[0.05] hover:border-violet-400/35 text-center p-3 transition-colors"
+                  className="flex min-h-[100px] w-full flex-col items-center justify-center rounded-xl bg-black/15 p-3 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-black/25 hover:ring-violet-400/25"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
                   <span className="text-[10px] text-white/45 mt-1">用一段话描述你想要的画面与商品关系</span>
@@ -4581,11 +4584,11 @@ function ImageGenerator({
                         selectHotStyleCard(idx)
                       }
                     }}
-                    className={`group/scard relative z-0 text-left rounded-2xl border px-3.5 pt-3 pb-3 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
+                    className={`group/scard relative z-0 rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
                       selectedHotStyleIndex === idx
-                        ? 'border-violet-400/50 bg-gradient-to-b from-violet-500/[0.14] to-white/[0.04] shadow-[0_0_0_1px_rgba(167,139,250,0.22)]'
-                        : 'border-white/10 bg-white/[0.025] hover:border-white/16 hover:bg-white/[0.04]'
-                    } ${promptRegenBusy ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
+                        ? 'bg-gradient-to-b from-violet-500/[0.16] to-white/[0.03] ring-2 ring-violet-400/35'
+                        : 'bg-black/20 ring-1 ring-inset ring-white/[0.08] hover:bg-black/28 hover:ring-white/14'
+                    } ${promptRegenBusy ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold text-white/95 leading-tight line-clamp-1 pr-1">{st.title}</h3>
@@ -4600,7 +4603,7 @@ function ImageGenerator({
                           })
                           setStyleCardEditIndex(idx)
                         }}
-                        className="shrink-0 rounded-md border border-white/12 bg-black/35 p-1.5 text-violet-200/95 transition-colors hover:border-violet-400/35 hover:bg-violet-500/15"
+                        className="shrink-0 rounded-md bg-black/40 p-1.5 text-violet-200/95 ring-1 ring-inset ring-white/10 transition-colors hover:bg-violet-500/15 hover:ring-violet-400/35"
                         title="编辑方案"
                       >
                         <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
@@ -4628,7 +4631,7 @@ function ImageGenerator({
                     setCustomStylePromptOnly(i >= 0 ? hotStyles[i].imagePrompt || '' : '')
                     setCustomStyleModalOpen(true)
                   }}
-                  className="flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed border-white/18 bg-white/[0.02] p-3 text-center transition-colors hover:border-violet-400/35 hover:bg-white/[0.05]"
+                  className="flex min-h-[168px] flex-col items-center justify-center rounded-xl bg-black/15 p-3 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-black/25 hover:ring-violet-400/25"
                 >
                   <span className="text-sm font-semibold text-violet-200">自定义方案</span>
                   <span className="mt-1 text-[10px] text-white/45">一段话描述想要的画面、风格与卖点呈现</span>
@@ -4664,7 +4667,9 @@ function ImageGenerator({
           {aiError ? (
             <div className="mt-3 text-xs text-red-200/95 bg-red-500/12 border border-red-400/25 rounded-lg px-3 py-2">{aiError}</div>
           ) : null}
-        </div>
+        </section>
+
+        <div className="border-t border-white/[0.08] pt-6 mt-2">
         <div className="text-xs text-white/50 mb-2 text-center sm:text-left">
           <span className="text-white/75 font-medium">{currentModelLabel}</span>
           <span className="mx-1.5 text-white/20">·</span>
@@ -4690,8 +4695,10 @@ function ImageGenerator({
             </>
           )}
         </button>
+        </div>
+        </div>
       </div>
-      <div className="bg-white rounded-2xl p-6 shadow-lg lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
+      <div className="tikgen-panel rounded-2xl p-5 sm:p-6 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
         <h2 className="text-xl font-bold mb-4 text-white/95">生成历史</h2>
         {genErrorText && !sceneBoardPreparing ? (
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -4722,7 +4729,7 @@ function ImageGenerator({
           </div>
         ) : null}
         {sceneRunBoard ? (
-          <div className="mb-8 rounded-2xl border border-white/14 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+          <div className="mb-8 rounded-xl bg-black/20 p-4 ring-1 ring-inset ring-white/[0.07]">
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
