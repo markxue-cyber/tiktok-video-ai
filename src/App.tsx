@@ -159,8 +159,10 @@ type ImageGenHistoryTask = {
   outputUrls: string[]
   /** 多场景批量出图时各张对应的场景标题 */
   sceneLabels?: string[]
-  /** 与各 outputUrls 对齐的短说明（卡片外露一行） */
+  /** 与各 outputUrls 对齐的短说明（旧存档；新记录优先用 sceneDescriptions 悬停展示） */
   sceneTeasers?: string[]
+  /** 与各 outputUrls 对齐的完整场景说明（description + imagePrompt），悬停场景名展示 */
+  sceneDescriptions?: string[]
   errorMessage?: string
 }
 
@@ -485,6 +487,12 @@ function buildHistoryTaskFromSceneBoard(
   const sceneTeasers = doneSlots.map((s) =>
     styleCardTeaser((s.description || s.imagePrompt || '').replace(/\s+/g, ' ').trim(), 42),
   )
+  const sceneDescriptions = doneSlots.map((s) => {
+    const d = String(s.description || '').trim()
+    const ip = String(s.imagePrompt || '').trim()
+    if (d && ip) return `${d}\n\n${ip}`
+    return d || ip || ''
+  })
 
   const basePrompt = board.basePrompt || ''
   const basePromptStored = basePrompt
@@ -525,6 +533,7 @@ function buildHistoryTaskFromSceneBoard(
     outputUrls,
     sceneLabels,
     sceneTeasers,
+    sceneDescriptions,
     errorMessage: failMsg,
   }
 }
@@ -5065,7 +5074,12 @@ function ImageGenerator({
                 label="说明"
                 text={`「重新分析」会同时刷新商品分析与 4 套爆款风格。
 
-点左侧「免费生成预览」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
+【爆款风格 和 6 场景分别管什么】
+· 爆款风格 = 整条素材的「总路线」：气质、叙事、光影基调（会写进当前出图主描述）。
+· 6 场景 = 在同一条路线下，拆成 6 种「镜头分工」：白底主图、卖点特写、生活方式…方便一次出齐投放图。
+两边文案可能都提到背景/光线，属于正常叠加，不是填错。出每一张图时 = 主描述 + 当前这一格的拍法；需要纯白底时请勾选「商业白底主图」等对应格。
+
+点「免费生成预览」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
             </div>
             <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
@@ -5132,7 +5146,9 @@ function ImageGenerator({
                 <ImageFormTip
                   wide
                   label="操作说明"
-                  text="点卡片切换爆款风格；鼠标悬停卡片可查看完整「出图主描述」浮层；点铅笔在弹窗中编辑。可添加「自定义方案」。"
+                  text="点卡片切换爆款风格；悬停卡片可看完整「出图主描述」；点铅笔编辑。可添加「自定义方案」。
+
+与下方 6 场景的分工：这里定「整套像什么」；6 场景定「这一张在素材里扮演哪种镜头」。若与白底/户外等有冲突，以勾选的场景格为准，或把主描述里过强的背景描写改短。"
                 />
               </div>
               <button
@@ -5330,6 +5346,13 @@ function ImageGenerator({
                 type="button"
                 onClick={() => void handlePrepareSceneBoard()}
                 disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
+                title={
+                  !refImages.length
+                    ? '请先上传参考图'
+                    : !prompt.trim()
+                      ? '请先生成出图主描述（一键分析或选中爆款风格）'
+                      : '在爆款风格/主描述基础上，规划 6 种电商镜头分工（可与主描述有少量重复，出图时会叠加强调当前格）'
+                }
                 className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
                   sceneBoardPreparing || (prompt.trim() && refImages.length > 0)
                     ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
@@ -5411,6 +5434,11 @@ function ImageGenerator({
                       {formatImageResLabel(resolution)}
                     </span>
                   </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-white/45">
+                    以下 6 格在<strong className="font-medium text-white/58">当前爆款风格 / 主描述</strong>
+                    之上标注「每张图的镜头类型」；可只勾选需要的格再批量生成。与主描述有重复用词时，以<strong className="font-medium text-white/58">当前格标题与说明</strong>
+                    为准。
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
@@ -5739,30 +5767,38 @@ function ImageGenerator({
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {task.outputUrls.map((url, idx) => {
                               const label = task.sceneLabels?.[idx] || `图 ${idx + 1}`
-                              const teaser =
-                                task.sceneTeasers?.[idx] ||
+                              const descFull =
+                                (task.sceneDescriptions?.[idx] || '').trim() ||
+                                (task.sceneTeasers?.[idx] || '').trim() ||
                                 styleCardTeaser(
                                   String(task.prompt || '')
                                     .split(/\n────────\n/)[1]
                                     ?.replace(/^\s*(画面方案|爆款风格)：/, '')
                                     .replace(/\s+/g, ' ')
                                     .trim() || '',
-                                  40,
+                                  400,
                                 )
                               return (
                                 <div
                                   key={`${task.id}_out_${idx}`}
-                                  className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 group/out"
+                                  className="flex flex-col overflow-visible rounded-2xl border border-white/12 bg-black/30 group/out"
                                 >
-                                  <div className="space-y-1 px-2.5 pb-2 pt-2.5">
-                                    <span className={`${SCENE_TAG_CLASS} max-w-full truncate`} title={label}>
-                                      {label}
-                                    </span>
-                                    <p className="h-[2rem] text-[10px] leading-snug text-white/42 overflow-hidden">
-                                      {teaser || '\u00a0'}
-                                    </p>
+                                  <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
+                                    <div
+                                      className={`relative group/histscene max-w-full ${descFull ? 'cursor-help' : ''}`}
+                                    >
+                                      <span className={`${SCENE_TAG_CLASS} max-w-full truncate block`}>{label}</span>
+                                      {descFull ? (
+                                        <div
+                                          className="pointer-events-none absolute left-1/2 z-[60] min-w-[13rem] max-w-[min(22rem,calc(100vw-1.5rem))] -translate-x-1/2 bottom-full translate-y-2 rounded-xl border border-white/18 bg-[#14141c]/98 px-3 py-2 text-[11px] leading-relaxed text-white/90 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md max-h-[min(12rem,40vh)] overflow-y-auto whitespace-pre-wrap break-words opacity-0 transition-[opacity] duration-100 ease-out group-hover/histscene:pointer-events-auto group-hover/histscene:opacity-100"
+                                          role="tooltip"
+                                        >
+                                          {descFull}
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   </div>
-                                  <div className="relative aspect-square w-full bg-black/35">
+                                  <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35">
                                     <button
                                       type="button"
                                       className="absolute inset-0 z-[1] block"
