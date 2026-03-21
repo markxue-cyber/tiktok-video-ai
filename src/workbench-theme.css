@@ -342,7 +342,23 @@
   color: rgba(255, 255, 255, 0.88) !important;
 }
 
-/* Image generator: ℹ️ popover (click to open) */
+/* Image generator: ℹ️ trigger — no “button tile”, icon only */
+.workbench-root .image-form-tip-trigger {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.workbench-root .image-form-tip-trigger:focus {
+  outline: none !important;
+}
+
+/* Image generator: ℹ️ popover (hover) */
 .workbench-root .image-form-tip-pop {
   background: rgba(12, 14, 32, 0.97) !important;
   border-color: rgba(167, 139, 250, 0.28) !important;

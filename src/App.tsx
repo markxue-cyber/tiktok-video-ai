@@ -2371,43 +2371,34 @@ function VideoGenerator({
   )
 }
 
-/** 图片生成页：将说明收进 ℹ️，避免主界面铺满小字 */
+/** 图片生成页：hover / 聚焦显示说明；图标无按钮方框感 */
 function ImageFormTip({ text, wide, label = '查看说明' }: { text: string; wide?: boolean; label?: string }) {
   const [open, setOpen] = useState(false)
-  const wrapRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onDoc)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onDoc)
-    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
   return (
-    <div className="relative inline-flex items-center shrink-0" ref={wrapRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="p-1 rounded-md text-white/40 hover:text-violet-200/90 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50"
-        aria-label={label}
-        aria-expanded={open}
-      >
-        <Info className="w-4 h-4" strokeWidth={2} />
-      </button>
+    <div
+      className="relative inline-flex items-center shrink-0"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span className="image-form-tip-trigger inline-flex cursor-help text-violet-400/65 hover:text-violet-200/95 transition-colors duration-150" aria-label={label}>
+        <Info className="w-[15px] h-[15px]" strokeWidth={1.5} aria-hidden />
+      </span>
       {open ? (
-        <div
-          role="tooltip"
-          className={`image-form-tip-pop absolute z-[80] left-0 top-full mt-1.5 ${wide ? 'w-[min(22rem,calc(100vw-2rem))]' : 'w-[min(19rem,calc(100vw-2rem))]'} rounded-xl border px-3 py-2.5 text-xs leading-relaxed shadow-2xl`}
-        >
-          <div className="whitespace-pre-wrap text-white/88">{text}</div>
+        <div className="absolute left-0 top-full z-[80] -mt-1.5 pt-1.5" role="tooltip">
+          <div
+            className={`image-form-tip-pop rounded-xl border px-3 py-2.5 text-xs leading-relaxed shadow-2xl max-h-[min(70vh,24rem)] overflow-y-auto ${wide ? 'w-[min(22rem,calc(100vw-2rem))]' : 'w-[min(19rem,calc(100vw-2rem))]'}`}
+          >
+            <div className="whitespace-pre-wrap text-white/88">{text}</div>
+          </div>
         </div>
       ) : null}
     </div>
