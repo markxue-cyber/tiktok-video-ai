@@ -753,6 +753,8 @@ let assetsPrefetchAt = 0
 let assetsWarmupDoneForToken = ''
 const SESSION_KEY = 'tikgen.session'
 const SUPPORT_TICKET_ENABLED = false
+/** 设为 true 可恢复侧栏「模板库」入口与页面 */
+const TEMPLATES_LIBRARY_ENABLED = false
 
 function parseSessionFromUrl(): null | {
   access_token: string
@@ -1026,6 +1028,13 @@ function App() {
   }, [isDevAdmin, mainNav])
 
   useEffect(() => {
+    if (!TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates') {
+      setMainNav('image')
+      setImageSubNav('generate')
+    }
+  }, [mainNav])
+
+  useEffect(() => {
     if (!accessToken || page !== 'home') return
     if (assetsWarmupDoneForToken === accessToken) return
     assetsWarmupDoneForToken = accessToken
@@ -1069,8 +1078,8 @@ function App() {
       if (imageSubNav === 'tools') {
         if (imageToolsTab === 'removeBg') return '图片工具-去除背景'
         if (imageToolsTab === 'upscale') return '图片工具-高清放大'
-        if (imageToolsTab === 'translate') return '图片工具-图片翻译'
         if (imageToolsTab === 'compress') return '图片工具-图片压缩'
+        if (imageToolsTab === 'translate') return '图片工具-图片翻译'
         return '图片工具-去水印'
       }
     }
@@ -1083,7 +1092,7 @@ function App() {
       }
       return '视频分析'
     }
-    if (mainNav === 'templates') return '模板与案例库'
+    if (TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates') return '模板与案例库'
     if (mainNav === 'tasks') return '任务中心'
     if (mainNav === 'assets') return '资产库'
     if (mainNav === 'benefits') return '个人权益'
@@ -1572,7 +1581,9 @@ function App() {
                   setVideoSubNav('tools')
                 }}
               />
-              <NavPrimary collapsed icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+              {TEMPLATES_LIBRARY_ENABLED ? (
+                <NavPrimary collapsed icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+              ) : null}
               <NavPrimary collapsed icon={<ListTodo className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
               <NavPrimary
                 collapsed
@@ -1657,7 +1668,9 @@ function App() {
                 />
               </div>
 
-              <NavPrimary collapsed={false} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+              {TEMPLATES_LIBRARY_ENABLED ? (
+                <NavPrimary collapsed={false} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
+              ) : null}
               <NavPrimary collapsed={false} icon={<ListTodo className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
               <NavPrimary
                 collapsed={false}
@@ -1691,15 +1704,15 @@ function App() {
                 {mainNav === 'image' && imageSubNav === 'generate' && '图片生成'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'upscale' && '图片工具 · 高清放大'}
-                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
+                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeWatermark' && '图片工具 · 去水印'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' && '视频工具 · 视频生成'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 画质提升'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'watermark' && '视频工具 · 去水印'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'subtitle' && '视频工具 · 去字幕'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
-                {mainNav === 'templates' && '模板与案例库'}
+                {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && '模板与案例库'}
                 {mainNav === 'tasks' && '任务中心'}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
@@ -1806,7 +1819,7 @@ function App() {
             <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
           </div>
           {mainNav === 'video' && videoSubNav === 'analyze' ? <WorkbenchComingSoon title="视频分析" /> : null}
-          {mainNav === 'templates' && (
+          {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && (
             <TemplatesLibrary
               onApplyVideo={(preset) => {
                 setVideoTemplatePreset(preset)
@@ -1899,8 +1912,8 @@ function ImageToolsWorkbench({
   const items: { id: ImageToolsTabId; label: string; icon: ReactNode }[] = [
     { id: 'removeBg', label: '去除背景', icon: <Eraser className="w-4 h-4 shrink-0" /> },
     { id: 'upscale', label: '高清放大', icon: <Maximize2 className="w-4 h-4 shrink-0" /> },
-    { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
     { id: 'compress', label: '图片压缩', icon: <Minimize2 className="w-4 h-4 shrink-0" /> },
+    { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
     { id: 'removeWatermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
   ]
   return (
@@ -1908,8 +1921,8 @@ function ImageToolsWorkbench({
       <WorkbenchSubTabNav ariaLabel="图片工具" items={items} tab={tab} onTabChange={onTabChange} />
       {tab === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
       {tab === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
-      {tab === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
       {tab === 'compress' ? <WorkbenchComingSoon title="图片压缩" /> : null}
+      {tab === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
       {tab === 'removeWatermark' ? <WorkbenchComingSoon title="去水印" /> : null}
     </div>
   )
