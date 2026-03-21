@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell } from 'lucide-react'
+import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import { beautifyScript, generateImagePrompt, generateVideoScripts, parseProductInfo, type ProductInfo } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -2371,6 +2371,49 @@ function VideoGenerator({
   )
 }
 
+/** 图片生成页：将说明收进 ℹ️，避免主界面铺满小字 */
+function ImageFormTip({ text, wide, label = '查看说明' }: { text: string; wide?: boolean; label?: string }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDoc)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDoc)
+    }
+  }, [open])
+
+  return (
+    <div className="relative inline-flex items-center shrink-0" ref={wrapRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="p-1 rounded-md text-white/40 hover:text-violet-200/90 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50"
+        aria-label={label}
+        aria-expanded={open}
+      >
+        <Info className="w-4 h-4" strokeWidth={2} />
+      </button>
+      {open ? (
+        <div
+          role="tooltip"
+          className={`image-form-tip-pop absolute z-[80] left-0 top-full mt-1.5 ${wide ? 'w-[min(22rem,calc(100vw-2rem))]' : 'w-[min(19rem,calc(100vw-2rem))]'} rounded-xl border px-3 py-2.5 text-xs leading-relaxed shadow-2xl`}
+        >
+          <div className="whitespace-pre-wrap text-white/88">{text}</div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ImageGenerator({
   templatePreset,
   onTemplateApplied,
@@ -3410,9 +3453,12 @@ function ImageGenerator({
   return (
     <>
     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
+      <div className="bg-white rounded-2xl p-6 shadow-lg overflow-visible">
         <div className="workbench-form-section p-4 mb-5">
-          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-2">生成模型</div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">生成模型</div>
+            <ImageFormTip text="切换模型后，下方「输出规格」中的画幅与分辨率会随该模型能力自动变化。" label="生成模型说明" />
+          </div>
           <label htmlFor="tikgen-image-model" className="sr-only">
             生成模型
           </label>
@@ -3424,14 +3470,23 @@ function ImageGenerator({
               </option>
             ))}
           </select>
-          <p className="text-[11px] text-gray-500 mt-2">切换模型后，下方画幅与分辨率选项会随模型能力变化。</p>
           {modelChangeNotice ? <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-2">{modelChangeNotice}</div> : null}
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
-          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-2">参考图</div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] text-white/55">支持上传 1–5 张，JPG / PNG / WEBP，单张 ≤10MB</span>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">参考图</div>
+              <ImageFormTip
+                wide
+                label="参考图说明"
+                text={`支持 1–5 张，JPG / PNG / WEBP，单张 ≤10MB。
+
+第一张为「主参考」，可拖拽调整顺序；主参考对构图与商品识别影响最大。
+
+可点击上传区域、或下方按钮从本地上传 / 资产库选择。`}
+              />
+            </div>
             <div className="text-xs text-white/50 shrink-0 tabular-nums">{refImages.length}/{MAX_REF_IMAGES}</div>
           </div>
           <div
@@ -3545,10 +3600,9 @@ function ImageGenerator({
                 </div>
               </div>
             ) : (
-              <div className="py-2 text-center min-h-[150px] flex flex-col items-center justify-center">
-                <Upload className="w-6 h-6 mx-auto text-gray-300 mb-1.5" />
-                <div className="text-base font-semibold mb-1">点击或拖拽到此区域上传</div>
-                <div className="text-[10px] text-white/45 mb-2.5">也可使用下方按钮</div>
+              <div className="py-2 text-center min-h-[130px] flex flex-col items-center justify-center gap-3">
+                <Upload className="w-7 h-7 mx-auto text-white/35" />
+                <div className="text-sm font-medium text-white/75">点击或拖拽上传</div>
                 <div className="flex items-center justify-center gap-2">
                   <label
                     className="px-3 py-1.5 rounded-lg border text-xs cursor-pointer hover:bg-gray-50"
@@ -3584,13 +3638,20 @@ function ImageGenerator({
             )}
           </div>
           {refUploadNotice ? <div className="mt-2 text-xs text-amber-500">{refUploadNotice}</div> : null}
-          {refUploadBusy ? <div className="mt-1 text-xs text-gray-500">正在上传图片，请稍候...</div> : null}
-          <p className="text-[11px] text-gray-500 mt-2">第一张为「主参考」，拖拽可调整顺序；主参考对构图与商品识别影响最大。</p>
+          {refUploadBusy ? <div className="mt-1 text-xs text-white/45">上传中…</div> : null}
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
-          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">输出规格</div>
-          <p className="text-[11px] text-gray-500 mb-3">选项随当前模型能力变化。一键生成提示词会结合此处<strong className="text-gray-700">画幅</strong>与<strong className="text-gray-700">分辨率</strong>优化文案。</p>
+          <div className="flex items-center gap-1.5 mb-3">
+            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">输出规格</div>
+            <ImageFormTip
+              wide
+              label="输出规格说明"
+              text={`画幅与分辨率的可选项会随当前模型变化。
+
+一键生成提示词会结合此处的画幅与分辨率优化文案。若之后修改了画幅或分辨率，建议重新生成提示词，以免文案与出图设置不一致。`}
+            />
+          </div>
           <label className="block text-sm font-medium mb-2">比例</label>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {imageCaps.aspectRatios.map((ar) => (
@@ -3636,8 +3697,16 @@ function ImageGenerator({
         </div>
 
         <div className="workbench-form-section p-4 mb-5">
-          <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide mb-1">提示词</div>
-          <p className="text-[11px] text-gray-500 mb-2">生成图片以本页下方文本框中的完整 prompt 为准；结构化编辑请在一键生成弹窗内完成。</p>
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="workbench-form-section-title text-xs font-semibold uppercase tracking-wide">提示词</div>
+            <ImageFormTip
+              wide
+              label="提示词说明"
+              text={`最终出图以本页「画面描述」文本框里的完整 prompt 为准；结构化分块请在一键生成弹窗内编辑。
+
+一键生成会读取当前的模型、画幅与分辨率。若你改了画幅/分辨率，页面可能出现提醒条，可用「按当前设置重新生成」或重新走一键流程。`}
+            />
+          </div>
           {outputSpecsMismatch ? (
             <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-xs text-amber-900">
               <span>
@@ -3660,14 +3729,13 @@ function ImageGenerator({
               type="button"
               onClick={() => void handlePromptGen()}
               disabled={!refImages.length}
-              title={!refImages.length ? '请先上传至少1张参考图' : '将按当前画幅与分辨率优化提示词'}
+              title={!refImages.length ? '请先上传至少1张参考图' : '一键生成提示词'}
               className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Sparkles className="w-4 h-4 mr-1 shrink-0" /> 一键生成提示词
+              <Sparkles className="w-4 h-4 mr-1 shrink-0" /> 一键生成
             </button>
           </div>
-          <p className="text-[11px] text-gray-500 mb-2">一键生成会读取当前<strong className="text-gray-700">模型、画幅、分辨率</strong>；若之后修改画幅/分辨率，请使用上方「重新生成」或重新走一键流程。</p>
-          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="输入画面描述/风格，或使用一键生成提示词..." />
+          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="w-full px-4 py-3 border rounded-xl min-h-[140px]" placeholder="描述画面与风格，或点「一键生成」…" />
         </div>
         <div className="text-xs text-gray-500 mb-2 text-center sm:text-left">
           本次生成：<span className="text-gray-700 font-medium">{currentModelLabel}</span>

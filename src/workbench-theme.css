@@ -330,6 +330,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 12px 40px rgba(3, 6, 18, 0.28) !important;
   backdrop-filter: blur(12px);
+  overflow: visible;
 }
 
 .workbench-root .workbench-form-section-title {
@@ -339,6 +340,16 @@
 
 .workbench-root .workbench-form-section strong {
   color: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* Image generator: ℹ️ popover (click to open) */
+.workbench-root .image-form-tip-pop {
+  background: rgba(12, 14, 32, 0.97) !important;
+  border-color: rgba(167, 139, 250, 0.28) !important;
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Replace ugly dashed placeholders with premium glass frames. */
