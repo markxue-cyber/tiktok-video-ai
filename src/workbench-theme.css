@@ -400,3 +400,12 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)) !important;
 }
 
+/* 图片工作台：模型 / 分辨率 / 比例 一行三列下拉 */
+.workbench-root select.tikgen-spec-select {
+  background-color: rgba(0, 0, 0, 0.32) !important;
+}
+.workbench-root select.tikgen-spec-select option {
+  background-color: #141824;
+  color: rgba(255, 255, 255, 0.92);
+}
+
