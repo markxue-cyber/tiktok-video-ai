@@ -4720,17 +4720,27 @@ function ImageGenerator({
             type="button"
             onClick={() => void handlePrepareSceneBoard()}
             disabled={sceneBoardPreparing || !prompt.trim() || !refImages.length}
-            className="w-full rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 py-4 font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
+            className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
+              sceneBoardPreparing || (prompt.trim() && refImages.length > 0)
+                ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_10px_40px_-8px_rgba(217,70,239,0.55),0_6px_20px_-6px_rgba(124,58,237,0.45)] ring-1 ring-inset ring-white/25 [text-shadow:0_1px_2px_rgba(0,0,0,0.25)] hover:enabled:shadow-[0_14px_48px_-6px_rgba(217,70,239,0.65),0_8px_24px_-6px_rgba(99,102,241,0.4)] hover:enabled:brightness-[1.05] active:enabled:scale-[0.99] active:enabled:brightness-100 disabled:cursor-wait'
+                : 'cursor-not-allowed bg-[#252532] text-white/40 ring-1 ring-inset ring-white/[0.08]'
+            }`}
           >
+            {!sceneBoardPreparing && prompt.trim() && refImages.length > 0 ? (
+              <span
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent via-white/[0.08] to-white/[0.14] opacity-90"
+                aria-hidden
+              />
+            ) : null}
             {sceneBoardPreparing ? (
               <>
-                <RefreshCw className="mr-2 inline h-5 w-5 animate-spin" />
-                正在规划场景…
+                <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
+                <span className="relative">正在规划场景…</span>
               </>
             ) : (
               <>
-                <Sparkles className="mr-2 inline h-5 w-5 opacity-95" />
-                一键生成图片
+                <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
+                <span className="relative">一键生成图片</span>
               </>
             )}
           </button>
