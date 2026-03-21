@@ -4306,7 +4306,7 @@ function ImageGenerator({
           </div>
         </section>
 
-        <section className="border-t border-white/[0.08] pt-8">
+        <section className="pt-10">
           <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">参考图</div>
@@ -4476,7 +4476,7 @@ function ImageGenerator({
           {refUploadBusy ? <div className="mt-1 text-xs text-white/45">上传中…</div> : null}
         </section>
 
-        <section className="border-t border-white/[0.08] pt-8 mt-2">
+        <section className="mt-2 pt-10">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">商品分析与爆款风格</div>
@@ -4513,7 +4513,7 @@ function ImageGenerator({
             </div>
           </div>
 
-          <div className="pb-6 mb-6 border-b border-white/[0.06]">
+          <div className="mb-8 pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium text-white/88">商品分析</span>
               <button
@@ -4669,7 +4669,7 @@ function ImageGenerator({
           ) : null}
         </section>
 
-        <div className="border-t border-white/[0.08] pt-6 mt-2">
+        <div className="mt-6 pt-8">
         <div className="text-xs text-white/50 mb-2 text-center sm:text-left">
           <span className="text-white/75 font-medium">{currentModelLabel}</span>
           <span className="mx-1.5 text-white/20">·</span>
@@ -4807,7 +4807,7 @@ function ImageGenerator({
                         : 'border-white/[0.07] bg-black/12 opacity-55'
                     } ${sceneBatchGenerating ? 'cursor-default' : 'cursor-pointer'}`}
                   >
-                    <div className="border-b border-white/[0.07] px-2.5 pb-2 pt-2.5">
+                    <div className="px-2.5 pb-2 pt-2.5">
                       <div className="min-w-0">
                         <span className={SCENE_TAG_CLASS}>{slot.title}</span>
                         <p className="mt-1.5 min-h-[3.6rem] text-[10px] leading-[1.45] text-white/48 line-clamp-4">
@@ -5009,7 +5009,7 @@ function ImageGenerator({
                                       {teaser || '\u00a0'}
                                     </p>
                                   </div>
-                                  <div className="relative aspect-square w-full border-t border-white/[0.08] bg-black/35">
+                                  <div className="relative aspect-square w-full bg-black/35">
                                     <button
                                       type="button"
                                       className="absolute inset-0 z-[1] block"
