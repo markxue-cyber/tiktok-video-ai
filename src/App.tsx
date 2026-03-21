@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Video,
@@ -38,6 +38,7 @@ import {
   Eraser,
   BarChart2,
   Clapperboard,
+  Wrench,
 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -876,7 +877,8 @@ function App() {
   const [mainNav, setMainNav] = useState<
     'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
   >('image')
-  const [imageSubNav, setImageSubNav] = useState<'generate' | 'removeBg' | 'upscale' | 'translate'>('generate')
+  const [imageSubNav, setImageSubNav] = useState<'generate' | 'tools'>('generate')
+  const [imageToolsTab, setImageToolsTab] = useState<'removeBg' | 'upscale' | 'translate'>('removeBg')
   const [videoSubNav, setVideoSubNav] = useState<'generate' | 'analyze'>('generate')
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
@@ -1058,9 +1060,11 @@ function App() {
   const currentPageLabel = useMemo(() => {
     if (mainNav === 'image') {
       if (imageSubNav === 'generate') return '图片生成'
-      if (imageSubNav === 'removeBg') return '去除背景'
-      if (imageSubNav === 'upscale') return '高清放大'
-      return '图片翻译'
+      if (imageSubNav === 'tools') {
+        if (imageToolsTab === 'removeBg') return '图片工具-去除背景'
+        if (imageToolsTab === 'upscale') return '图片工具-高清放大'
+        return '图片工具-图片翻译'
+      }
     }
     if (mainNav === 'video') {
       if (videoSubNav === 'generate') return '视频生成'
@@ -1072,7 +1076,7 @@ function App() {
     if (mainNav === 'benefits') return '个人权益'
     if (mainNav === 'developer' && isDevAdmin) return '开发者后台'
     return '图片生成'
-  }, [mainNav, imageSubNav, videoSubNav, isDevAdmin])
+  }, [mainNav, imageSubNav, imageToolsTab, videoSubNav, isDevAdmin])
 
   const ANN_READ_KEY = user?.id ? `tikgen.ann.read.${user.id}` : 'tikgen.ann.read.guest'
 
@@ -1537,6 +1541,16 @@ function App() {
               />
               <NavPrimary
                 collapsed
+                icon={<Wrench className="w-5 h-5" />}
+                label="图片工具"
+                active={mainNav === 'image' && imageSubNav === 'tools'}
+                onClick={() => {
+                  setMainNav('image')
+                  setImageSubNav('tools')
+                }}
+              />
+              <NavPrimary
+                collapsed
                 icon={<Video className="w-5 h-5" />}
                 label="视频生成"
                 active={mainNav === 'video' && videoSubNav === 'generate'}
@@ -1590,32 +1604,12 @@ function App() {
                 />
                 <NavSecondary
                   collapsed={false}
-                  icon={<Eraser className="w-4 h-4" />}
-                  label="去除背景"
-                  active={mainNav === 'image' && imageSubNav === 'removeBg'}
+                  icon={<Wrench className="w-4 h-4" />}
+                  label="图片工具"
+                  active={mainNav === 'image' && imageSubNav === 'tools'}
                   onClick={() => {
                     setMainNav('image')
-                    setImageSubNav('removeBg')
-                  }}
-                />
-                <NavSecondary
-                  collapsed={false}
-                  icon={<Maximize2 className="w-4 h-4" />}
-                  label="高清放大"
-                  active={mainNav === 'image' && imageSubNav === 'upscale'}
-                  onClick={() => {
-                    setMainNav('image')
-                    setImageSubNav('upscale')
-                  }}
-                />
-                <NavSecondary
-                  collapsed={false}
-                  icon={<Languages className="w-4 h-4" />}
-                  label="图片翻译"
-                  active={mainNav === 'image' && imageSubNav === 'translate'}
-                  onClick={() => {
-                    setMainNav('image')
-                    setImageSubNav('translate')
+                    setImageSubNav('tools')
                   }}
                 />
               </div>
@@ -1682,9 +1676,9 @@ function App() {
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">
                 {mainNav === 'image' && imageSubNav === 'generate' && '图片生成'}
-                {mainNav === 'image' && imageSubNav === 'removeBg' && '去除背景'}
-                {mainNav === 'image' && imageSubNav === 'upscale' && '高清放大'}
-                {mainNav === 'image' && imageSubNav === 'translate' && '图片翻译'}
+                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
+                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'upscale' && '图片工具 · 高清放大'}
+                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
                 {mainNav === 'video' && videoSubNav === 'generate' && '视频生成'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
                 {mainNav === 'templates' && '模板与案例库'}
@@ -1783,9 +1777,9 @@ function App() {
           <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
             <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
           </div>
-          {mainNav === 'image' && imageSubNav === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
-          {mainNav === 'image' && imageSubNav === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
-          {mainNav === 'image' && imageSubNav === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
+          {mainNav === 'image' && imageSubNav === 'tools' ? (
+            <ImageToolsWorkbench tab={imageToolsTab} onTabChange={setImageToolsTab} />
+          ) : null}
           {mainNav === 'video' && videoSubNav === 'analyze' ? <WorkbenchComingSoon title="视频分析" /> : null}
           {mainNav === 'templates' && (
             <TemplatesLibrary
@@ -1830,6 +1824,48 @@ function WorkbenchComingSoon({ title }: { title: string }) {
         <p className="text-lg font-semibold text-gray-800">{title}</p>
         <p className="mt-2 text-sm text-gray-500">功能开发中，敬请期待。</p>
       </div>
+    </div>
+  )
+}
+
+type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate'
+
+function ImageToolsWorkbench({
+  tab,
+  onTabChange,
+}: {
+  tab: ImageToolsTabId
+  onTabChange: (t: ImageToolsTabId) => void
+}) {
+  const items: { id: ImageToolsTabId; label: string; icon: ReactNode }[] = [
+    { id: 'removeBg', label: '去除背景', icon: <Eraser className="w-4 h-4 shrink-0" /> },
+    { id: 'upscale', label: '高清放大', icon: <Maximize2 className="w-4 h-4 shrink-0" /> },
+    { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
+  ]
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-2 shadow-sm">
+        <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1">
+          {items.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onTabChange(t.id)}
+              className={`inline-flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-5 ${
+                tab === t.id
+                  ? 'bg-gray-900 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-white/90 hover:text-gray-900'
+              }`}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'removeBg' ? <WorkbenchComingSoon title="去除背景" /> : null}
+      {tab === 'upscale' ? <WorkbenchComingSoon title="高清放大" /> : null}
+      {tab === 'translate' ? <WorkbenchComingSoon title="图片翻译" /> : null}
     </div>
   )
 }
