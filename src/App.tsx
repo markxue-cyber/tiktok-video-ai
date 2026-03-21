@@ -2614,6 +2614,8 @@ function ImageGenerator({
   const [promptRegenBusy, setPromptRegenBusy] = useState(false)
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
   const oneClickHintTimerRef = useRef(0)
+  /** 商品分析 + 画面方案：默认折叠，上传参考图并点击「一键分析」后展开 */
+  const [productStylePanelOpen, setProductStylePanelOpen] = useState(false)
   const [productAnalysisText, setProductAnalysisText] = useState('')
   const [hotStyles, setHotStyles] = useState<ImageWorkbenchStyleRow[]>([])
   const [selectedHotStyleIndex, setSelectedHotStyleIndex] = useState(0)
@@ -2777,6 +2779,10 @@ function ImageGenerator({
       setOneClickNeedRefHint(false)
       window.clearTimeout(oneClickHintTimerRef.current)
     }
+  }, [refImages.length])
+
+  useEffect(() => {
+    if (refImages.length === 0) setProductStylePanelOpen(false)
   }, [refImages.length])
 
   useEffect(() => {
@@ -3107,6 +3113,7 @@ function ImageGenerator({
     const ip0 = String(style0?.imagePrompt || '').trim()
     if (ip0 && jobId === aiJobRef.current) {
       applyStyleCardAsMainPrompt(jobId, style0, nextProduct)
+      setProductStylePanelOpen(true)
       return
     }
     setPromptRegenBusy(true)
@@ -3122,6 +3129,7 @@ function ImageGenerator({
         hotSellingStyle: style0?.description ? { title: style0.title, description: style0.description } : undefined,
         productAnalysisNotes: analysisText.trim() || undefined,
       })
+      if (jobId !== aiJobRef.current) return
       applyGeneratedImagePrompt(
         jobId,
         r,
@@ -3134,6 +3142,7 @@ function ImageGenerator({
       if (merged0) {
         setHotStyles((prev) => prev.map((s, i) => (i === 0 ? { ...s, imagePrompt: merged0 } : s)))
       }
+      setProductStylePanelOpen(true)
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
       setAiError(e?.message || '生成出图描述失败')
@@ -4476,6 +4485,40 @@ function ImageGenerator({
           {refUploadBusy ? <div className="mt-1 text-xs text-white/45">上传中…</div> : null}
         </section>
 
+        {aiError ? (
+          <div className="rounded-lg border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200/95">{aiError}</div>
+        ) : null}
+
+        {!productStylePanelOpen ? (
+          <div className="flex flex-col gap-2">
+            {oneClickNeedRefHint ? (
+              <span className="text-center text-xs text-amber-400/95" role="status">
+                请先上传参考图
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void handleOneClickFill()}
+              disabled={!refImages.length || isAiBusy || promptRegenBusy}
+              title={refImages.length ? '分析商品信息并生成 4 套画面方案' : '请先上传至少一张参考图'}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold transition-opacity ${
+                !refImages.length || isAiBusy || promptRegenBusy
+                  ? 'cursor-not-allowed bg-white/[0.06] text-white/40 ring-1 ring-inset ring-white/10'
+                  : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-900/30 hover:from-violet-500 hover:to-fuchsia-500'
+              }`}
+            >
+              {isAiBusy || promptRegenBusy ? (
+                <RefreshCw className="h-5 w-5 shrink-0 animate-spin opacity-90" />
+              ) : (
+                <Wand2 className="h-5 w-5 shrink-0 opacity-95" />
+              )}
+              {isAiBusy ? '分析中…' : promptRegenBusy ? '生成描述中…' : '一键分析商品及爆款风格'}
+            </button>
+            <p className="text-center text-[11px] leading-relaxed text-white/38">
+              上传参考图后点击，将展示商品分析与画面方案，并同步生成主提示词
+            </p>
+          </div>
+        ) : (
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -4483,31 +4526,26 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「一键填充」会同时生成商品分析与 4 套画面方案。
+                text={`「一键填充」会同时刷新商品分析与 4 套画面方案。
 
-左侧点「一键生成图片」规划 6 场景后，在右侧生成历史中勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
+点左侧「一键生成图片」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
             </div>
             <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
-              {oneClickNeedRefHint ? (
-                <span className="text-xs text-amber-400/95 whitespace-nowrap" role="status">
-                  请先上传参考图
-                </span>
-              ) : null}
               <button
                 type="button"
                 onClick={() => void handleOneClickFill()}
                 disabled={isAiBusy || promptRegenBusy}
-                title={refImages.length ? '一键填充商品分析与爆款风格' : '需先上传参考图'}
-                className={`px-3 py-1.5 rounded-full text-sm flex items-center shrink-0 transition-colors ${
+                title={refImages.length ? '重新分析并填充商品与画面方案' : '需先上传参考图'}
+                className={`flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors ${
                   isAiBusy || promptRegenBusy
-                    ? 'opacity-45 cursor-not-allowed bg-white/[0.06] text-white/40 border border-white/10'
+                    ? 'cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 opacity-45'
                     : refImages.length
-                      ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-transparent'
-                      : 'cursor-pointer bg-white/[0.05] text-white/38 border border-white/[0.10] hover:bg-white/[0.08] hover:text-white/50'
+                      ? 'border border-transparent bg-purple-50 text-purple-700 hover:bg-purple-100'
+                      : 'cursor-pointer border border-white/[0.10] bg-white/[0.05] text-white/38 hover:bg-white/[0.08] hover:text-white/50'
                 }`}
               >
-                {isAiBusy ? <RefreshCw className="w-4 h-4 mr-1 shrink-0 animate-spin opacity-90" /> : <Wand2 className="w-4 h-4 mr-1 shrink-0 opacity-90" />}
+                {isAiBusy ? <RefreshCw className="mr-1 h-4 w-4 shrink-0 animate-spin opacity-90" /> : <Wand2 className="mr-1 h-4 w-4 shrink-0 opacity-90" />}
                 {isAiBusy ? '分析中…' : '一键填充'}
               </button>
             </div>
@@ -4557,7 +4595,7 @@ function ImageGenerator({
             {hotStyles.length === 0 ? (
               <div className="space-y-2">
                 <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
-                  上传主参考图后，使用「一键填充」或「重新分析」生成画面方案（标题建议 4 字）
+                  上传主参考图后，使用上方「一键填充」或「重新分析」生成画面方案（标题建议 4 字）
                 </div>
                 <button
                   type="button"
@@ -4665,12 +4703,10 @@ function ImageGenerator({
               </button>
             </div>
           ) : null}
-
-          {aiError ? (
-            <div className="mt-3 text-xs text-red-200/95 bg-red-500/12 border border-red-400/25 rounded-lg px-3 py-2">{aiError}</div>
-          ) : null}
         </section>
+        )}
 
+        {productStylePanelOpen ? (
         <div className="mt-1 pt-4">
         <div className="mb-1.5 text-center text-xs text-white/50 sm:text-left">
           <span className="text-white/75 font-medium">{currentModelLabel}</span>
@@ -4698,6 +4734,7 @@ function ImageGenerator({
           )}
         </button>
         </div>
+        ) : null}
         </div>
       </div>
       <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
