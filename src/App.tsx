@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Video, Image, Zap, LogOut, User, Play, Download, RefreshCw, Sparkles, X, Upload, Scissors, Eraser, Wand2, Folder, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, Crown, WandSparkles, ShieldCheck, Library, Settings2, Eye, EyeOff, MessageSquare, Bell, Info, Clock, Box, Maximize2, Pencil } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -2632,6 +2633,11 @@ function ImageGenerator({
   const [customStylePromptOnly, setCustomStylePromptOnly] = useState('')
   const [styleCardEditIndex, setStyleCardEditIndex] = useState<number | null>(null)
   const [styleCardEditDraft, setStyleCardEditDraft] = useState({ title: '', description: '', imagePrompt: '' })
+  /** 画面方案「出图主描述」悬停浮层：挂到 body + fixed，避免被下方卡片 / 层叠上下文挡住 */
+  const [stylePromptHoverIdx, setStylePromptHoverIdx] = useState<number | null>(null)
+  const [stylePromptPopBox, setStylePromptPopBox] = useState<{ top: number; left: number; width: number } | null>(null)
+  const stylePromptAnchorRef = useRef<HTMLDivElement | null>(null)
+  const stylePromptLeaveTimerRef = useRef<number | null>(null)
   const [sceneBatchGenerating, setSceneBatchGenerating] = useState(false)
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
     IMAGE_SCENE_BLUEPRINT.map((b) => ({
@@ -2655,6 +2661,54 @@ function ImageGenerator({
     [imageModels, unavailableImageMap],
   )
   const MAX_REF_IMAGES = 5
+
+  useEffect(() => {
+    if (stylePromptHoverIdx === null) return
+    const sync = () => {
+      const el = stylePromptAnchorRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const w = Math.max(176, Math.min(r.width * 0.45, 320))
+      const vw = window.innerWidth
+      const left = Math.max(8, Math.min(r.right - w, vw - w - 8))
+      const top = r.top + 44
+      setStylePromptPopBox((prev) => {
+        if (prev && prev.top === top && prev.left === left && prev.width === w) return prev
+        return { top, left, width: w }
+      })
+    }
+    sync()
+    window.addEventListener('scroll', sync, true)
+    window.addEventListener('resize', sync)
+    return () => {
+      window.removeEventListener('scroll', sync, true)
+      window.removeEventListener('resize', sync)
+    }
+  }, [stylePromptHoverIdx])
+
+  useEffect(() => {
+    if (!customStyleModalOpen && styleCardEditIndex === null) return
+    if (stylePromptLeaveTimerRef.current != null) {
+      window.clearTimeout(stylePromptLeaveTimerRef.current)
+      stylePromptLeaveTimerRef.current = null
+    }
+    setStylePromptHoverIdx(null)
+    setStylePromptPopBox(null)
+    stylePromptAnchorRef.current = null
+  }, [customStyleModalOpen, styleCardEditIndex])
+
+  useEffect(() => {
+    if (stylePromptHoverIdx === null) return
+    if (!hotStyles[stylePromptHoverIdx]) {
+      if (stylePromptLeaveTimerRef.current != null) {
+        window.clearTimeout(stylePromptLeaveTimerRef.current)
+        stylePromptLeaveTimerRef.current = null
+      }
+      setStylePromptHoverIdx(null)
+      setStylePromptPopBox(null)
+      stylePromptAnchorRef.current = null
+    }
+  }, [hotStyles, stylePromptHoverIdx])
 
   const historyGrouped = useMemo(() => groupImageHistoryByDay(imageGenHistory), [imageGenHistory])
 
@@ -4600,7 +4654,35 @@ function ImageGenerator({
                         selectHotStyleCard(idx)
                       }
                     }}
-                    className={`group/scard relative z-0 overflow-visible rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-[background-color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-violet-400/50 group-hover/scard:z-[200] ${
+                    onMouseEnter={(e) => {
+                      if (promptRegenBusy) return
+                      if (stylePromptLeaveTimerRef.current != null) {
+                        window.clearTimeout(stylePromptLeaveTimerRef.current)
+                        stylePromptLeaveTimerRef.current = null
+                      }
+                      const el = e.currentTarget
+                      stylePromptAnchorRef.current = el
+                      setStylePromptHoverIdx(idx)
+                      const apply = () => {
+                        const r = el.getBoundingClientRect()
+                        const w = Math.max(176, Math.min(r.width * 0.45, 320))
+                        const vw = window.innerWidth
+                        const left = Math.max(8, Math.min(r.right - w, vw - w - 8))
+                        setStylePromptPopBox({ top: r.top + 44, left, width: w })
+                      }
+                      apply()
+                      requestAnimationFrame(apply)
+                    }}
+                    onMouseLeave={() => {
+                      const t = window.setTimeout(() => {
+                        setStylePromptHoverIdx(null)
+                        setStylePromptPopBox(null)
+                        stylePromptAnchorRef.current = null
+                        stylePromptLeaveTimerRef.current = null
+                      }, 200)
+                      stylePromptLeaveTimerRef.current = t
+                    }}
+                    className={`relative overflow-visible rounded-2xl px-3.5 pb-3 pt-3 text-left outline-none transition-[background-color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-violet-400/50 ${
                       selectedHotStyleIndex === idx
                         ? 'bg-gradient-to-b from-violet-500/[0.2] to-[#1a1528] ring-2 ring-violet-400/35'
                         : 'bg-[#16161c] ring-1 ring-inset ring-white/[0.1] hover:bg-[#1f1f28] hover:ring-white/16'
@@ -4628,19 +4710,6 @@ function ImageGenerator({
                     <p className="mt-2 min-h-[4.5rem] text-[11px] leading-[1.45] text-white/55 line-clamp-4">
                       {styleCardSummary(hotStyleCardPreviewText(st)) || '\u00a0'}
                     </p>
-                    <div
-                      className="pointer-events-none invisible absolute right-2 top-11 z-[210] w-[45%] min-w-[11rem] max-w-[20rem] opacity-0 transition-none group-hover/scard:visible group-hover/scard:pointer-events-auto group-hover/scard:opacity-100"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="max-h-[min(18rem,55vh)] overflow-y-auto rounded-xl border border-white/22 bg-[#121218] p-3 text-[11px] leading-relaxed text-white shadow-[0_20px_50px_rgba(0,0,0,0.9)] ring-2 ring-black/60">
-                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-300">
-                          出图主描述
-                        </div>
-                        <div className="whitespace-pre-wrap break-words text-white/88">
-                          {String(st.imagePrompt || '').trim() || '（暂无，可点击铅笔编辑后填写）'}
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 ))}
                 {!hotStyles.some((s) => s.isCustom) ? (
@@ -5109,6 +5178,47 @@ function ImageGenerator({
         ) : null}
       </div>
     </div>
+    {typeof document !== 'undefined' &&
+    stylePromptHoverIdx !== null &&
+    stylePromptPopBox &&
+    hotStyles[stylePromptHoverIdx] != null
+      ? createPortal(
+          <div
+            className="image-form-tip-pop fixed z-[10050] rounded-xl border border-white/22 bg-[#121218] p-3 text-[11px] leading-relaxed text-white shadow-[0_20px_50px_rgba(0,0,0,0.9)] ring-2 ring-black/60"
+            style={{
+              top: stylePromptPopBox.top,
+              left: stylePromptPopBox.left,
+              width: stylePromptPopBox.width,
+              maxHeight: 'min(18rem, 55vh)',
+              overflowY: 'auto',
+              pointerEvents: 'auto',
+            }}
+            onMouseEnter={() => {
+              if (stylePromptLeaveTimerRef.current != null) {
+                window.clearTimeout(stylePromptLeaveTimerRef.current)
+                stylePromptLeaveTimerRef.current = null
+              }
+            }}
+            onMouseLeave={() => {
+              const t = window.setTimeout(() => {
+                setStylePromptHoverIdx(null)
+                setStylePromptPopBox(null)
+                stylePromptAnchorRef.current = null
+                stylePromptLeaveTimerRef.current = null
+              }, 200)
+              stylePromptLeaveTimerRef.current = t
+            }}
+            onClick={(e) => e.stopPropagation()}
+            role="tooltip"
+          >
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-violet-300">出图主描述</div>
+            <div className="whitespace-pre-wrap break-words text-white/88">
+              {String(hotStyles[stylePromptHoverIdx]?.imagePrompt || '').trim() || '（暂无，可点击铅笔编辑后填写）'}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null}
     {customStyleModalOpen ? (
       <div
         className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-4"
