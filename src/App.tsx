@@ -4225,11 +4225,11 @@ function ImageGenerator({
 
   return (
     <>
-    <div className="grid lg:grid-cols-2 gap-8">
-      <div className="tikgen-panel rounded-2xl p-5 sm:p-6 overflow-visible">
-        <div className="space-y-0">
-        <section className="pb-8">
-          <div className="flex items-center gap-1.5 mb-3">
+    <div className="grid lg:grid-cols-2 gap-6">
+      <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
+        <div className="flex flex-col gap-6">
+        <section>
+          <div className="mb-2 flex items-center gap-1.5">
             <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">模型与规格</div>
             <ImageFormTip
               wide
@@ -4239,9 +4239,9 @@ function ImageGenerator({
 一键生成提示词会结合当前画幅与分辨率优化文案；若之后修改了画幅或分辨率，建议重新生成提示词。`}
             />
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
             <div className="min-w-0 flex-1 sm:min-w-[160px] sm:flex-[1.35]">
-              <label htmlFor="tikgen-image-model" className="block text-xs text-white/50 mb-1.5 font-medium">
+              <label htmlFor="tikgen-image-model" className="sr-only">
                 模型选择
               </label>
               <div className="relative">
@@ -4263,17 +4263,17 @@ function ImageGenerator({
               </div>
             </div>
             <div className="w-full shrink-0 sm:w-[min(28%,9.5rem)] sm:max-w-[10rem]">
-              <label htmlFor="tikgen-image-resolution" className="mb-1.5 flex items-center gap-1 text-xs font-medium text-white/50">
+              <label htmlFor="tikgen-image-resolution" className="sr-only">
                 分辨率选择
-                <Sparkles className="h-3 w-3 text-emerald-400/90" strokeWidth={2} aria-hidden />
               </label>
               <div className="relative">
+                <Sparkles className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-emerald-400/85" strokeWidth={2} aria-hidden />
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                 <select
                   id="tikgen-image-resolution"
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value as ImageRes)}
-                  className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
+                  className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-9 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
                 >
                   {imageCaps.resolutions.map((r) => (
                     <option key={r} value={r}>
@@ -4284,7 +4284,7 @@ function ImageGenerator({
               </div>
             </div>
             <div className="w-full shrink-0 sm:w-[min(22%,6.5rem)] sm:max-w-[7rem]">
-              <label htmlFor="tikgen-image-aspect" className="block text-xs font-medium text-white/50 mb-1.5">
+              <label htmlFor="tikgen-image-aspect" className="sr-only">
                 图片比例
               </label>
               <div className="relative">
@@ -4306,8 +4306,8 @@ function ImageGenerator({
           </div>
         </section>
 
-        <section className="pt-10">
-          <div className="flex items-center justify-between gap-2 mb-3">
+        <section>
+          <div className="mb-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">参考图</div>
               <ImageFormTip
@@ -4435,7 +4435,7 @@ function ImageGenerator({
                 </div>
               </div>
             ) : (
-              <div className="py-2 text-center min-h-[130px] flex flex-col items-center justify-center gap-3">
+              <div className="flex min-h-[104px] flex-col items-center justify-center gap-2.5 py-4 text-center">
                 <Upload className="w-7 h-7 mx-auto text-white/35" />
                 <div className="text-sm font-medium text-white/75">点击或拖拽上传</div>
                 <div className="flex items-center justify-center gap-2">
@@ -4476,16 +4476,16 @@ function ImageGenerator({
           {refUploadBusy ? <div className="mt-1 text-xs text-white/45">上传中…</div> : null}
         </section>
 
-        <section className="mt-2 pt-10">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-            <div className="flex items-center gap-1.5 min-w-0">
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-1.5">
               <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">商品分析与爆款风格</div>
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「一键填充」生成商品分析与画面方案。点卡片切换方案；鼠标悬停卡片可看完整出图主描述浮层；点铅笔在弹窗中编辑。
+                text={`「一键填充」会同时生成商品分析与 4 套画面方案。
 
-左侧「一键生成图片」加载 6 场景后，在右侧点击卡片即可勾选/取消，再批量生成。`}
+左侧点「一键生成图片」规划 6 场景后，在右侧生成历史中勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
             </div>
             <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 shrink-0">
@@ -4513,8 +4513,8 @@ function ImageGenerator({
             </div>
           </div>
 
-          <div className="mb-8 pb-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium text-white/88">商品分析</span>
               <button
                 type="button"
@@ -4529,18 +4529,20 @@ function ImageGenerator({
             <textarea
               value={productAnalysisText}
               onChange={(e) => setProductAnalysisText(e.target.value)}
-              className="w-full resize-y min-h-[168px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+              className="w-full resize-y min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
           </div>
 
           <div>
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
-              <div>
-                <div className="text-sm font-medium text-white/88">画面方案（风格 + 出图描述）</div>
-                <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
-                  点卡片切换方案；悬停浮层查看完整出图主描述；铅笔编辑。可添加「自定义方案」。
-                </p>
+            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-sm font-medium text-white/88">画面方案（风格 + 出图描述）</span>
+                <ImageFormTip
+                  wide
+                  label="操作说明"
+                  text="点卡片切换方案；鼠标悬停卡片可查看完整「出图主描述」浮层；点铅笔在弹窗中编辑。可添加「自定义方案」。"
+                />
               </div>
               <button
                 type="button"
@@ -4669,8 +4671,8 @@ function ImageGenerator({
           ) : null}
         </section>
 
-        <div className="mt-6 pt-8">
-        <div className="text-xs text-white/50 mb-2 text-center sm:text-left">
+        <div className="mt-1 pt-4">
+        <div className="mb-1.5 text-center text-xs text-white/50 sm:text-left">
           <span className="text-white/75 font-medium">{currentModelLabel}</span>
           <span className="mx-1.5 text-white/20">·</span>
           {size}
@@ -4698,8 +4700,8 @@ function ImageGenerator({
         </div>
         </div>
       </div>
-      <div className="tikgen-panel rounded-2xl p-5 sm:p-6 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
-        <h2 className="text-xl font-bold mb-4 text-white/95">生成历史</h2>
+      <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
+        <h2 className="text-xl font-bold mb-3 text-white/95">生成历史</h2>
         {genErrorText && !sceneBoardPreparing ? (
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <span className="break-words">
