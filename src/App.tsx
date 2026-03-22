@@ -2065,7 +2065,7 @@ function App() {
             </div>
           </div>
         </header>
-        <div className={mainNav === 'video' ? 'px-6 pb-6 pt-3' : 'p-6'}>
+        <div className="p-6">
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
           <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
             <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
