@@ -88,6 +88,7 @@ export default async function handler(req, res) {
 
     const inferCode = (message: string): string => {
       const t = String(message || '').toLowerCase()
+      if (t.includes('未登录') || (t.includes('authorization') && t.includes('bearer'))) return 'AUTH_REQUIRED'
       if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) return 'QUOTA_EXHAUSTED'
       if (t.includes('timeout') || t.includes('超时')) return 'UPSTREAM_TIMEOUT'
       if (t.includes('model') && (t.includes('does not exist') || t.includes('invalid field') || t.includes('not in') || t.includes('不存在'))) {
