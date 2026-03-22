@@ -565,8 +565,6 @@ export function VideoUpscaleWorkbench() {
   return (
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="tikgen-panel rounded-2xl p-6">
-        <h2 className="text-xl font-bold mb-6 text-white/95">视频增强</h2>
-
         <div className="mb-6">
           <div className="block text-sm font-medium mb-2 text-white/75">上传视频</div>
           <input

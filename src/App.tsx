@@ -3529,7 +3529,6 @@ function VideoGenerator({
     <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="tikgen-panel rounded-2xl p-6">
-        <h2 className="text-xl font-bold mb-6 text-white/95">视频生成</h2>
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2 text-white/75">上传参考图</label>
           <div
