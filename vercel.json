@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/ai-video-analyze-chat.ts": {
+      "maxDuration": 120
+    }
+  },
   "rewrites": [
     { "source": "/api/assets/create", "destination": "/api/assets-create" },
     { "source": "/api/assets/list", "destination": "/api/assets-list" },
@@ -41,6 +46,7 @@
     { "source": "/api/ai/image-scenes", "destination": "/api/ai-image-scenes" },
     { "source": "/api/ai/image-style", "destination": "/api/ai-image-style" },
     { "source": "/api/ai/image-qc", "destination": "/api/ai-image-qc" },
+    { "source": "/api/ai/video-analyze-chat", "destination": "/api/ai-video-analyze-chat" },
     { "source": "/api/video-upscale-sign", "destination": "/api/vusign" }
   ]
 }

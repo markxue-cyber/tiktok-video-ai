@@ -39,7 +39,26 @@ export const TIKGEN_IG_IDB = {
   videoUpscaleWorkspace: 'videoUpscale.workspace.v1',
   /** 视频工具 · 视频生成：表单 + 进行中任务（刷新后续传） */
   videoGeneratorWorkspace: 'videoGenerator.workspace.v1',
+  /** 视频分析 · 会话历史（含多模态 data URL，体积可能较大） */
+  videoAnalyzeSessions: 'videoAnalyze.sessions.v1',
 } as const
+
+/** 视频分析对话消息（持久化） */
+export type VideoAnalyzeChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  videoDataUrl?: string
+  imageDataUrls?: string[]
+}
+
+/** 视频分析会话存档 */
+export type VideoAnalyzeSessionStored = {
+  id: string
+  title: string
+  updatedAt: number
+  messages: VideoAnalyzeChatMessage[]
+}
 
 /** 视频生成页持久化快照 */
 export type VideoGeneratorWorkspaceV1 = {

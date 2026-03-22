@@ -68,6 +68,7 @@ import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPa
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
 import { VideoUpscaleWorkbench } from './VideoUpscaleWorkbench'
+import { VideoAnalyzeWorkbench } from './VideoAnalyzeWorkbench'
 import { AI_ASSET_CREATED_EVENT, archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
@@ -2115,7 +2116,9 @@ function App() {
           >
             <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
           </div>
-          {mainNav === 'video' && videoSubNav === 'analyze' ? <WorkbenchComingSoon title="视频分析" /> : null}
+          <div className={mainNav === 'video' && videoSubNav === 'analyze' ? '' : 'hidden'}>
+            <VideoAnalyzeWorkbench visible={mainNav === 'video' && videoSubNav === 'analyze'} />
+          </div>
           {mainNav === 'creativePlaza' ? <CreativePlazaPage /> : null}
           {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && (
             <TemplatesLibrary
@@ -2163,17 +2166,6 @@ function CreativePlazaPage() {
         <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto leading-relaxed">
           精选灵感、模板案例与社区活动将在这里聚合，便于发现爆款思路与可复用创意。功能建设中，敬请期待。
         </p>
-      </div>
-    </div>
-  )
-}
-
-function WorkbenchComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex min-h-[40vh] items-center justify-center px-6">
-      <div className="max-w-md rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-8 py-10 text-center shadow-sm">
-        <p className="text-lg font-semibold text-gray-800">{title}</p>
-        <p className="mt-2 text-sm text-gray-500">功能开发中，敬请期待。</p>
       </div>
     </div>
   )
