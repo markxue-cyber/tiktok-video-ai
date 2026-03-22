@@ -1151,6 +1151,14 @@ function App() {
     })
   }, [])
 
+  /** 图片创作二级：同步 flush DOM，避免选中背景块滞后（与视频二级 goVideoSubNav 一致） */
+  const goImageSubNav = useCallback((sub: ImageSubNavId) => {
+    flushSync(() => {
+      setMainNav('image')
+      setImageSubNav(sub)
+    })
+  }, [])
+
   /** 工作台顶部 Tab 点击：同步提交，避免与主题 transition 叠加产生高亮滞后 */
   const onWorkbenchImageTabChange = useCallback((t: ImageToolsTabId) => {
     flushSync(() => setImageToolsTab(t))
@@ -1836,20 +1844,14 @@ function App() {
                 icon={<Sparkles className="w-5 h-5" />}
                 label="图片生成"
                 active={mainNav === 'image' && imageSubNav === 'imageGen'}
-                onClick={() => {
-                  setMainNav('image')
-                  setImageSubNav('imageGen')
-                }}
+                onClick={() => goImageSubNav('imageGen')}
               />
               <NavPrimary
                 collapsed
                 icon={<Layers className="w-5 h-5" />}
                 label="电商套图"
                 active={mainNav === 'image' && imageSubNav === 'ecommerce'}
-                onClick={() => {
-                  setMainNav('image')
-                  setImageSubNav('ecommerce')
-                }}
+                onClick={() => goImageSubNav('ecommerce')}
               />
               <NavCollapsedToolsFlyout
                 icon={<Wrench className="w-5 h-5" />}
@@ -1915,10 +1917,7 @@ function App() {
                 icon={<Image className="w-5 h-5" />}
                 label="图片创作"
                 active={mainNav === 'image'}
-                onClick={() => {
-                  setMainNav('image')
-                  setImageSubNav('imageGen')
-                }}
+                onClick={() => goImageSubNav('imageGen')}
               />
               <div className="pl-3 space-y-1">
                 <NavSecondary
@@ -1926,20 +1925,14 @@ function App() {
                   icon={<Sparkles className="w-4 h-4" />}
                   label="图片生成"
                   active={mainNav === 'image' && imageSubNav === 'imageGen'}
-                  onClick={() => {
-                    setMainNav('image')
-                    setImageSubNav('imageGen')
-                  }}
+                  onClick={() => goImageSubNav('imageGen')}
                 />
                 <NavSecondary
                   collapsed={false}
                   icon={<Layers className="w-4 h-4" />}
                   label="电商套图"
                   active={mainNav === 'image' && imageSubNav === 'ecommerce'}
-                  onClick={() => {
-                    setMainNav('image')
-                    setImageSubNav('ecommerce')
-                  }}
+                  onClick={() => goImageSubNav('ecommerce')}
                 />
                 <NavSecondaryToolsFlyout
                   icon={<Wrench className="w-4 h-4" />}
@@ -2284,7 +2277,7 @@ function NavSecondary({ icon, label, active, onClick, collapsed, className = '' 
     <button
       onClick={onClick}
       title={collapsed ? label : undefined}
-      className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-200 text-sm ${
+      className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-75 ease-out text-sm ${
         active ? 'bg-purple-50 text-purple-700 shadow-none' : 'bg-transparent text-gray-600 hover:bg-white/[0.06]'
       } ${className}`}
     >
@@ -2319,7 +2312,7 @@ function NavSecondaryToolsFlyout({
         type="button"
         onClick={onActivateDefault}
         title={label}
-        className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-200 text-sm ${
+        className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-75 ease-out text-sm ${
           active ? 'bg-purple-50 text-purple-700 shadow-none' : 'bg-transparent text-gray-600 hover:bg-white/[0.06]'
         }`}
       >
