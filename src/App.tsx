@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Video,
@@ -860,6 +860,49 @@ async function prefetchAssetsCacheIfNeeded() {
   }
 }
 
+/** 图片 / 视频工具三级 Tab（侧栏 flyout、URL workspace=、工作台子导航共用） */
+type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
+type VideoToolsTabId = 'generate' | 'upscale' | 'watermark' | 'subtitle'
+
+const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNode }[] = [
+  { id: 'removeBg', label: '去除背景', icon: <Eraser className="w-4 h-4 shrink-0" /> },
+  { id: 'upscale', label: '高清放大', icon: <Maximize2 className="w-4 h-4 shrink-0" /> },
+  { id: 'compress', label: '图片压缩', icon: <Minimize2 className="w-4 h-4 shrink-0" /> },
+  { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
+  { id: 'removeWatermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
+]
+
+const VIDEO_TOOLS_TAB_ITEMS: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
+  { id: 'generate', label: '视频生成', icon: <Video className="w-4 h-4 shrink-0" /> },
+  { id: 'upscale', label: '画质提升', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
+  { id: 'watermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
+  { id: 'subtitle', label: '去字幕', icon: <Scissors className="w-4 h-4 shrink-0" /> },
+]
+
+function isImageToolsTabId(v: string): v is ImageToolsTabId {
+  return (IMAGE_TOOLS_TAB_ITEMS as readonly { id: ImageToolsTabId }[]).some((x) => x.id === v)
+}
+function isVideoToolsTabId(v: string): v is VideoToolsTabId {
+  return (VIDEO_TOOLS_TAB_ITEMS as readonly { id: VideoToolsTabId }[]).some((x) => x.id === v)
+}
+
+const FIRST_IMAGE_TOOL_TAB: ImageToolsTabId = IMAGE_TOOLS_TAB_ITEMS[0]!.id
+const FIRST_VIDEO_TOOL_TAB: VideoToolsTabId = VIDEO_TOOLS_TAB_ITEMS[0]!.id
+
+function workspaceParamFromNav(
+  mainNav: 'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer',
+  imageSubNav: 'generate' | 'tools',
+  imageToolsTab: ImageToolsTabId,
+  videoSubNav: 'tools' | 'analyze',
+  videoToolsTab: VideoToolsTabId,
+): string | null {
+  if (mainNav === 'image' && imageSubNav === 'generate') return 'image.generate'
+  if (mainNav === 'image' && imageSubNav === 'tools') return `image.tools.${imageToolsTab}`
+  if (mainNav === 'video' && videoSubNav === 'tools') return `video.tools.${videoToolsTab}`
+  if (mainNav === 'video' && videoSubNav === 'analyze') return 'video.analyze'
+  return null
+}
+
 function App() {
   const urlSession = parseSessionFromUrl()
   const urlType = urlSession?.type || ''
@@ -904,27 +947,33 @@ function App() {
     }
     return 'generate'
   })
-  const [imageToolsTab, setImageToolsTab] = useState<
-    'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
-  >(() => {
+  const [imageToolsTab, setImageToolsTab] = useState<ImageToolsTabId>(() => {
     try {
       const v = sessionStorage.getItem('tikgen.sess.imageToolsTab')
-      if (
-        v === 'removeBg' ||
-        v === 'upscale' ||
-        v === 'translate' ||
-        v === 'compress' ||
-        v === 'removeWatermark'
-      ) {
-        return v
-      }
+      if (v && isImageToolsTabId(v)) return v
     } catch {
       // ignore
     }
-    return 'removeBg'
+    return FIRST_IMAGE_TOOL_TAB
   })
-  const [videoSubNav, setVideoSubNav] = useState<'tools' | 'analyze'>('tools')
-  const [videoToolsTab, setVideoToolsTab] = useState<'generate' | 'upscale' | 'watermark' | 'subtitle'>('generate')
+  const [videoSubNav, setVideoSubNav] = useState<'tools' | 'analyze'>(() => {
+    try {
+      const v = sessionStorage.getItem('tikgen.sess.videoSubNav')
+      if (v === 'tools' || v === 'analyze') return v
+    } catch {
+      // ignore
+    }
+    return 'tools'
+  })
+  const [videoToolsTab, setVideoToolsTab] = useState<VideoToolsTabId>(() => {
+    try {
+      const v = sessionStorage.getItem('tikgen.sess.videoToolsTab')
+      if (v && isVideoToolsTabId(v)) return v
+    } catch {
+      // ignore
+    }
+    return FIRST_VIDEO_TOOL_TAB
+  })
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
   const [packageCatalog, setPackageCatalog] = useState<PackageConfigItem[]>(DEFAULT_PACKAGES)
@@ -954,6 +1003,77 @@ function App() {
       // ignore
     }
   }, [imageToolsTab])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('tikgen.sess.videoSubNav', videoSubNav)
+    } catch {
+      // ignore
+    }
+  }, [videoSubNav])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('tikgen.sess.videoToolsTab', videoToolsTab)
+    } catch {
+      // ignore
+    }
+  }, [videoToolsTab])
+
+  /** 深链：?workspace=image.tools.upscale | image.generate | video.tools.generate | video.analyze（先于 URL 同步执行，避免竞态） */
+  useLayoutEffect(() => {
+    if (page !== 'home' || typeof window === 'undefined') return
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const w = sp.get('workspace')?.trim()
+      if (!w) return
+      const parts = w.split('.').filter(Boolean)
+      if (parts[0] === 'image') {
+        if (parts[1] === 'generate') {
+          setMainNav('image')
+          setImageSubNav('generate')
+        } else if (parts[1] === 'tools') {
+          setMainNav('image')
+          setImageSubNav('tools')
+          if (parts[2] && isImageToolsTabId(parts[2])) setImageToolsTab(parts[2])
+          else setImageToolsTab(FIRST_IMAGE_TOOL_TAB)
+        }
+      } else if (parts[0] === 'video') {
+        if (parts[1] === 'analyze') {
+          setMainNav('video')
+          setVideoSubNav('analyze')
+        } else if (parts[1] === 'tools') {
+          setMainNav('video')
+          setVideoSubNav('tools')
+          if (parts[2] && isVideoToolsTabId(parts[2])) setVideoToolsTab(parts[2])
+          else setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
+        }
+      }
+      sp.delete('workspace')
+      const rest = sp.toString()
+      const nextUrl = `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash || ''}`
+      window.history.replaceState(null, '', nextUrl)
+    } catch {
+      // ignore
+    }
+  }, [page])
+
+  /** 与当前页同步 workspace 参数，便于复制链接直达三级 Tab */
+  useEffect(() => {
+    if (page !== 'home' || typeof window === 'undefined') return
+    try {
+      const nextW = workspaceParamFromNav(mainNav, imageSubNav, imageToolsTab, videoSubNav, videoToolsTab)
+      const sp = new URLSearchParams(window.location.search)
+      if (nextW) sp.set('workspace', nextW)
+      else sp.delete('workspace')
+      const qs = sp.toString()
+      const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+      const cur = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`
+      if (nextUrl !== cur) window.history.replaceState(null, '', nextUrl)
+    } catch {
+      // ignore
+    }
+  }, [page, mainNav, imageSubNav, imageToolsTab, videoSubNav, videoToolsTab])
 
   const readSession = () => {
     try {
@@ -1580,7 +1700,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex workbench-root">
-      <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all relative`}>
+      <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all relative overflow-visible`}>
         <div className="p-4 border-b">
           <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'justify-between'}`}>
             {!navCollapsed ? (
@@ -1614,24 +1734,38 @@ function App() {
                   setImageSubNav('generate')
                 }}
               />
-              <NavPrimary
-                collapsed
+              <NavCollapsedToolsFlyout
                 icon={<Wrench className="w-5 h-5" />}
                 label="图片工具"
                 active={mainNav === 'image' && imageSubNav === 'tools'}
-                onClick={() => {
+                flyoutItems={IMAGE_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
+                onClickDefault={() => {
                   setMainNav('image')
                   setImageSubNav('tools')
+                  setImageToolsTab(FIRST_IMAGE_TOOL_TAB)
+                }}
+                onPickTool={(id) => {
+                  if (!isImageToolsTabId(id)) return
+                  setMainNav('image')
+                  setImageSubNav('tools')
+                  setImageToolsTab(id)
                 }}
               />
-              <NavPrimary
-                collapsed
+              <NavCollapsedToolsFlyout
                 icon={<Video className="w-5 h-5" />}
                 label="视频工具"
                 active={mainNav === 'video' && videoSubNav === 'tools'}
-                onClick={() => {
+                flyoutItems={VIDEO_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
+                onClickDefault={() => {
                   setMainNav('video')
                   setVideoSubNav('tools')
+                  setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
+                }}
+                onPickTool={(id) => {
+                  if (!isVideoToolsTabId(id)) return
+                  setMainNav('video')
+                  setVideoSubNav('tools')
+                  setVideoToolsTab(id)
                 }}
               />
               {TEMPLATES_LIBRARY_ENABLED ? (
@@ -1666,7 +1800,10 @@ function App() {
                 icon={<Image className="w-5 h-5" />}
                 label="图片创作"
                 active={mainNav === 'image'}
-                clickable={false}
+                onClick={() => {
+                  setMainNav('image')
+                  setImageSubNav('generate')
+                }}
               />
               <div className="pl-3 space-y-1">
                 <NavSecondary
@@ -1679,14 +1816,22 @@ function App() {
                     setImageSubNav('generate')
                   }}
                 />
-                <NavSecondary
-                  collapsed={false}
+                <NavSecondaryToolsFlyout
                   icon={<Wrench className="w-4 h-4" />}
                   label="图片工具"
                   active={mainNav === 'image' && imageSubNav === 'tools'}
-                  onClick={() => {
+                  flyoutItems={IMAGE_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
+                  activeThirdId={mainNav === 'image' && imageSubNav === 'tools' ? imageToolsTab : null}
+                  onActivateDefault={() => {
                     setMainNav('image')
                     setImageSubNav('tools')
+                    setImageToolsTab(FIRST_IMAGE_TOOL_TAB)
+                  }}
+                  onPickThird={(id) => {
+                    if (!isImageToolsTabId(id)) return
+                    setMainNav('image')
+                    setImageSubNav('tools')
+                    setImageToolsTab(id)
                   }}
                 />
               </div>
@@ -1696,17 +1841,29 @@ function App() {
                 icon={<Clapperboard className="w-5 h-5" />}
                 label="视频创作"
                 active={mainNav === 'video'}
-                clickable={false}
+                onClick={() => {
+                  setMainNav('video')
+                  setVideoSubNav('tools')
+                  setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
+                }}
               />
               <div className="pl-3 space-y-1">
-                <NavSecondary
-                  collapsed={false}
+                <NavSecondaryToolsFlyout
                   icon={<Video className="w-4 h-4" />}
                   label="视频工具"
                   active={mainNav === 'video' && videoSubNav === 'tools'}
-                  onClick={() => {
+                  flyoutItems={VIDEO_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
+                  activeThirdId={mainNav === 'video' && videoSubNav === 'tools' ? videoToolsTab : null}
+                  onActivateDefault={() => {
                     setMainNav('video')
                     setVideoSubNav('tools')
+                    setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
+                  }}
+                  onPickThird={(id) => {
+                    if (!isVideoToolsTabId(id)) return
+                    setMainNav('video')
+                    setVideoSubNav('tools')
+                    setVideoToolsTab(id)
                   }}
                 />
                 <NavSecondary
@@ -1921,8 +2078,6 @@ function WorkbenchComingSoon({ title }: { title: string }) {
   )
 }
 
-type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
-
 /** 单层底边线 + 下划线指示当前项，避免多层圆角框嵌套 */
 function WorkbenchSubTabNav<T extends string>({
   ariaLabel,
@@ -1963,16 +2118,9 @@ function ImageToolsWorkbench({
   tab: ImageToolsTabId
   onTabChange: (t: ImageToolsTabId) => void
 }) {
-  const items: { id: ImageToolsTabId; label: string; icon: ReactNode }[] = [
-    { id: 'removeBg', label: '去除背景', icon: <Eraser className="w-4 h-4 shrink-0" /> },
-    { id: 'upscale', label: '高清放大', icon: <Maximize2 className="w-4 h-4 shrink-0" /> },
-    { id: 'compress', label: '图片压缩', icon: <Minimize2 className="w-4 h-4 shrink-0" /> },
-    { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
-    { id: 'removeWatermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
-  ]
   return (
     <div className="space-y-6">
-      <WorkbenchSubTabNav ariaLabel="图片工具" items={items} tab={tab} onTabChange={onTabChange} />
+      <WorkbenchSubTabNav ariaLabel="图片工具" items={IMAGE_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
       {/* 保持挂载，避免切换 Tab 时 React 状态与未落盘的 IDB 写入丢失 */}
       <div className={tab === 'removeBg' ? 'block' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
         <RemoveBackgroundWorkbench />
@@ -1991,8 +2139,6 @@ function ImageToolsWorkbench({
   )
 }
 
-type VideoToolsTabId = 'generate' | 'upscale' | 'watermark' | 'subtitle'
-
 function VideoToolsWorkbench({
   tab,
   onTabChange,
@@ -2000,15 +2146,9 @@ function VideoToolsWorkbench({
   tab: VideoToolsTabId
   onTabChange: (t: VideoToolsTabId) => void
 }) {
-  const items: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
-    { id: 'generate', label: '视频生成', icon: <Video className="w-4 h-4 shrink-0" /> },
-    { id: 'upscale', label: '画质提升', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
-    { id: 'watermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
-    { id: 'subtitle', label: '去字幕', icon: <Scissors className="w-4 h-4 shrink-0" /> },
-  ]
   return (
     <div className="space-y-6">
-      <WorkbenchSubTabNav ariaLabel="视频工具" items={items} tab={tab} onTabChange={onTabChange} />
+      <WorkbenchSubTabNav ariaLabel="视频工具" items={VIDEO_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
       {tab === 'upscale' ? <WorkbenchComingSoon title="画质提升" /> : null}
       {tab === 'watermark' ? <WorkbenchComingSoon title="去水印" /> : null}
       {tab === 'subtitle' ? <WorkbenchComingSoon title="去字幕" /> : null}
@@ -2049,6 +2189,123 @@ function NavSecondary({ icon, label, active, onClick, collapsed, className = '' 
       {icon}
       {!collapsed && <span>{label}</span>}
     </button>
+  )
+}
+
+/** 展开侧栏：二级「图片工具 / 视频工具」悬停显示三级目录 */
+function NavSecondaryToolsFlyout({
+  icon,
+  label,
+  active,
+  flyoutItems,
+  activeThirdId,
+  onActivateDefault,
+  onPickThird,
+}: {
+  icon: ReactNode
+  label: string
+  active: boolean
+  flyoutItems: { id: string; label: string }[]
+  activeThirdId: string | null
+  onActivateDefault: () => void
+  onPickThird: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button
+        type="button"
+        onClick={onActivateDefault}
+        title={label}
+        className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-all text-sm ${
+          active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
+        }`}
+      >
+        <span className="flex items-center space-x-2 min-w-0">
+          {icon}
+          <span className="truncate">{label}</span>
+        </span>
+        <ChevronRight className={`w-3.5 h-3.5 shrink-0 opacity-45 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          className="absolute left-full top-0 z-[90] pl-2 -ml-1 min-h-[36px]"
+          role="menu"
+          aria-label={`${label}子功能`}
+        >
+          <div className="rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl min-w-[10rem]">
+            {flyoutItems.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                role="menuitem"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                  active && activeThirdId === it.id ? 'text-purple-700 font-medium bg-purple-50/60' : 'text-gray-700'
+                }`}
+                onClick={() => {
+                  onPickThird(it.id)
+                  setOpen(false)
+                }}
+              >
+                {it.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** 收起侧栏：图标 + 悬停三级菜单 */
+function NavCollapsedToolsFlyout({
+  icon,
+  label,
+  active,
+  flyoutItems,
+  onClickDefault,
+  onPickTool,
+}: {
+  icon: ReactNode
+  label: string
+  active: boolean
+  flyoutItems: { id: string; label: string }[]
+  onClickDefault: () => void
+  onPickTool: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div
+      className="relative w-full overflow-visible flex justify-center px-2"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <NavPrimary collapsed icon={icon} label={label} active={active} onClick={onClickDefault} />
+      {open ? (
+        <div
+          className="absolute left-full top-0 z-[90] pl-2 -ml-1"
+          role="menu"
+          aria-label={`${label}子功能`}
+        >
+          <div className="rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl min-w-[9.5rem]">
+            {flyoutItems.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                role="menuitem"
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                onClick={() => {
+                  onPickTool(it.id)
+                  setOpen(false)
+                }}
+              >
+                {it.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -2289,6 +2546,10 @@ function HelpCenter() {
     {
       title: '图片/视频生成',
       items: [
+        {
+          q: '如何分享链接直达某个工具 Tab？',
+          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；图片生成为 ?workspace=image.generate；视频工具·视频生成为 ?workspace=video.tools.generate；视频分析为 ?workspace=video.analyze。进入页面后会自动跳转并同步地址栏。',
+        },
         { q: '模型不可用怎么处理？', a: '切换到标记为可用的模型后重试；优先选择非“暂不可用”模型。' },
         { q: '生成超时怎么办？', a: '先去任务中心查看状态；若失败可点击“重试（保留参数）”，必要时降低分辨率/时长。' },
         { q: 'DALL·E 3 尺寸错误怎么办？', a: '该模型只支持固定三档尺寸。系统已自动映射，刷新后重试即可。' },
