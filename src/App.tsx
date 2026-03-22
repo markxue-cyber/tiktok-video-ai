@@ -2065,7 +2065,7 @@ function App() {
             </div>
           </div>
         </header>
-        <div className="p-6">
+        <div className={mainNav === 'video' ? 'px-6 pb-6 pt-3' : 'p-6'}>
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
           <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
             <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
@@ -2074,10 +2074,10 @@ function App() {
           <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
             <ImageToolsWorkbench tab={imageToolsTab} onTabChange={onWorkbenchImageTabChange} />
           </div>
-          <div className={mainNav === 'video' && videoSubNav === 'generate' ? 'mt-6' : 'hidden'}>
+          <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
             <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
           </div>
-          <div className={mainNav === 'video' && videoSubNav === 'upscale' ? 'mt-6' : 'hidden'}>
+          <div className={mainNav === 'video' && videoSubNav === 'upscale' ? '' : 'hidden'}>
             <VideoUpscaleWorkbench />
           </div>
           {mainNav === 'creativePlaza' ? <CreativePlazaPage /> : null}
