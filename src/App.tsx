@@ -2908,15 +2908,17 @@ function VideoGenerator({
   const handleVideoRefLocalFiles = async (files: FileList | null) => {
     const f = files?.[0]
     if (!f || !String(f.type || '').startsWith('image/')) return
+    setRefImagePreviewUrl((prev) => {
+      revokeVideoRefBlobUrl(prev)
+      return URL.createObjectURL(f)
+    })
+    setRefImageDataUrl('')
     setRefUploadBusy(true)
     try {
-      setRefImagePreviewUrl((prev) => {
-        revokeVideoRefBlobUrl(prev)
-        return URL.createObjectURL(f)
-      })
       const dataUrl = await fileToDataUrl(f)
       setRefImageDataUrl(dataUrl)
-      await safeArchiveAsset({
+      // 资产入库走后台，不阻塞「选图完成」体感（与其它产品「秒显预览」一致）
+      void safeArchiveAsset({
         source: 'user_upload',
         type: 'image',
         url: dataUrl,
@@ -3617,16 +3619,20 @@ function VideoGenerator({
                 </div>
               </div>
             )}
-            {refUploadBusy && (
+            {refUploadBusy && !refImagePreviewUrl ? (
               <div className="absolute inset-0 rounded-xl bg-black/35 backdrop-blur-[1px] flex items-center justify-center">
                 <div className="text-sm text-white/90 flex items-center">
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  上传中...
+                  处理中...
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
-          {refUploadBusy ? <div className="mt-2 text-xs text-white/45">正在处理参考图，请稍候...</div> : null}
+          {refUploadBusy ? (
+            <div className="mt-2 text-xs text-white/45">
+              {refImagePreviewUrl ? '正在准备图片（用于生成），请稍候…' : '正在处理参考图，请稍候…'}
+            </div>
+          ) : null}
         </div>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
@@ -4460,20 +4466,27 @@ function ImageGenerator({
     if (files.length > remain) setRefUploadNotice('最大可支持上传5张')
     else setRefUploadNotice('')
     const picked = Array.from(files).slice(0, remain)
-    const next: Array<{ id: string; url: string; name?: string; source: 'local' }> = []
     setRefUploadBusy(true)
     try {
-      for (const f of picked) {
-        const dataUrl = await fileToDataUrl(f)
-        next.push({ id: `local_${Date.now()}_${Math.random().toString(16).slice(2)}`, url: dataUrl, name: f.name, source: 'local' })
-        await safeArchiveAsset({
-          source: 'user_upload',
-          type: 'image',
-          url: dataUrl,
-          name: f.name,
-          metadata: { from: 'image_generator_ref_multi', mime: f.type, size: f.size },
-        })
-      }
+      const baseTs = Date.now()
+      const next = await Promise.all(
+        picked.map(async (f, i) => {
+          const dataUrl = await fileToDataUrl(f)
+          void safeArchiveAsset({
+            source: 'user_upload',
+            type: 'image',
+            url: dataUrl,
+            name: f.name,
+            metadata: { from: 'image_generator_ref_multi', mime: f.type, size: f.size },
+          })
+          return {
+            id: `local_${baseTs}_${i}_${Math.random().toString(16).slice(2)}`,
+            url: dataUrl,
+            name: f.name,
+            source: 'local' as const,
+          }
+        }),
+      )
       setRefImages((prev) => [...prev, ...next].slice(0, MAX_REF_IMAGES))
     } finally {
       setRefUploadBusy(false)
@@ -6231,17 +6244,21 @@ function ImageGenerator({
                 </div>
               </div>
             )}
-            {refUploadBusy && (
+            {refUploadBusy && refImages.length === 0 ? (
               <div className="absolute inset-0 rounded-xl bg-black/40 backdrop-blur-sm flex items-center justify-center">
                 <div className="text-sm text-white/90 flex items-center">
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  上传中...
+                  处理中...
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
           {refUploadNotice ? <div className="mt-2 text-xs text-amber-500">{refUploadNotice}</div> : null}
-          {refUploadBusy ? <div className="mt-1 text-xs text-white/45">上传中…</div> : null}
+          {refUploadBusy ? (
+            <div className="mt-1 text-xs text-white/45">
+              {refImages.length ? '正在添加图片，请稍候…' : '正在处理图片，请稍候…'}
+            </div>
+          ) : null}
         </section>
 
         {aiError ? (
