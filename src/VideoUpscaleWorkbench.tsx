@@ -88,7 +88,7 @@ function VideoUpscaleLoadingCard({
         <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-400 animate-spin" />
         <div className="absolute inset-[14px] rounded-full border-[3px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
       </div>
-      <h3 className="text-[28px] leading-none font-semibold text-white">视频生成中</h3>
+      <h3 className="text-[28px] leading-none font-semibold text-white">视频增强中</h3>
       <p className="mt-2 text-sm text-white/70">正在计算运镜轨迹与画面细节，请稍等片刻...</p>
       <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
         {['构图', '运镜', '质检'].map((chip) => (
@@ -543,7 +543,7 @@ export function VideoUpscaleWorkbench() {
         taskId: submit.taskId,
         historyId: hid,
         progress: '0%',
-        statusText: submit.message || '创建视频处理中…',
+        statusText: submit.message || '视频增强处理中…',
       })
       await runUpscaleStatusPoll(hid, submit.taskId, { targetRes, targetFps, durationSec })
     } catch (e: any) {
@@ -562,7 +562,7 @@ export function VideoUpscaleWorkbench() {
   return (
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-6">创建视频</h2>
+        <h2 className="text-xl font-bold mb-6">视频增强</h2>
 
         <div className="mb-6">
           <div className="block text-sm font-medium mb-2">上传视频</div>
@@ -765,7 +765,7 @@ export function VideoUpscaleWorkbench() {
         ) : !history.length ? (
           <div className="min-h-[200px] flex flex-col items-center justify-center text-center text-white/45 border border-white/12 rounded-xl bg-white/[0.02] px-6 mb-6">
             <Video className="w-14 h-14 mb-3 opacity-35" />
-            <p className="text-sm text-white/55">暂无创建视频记录</p>
+            <p className="text-sm text-white/55">暂无视频增强记录</p>
             <p className="text-xs text-white/40 mt-1 max-w-xs">完成左侧上传与「开始提升」后，进度与结果会出现在此处并写入资产库。</p>
           </div>
         ) : null}
@@ -783,7 +783,7 @@ export function VideoUpscaleWorkbench() {
                     >
                       <div className="mb-2.5 flex items-start justify-between gap-2">
                         <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-white/95 sm:text-xl pr-1">
-                          创建视频 · {resLabel(task.targetRes)} · {task.targetFps}FPS
+                          视频增强 · {resLabel(task.targetRes)} · {task.targetFps}FPS
                         </h3>
                         <button
                           type="button"

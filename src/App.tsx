@@ -876,7 +876,7 @@ const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNo
 
 const VIDEO_TOOLS_TAB_ITEMS: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
   { id: 'generate', label: '视频生成', icon: <Video className="w-4 h-4 shrink-0" /> },
-  { id: 'upscale', label: '创建视频', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
+  { id: 'upscale', label: '视频增强', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
   { id: 'watermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
   { id: 'subtitle', label: '去字幕', icon: <Scissors className="w-4 h-4 shrink-0" /> },
 ]
@@ -1297,7 +1297,7 @@ function App() {
     if (mainNav === 'video') {
       if (videoSubNav === 'tools') {
         if (videoToolsTab === 'generate') return '视频工具-视频生成'
-        if (videoToolsTab === 'upscale') return '视频工具-创建视频'
+        if (videoToolsTab === 'upscale') return '视频工具-视频增强'
         if (videoToolsTab === 'watermark') return '视频工具-去水印'
         return '视频工具-去字幕'
       }
@@ -1946,7 +1946,7 @@ function App() {
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' && '视频工具 · 视频生成'}
-                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 创建视频'}
+                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 视频增强'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'watermark' && '视频工具 · 去水印'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'subtitle' && '视频工具 · 去字幕'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
@@ -2591,7 +2591,7 @@ function HelpCenter() {
       items: [
         {
           q: '如何分享链接直达某个工具 Tab？',
-          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；图片生成为 ?workspace=image.generate；视频工具·视频生成为 ?workspace=video.tools.generate；视频分析为 ?workspace=video.analyze。进入页面后会自动跳转并同步地址栏。',
+          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；图片生成为 ?workspace=image.generate；视频工具·视频生成为 ?workspace=video.tools.generate；视频工具·视频增强为 ?workspace=video.tools.upscale；视频分析为 ?workspace=video.analyze。进入页面后会自动跳转并同步地址栏。',
         },
         { q: '模型不可用怎么处理？', a: '切换到标记为可用的模型后重试；优先选择非“暂不可用”模型。' },
         { q: '生成超时怎么办？', a: '先去任务中心查看状态；若失败可点击“重试（保留参数）”，必要时降低分辨率/时长。' },
@@ -3530,12 +3530,12 @@ function VideoGenerator({
   return (
     <>
     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-6">创建视频</h2>
+      <div className="tikgen-panel rounded-2xl p-6">
+        <h2 className="text-xl font-bold mb-6 text-white/95">视频生成</h2>
         <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">上传参考图</label>
+          <label className="block text-sm font-medium mb-2 text-white/75">上传参考图</label>
           <div
-            className={`tikgen-ref-dropzone-light rounded-xl p-2.5 relative transition-shadow ${refImagePreviewUrl ? 'cursor-default' : 'cursor-pointer'}`}
+            className={`tikgen-ref-dropzone rounded-xl p-2.5 relative transition-shadow ${refImagePreviewUrl ? 'cursor-default' : 'cursor-pointer'}`}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -3562,13 +3562,13 @@ function VideoGenerator({
             />
             {refImagePreviewUrl ? (
               <div className="flex flex-col items-center justify-center gap-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto rounded-lg ring-1 ring-inset ring-gray-200/90" />
+                <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto rounded-lg ring-1 ring-inset ring-white/12" />
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"
                     disabled={refUploadBusy}
                     onClick={() => videoRefUploadInputRef.current?.click()}
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] disabled:opacity-50"
                   >
                     选择文件
                   </button>
@@ -3579,16 +3579,16 @@ function VideoGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50 inline-flex items-center gap-1"
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] disabled:opacity-50 inline-flex items-center gap-1"
                   >
-                    <Folder className="w-3.5 h-3.5 opacity-70" aria-hidden />
+                    <Folder className="w-3.5 h-3.5 text-white/45" aria-hidden />
                     从资产库选择
                   </button>
                   <button
                     type="button"
                     disabled={refUploadBusy}
                     onClick={clearVideoRefImage}
-                    className="px-3 py-1.5 rounded-lg text-xs text-red-600/90 ring-1 ring-inset ring-red-200 hover:bg-red-50 disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg text-xs text-red-300/95 ring-1 ring-inset ring-red-400/22 hover:bg-red-500/12 disabled:opacity-50"
                   >
                     清除
                   </button>
@@ -3596,8 +3596,8 @@ function VideoGenerator({
               </div>
             ) : (
               <div className="flex min-h-[104px] flex-col items-center justify-center gap-2.5 py-4 text-center">
-                <Upload className="w-7 h-7 mx-auto text-gray-400" />
-                <div className="text-sm font-medium text-gray-600">点击或拖拽上传</div>
+                <Upload className="w-7 h-7 mx-auto text-white/35" />
+                <div className="text-sm font-medium text-white/75">点击或拖拽上传</div>
                 <div className="flex items-center justify-center gap-2">
                   <button
                     type="button"
@@ -3606,7 +3606,7 @@ function VideoGenerator({
                       e.stopPropagation()
                       videoRefUploadInputRef.current?.click()
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] disabled:opacity-50"
                   >
                     选择文件
                   </button>
@@ -3618,9 +3618,9 @@ function VideoGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50 inline-flex items-center gap-1"
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] disabled:opacity-50 inline-flex items-center gap-1"
                   >
-                    <Folder className="w-3.5 h-3.5 opacity-70" aria-hidden />
+                    <Folder className="w-3.5 h-3.5 text-white/45" aria-hidden />
                     从资产库选择
                   </button>
                 </div>
@@ -3635,12 +3635,16 @@ function VideoGenerator({
               </div>
             )}
           </div>
-          {refUploadBusy ? <div className="mt-2 text-xs text-gray-500">正在处理参考图，请稍候...</div> : null}
+          {refUploadBusy ? <div className="mt-2 text-xs text-white/45">正在处理参考图，请稍候...</div> : null}
         </div>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium mb-1">AI模型</label>
-            <select value={model} onChange={(e) => setModel(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <label className="block text-sm font-medium mb-1 text-white/75">AI模型</label>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-3 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/12 focus:ring-2 focus:ring-violet-400/35"
+            >
               {VIDEO_MODELS.map((m) => (
                 <option key={m.id} value={m.id} disabled={!!unavailableVideoMap[m.id]}>
                   {m.name}
@@ -3648,11 +3652,15 @@ function VideoGenerator({
                 </option>
               ))}
             </select>
-            {unavailableVideoMap[model] ? <div className="mt-1 text-xs text-amber-600">当前模型暂不可用，请切换其他模型。</div> : null}
+            {unavailableVideoMap[model] ? <div className="mt-1 text-xs text-amber-300/90">当前模型暂不可用，请切换其他模型。</div> : null}
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">分辨率</label>
-            <select value={resolution} onChange={(e) => setResolution(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <label className="block text-sm font-medium mb-1 text-white/75">分辨率</label>
+            <select
+              value={resolution}
+              onChange={(e) => setResolution(e.target.value as any)}
+              className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-3 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/12 focus:ring-2 focus:ring-violet-400/35"
+            >
               {caps.resolutions.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -3661,8 +3669,12 @@ function VideoGenerator({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">视频时长</label>
-            <select value={durationSec} onChange={(e) => setDurationSec(Number(e.target.value) as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <label className="block text-sm font-medium mb-1 text-white/75">视频时长</label>
+            <select
+              value={durationSec}
+              onChange={(e) => setDurationSec(Number(e.target.value) as any)}
+              className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-3 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/12 focus:ring-2 focus:ring-violet-400/35"
+            >
               {caps.durations.map((d) => (
                 <option key={d} value={d}>
                   {d}s
@@ -3671,8 +3683,12 @@ function VideoGenerator({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">尺寸</label>
-            <select value={size} onChange={(e) => setSize(e.target.value as any)} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <label className="block text-sm font-medium mb-1 text-white/75">尺寸</label>
+            <select
+              value={size}
+              onChange={(e) => setSize(e.target.value as any)}
+              className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-3 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/12 focus:ring-2 focus:ring-violet-400/35"
+            >
               {caps.aspectRatios.map((ar) => (
                 <option key={ar} value={ar}>
                   {ar}
@@ -3684,10 +3700,10 @@ function VideoGenerator({
 
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium">视频文案描述</label>
+            <label className="block text-sm font-medium text-white/75">视频文案描述</label>
             <button
               onClick={handlePromptGen}
-              className="px-3 py-1.5 rounded-full text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center"
+              className="px-3 py-1.5 rounded-full text-sm bg-white/10 text-violet-200 hover:bg-white/15 flex items-center ring-1 ring-inset ring-white/[0.08]"
             >
               <Sparkles className="w-4 h-4 mr-1" /> 一键生成提示词
             </button>
@@ -3695,14 +3711,14 @@ function VideoGenerator({
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="w-full px-4 py-3 border rounded-xl min-h-[140px]"
+            className="w-full px-4 py-3 rounded-xl min-h-[140px] bg-black/25 border border-white/10 text-white/90 placeholder:text-white/35 outline-none focus:ring-2 focus:ring-violet-400/30"
             placeholder="输入商品卖点/场景/风格，或使用一键生成提示词..."
           />
         </div>
         <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成视频'}</button>
       </div>
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-6">生成结果</h2>
+      <div className="tikgen-panel rounded-2xl p-6">
+        <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
         {isGenerating ? (
           <GenerationLoadingCard
             title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.title}
@@ -3712,10 +3728,10 @@ function VideoGenerator({
             progressText={`进度：${progress}${taskId ? ` | 任务ID：${taskId}` : ''}`}
           />
         ) : errorText ? (
-          <div className="h-96 flex flex-col items-center justify-center text-center bg-red-50 rounded-xl px-6">
-            <p className="text-red-600 font-medium">生成失败</p>
-            <p className="text-sm text-red-500 mt-2 break-words">{errorText}</p>
-            <p className="text-xs text-red-400 mt-2">错误码：{errorCode}</p>
+          <div className="h-96 flex flex-col items-center justify-center text-center rounded-xl px-6 border border-red-400/25 bg-red-500/10">
+            <p className="text-red-200 font-medium">生成失败</p>
+            <p className="text-sm text-red-300/90 mt-2 break-words">{errorText}</p>
+            <p className="text-xs text-red-400/80 mt-2">错误码：{errorCode}</p>
             {errorCode !== 'QUOTA_EXHAUSTED' && (
               <button
                 onClick={handleGenerate}
@@ -3725,20 +3741,33 @@ function VideoGenerator({
                 重试（保留参数）
               </button>
             )}
-            {taskId && <p className="text-xs text-red-400 mt-3 break-all">任务ID：{taskId}</p>}
+            {taskId && <p className="text-xs text-red-400/70 mt-3 break-all">任务ID：{taskId}</p>}
           </div>
         ) : generatedVideo ? (
           <div>
-            <video src={generatedVideo} className="w-full rounded-xl" controls />
+            <video src={generatedVideo} className="w-full rounded-xl ring-1 ring-inset ring-white/10" controls />
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <button className="py-3 bg-gray-100 rounded-xl flex items-center justify-center"><Play className="w-5 h-5 mr-2" />预览</button>
-              <a href={generatedVideo} download className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center">
-                <Download className="w-5 h-5 mr-2" />下载
+              <button
+                type="button"
+                className="py-3 rounded-xl flex items-center justify-center text-white/85 bg-white/[0.06] ring-1 ring-inset ring-white/[0.1] hover:bg-white/[0.1]"
+              >
+                <Play className="w-5 h-5 mr-2" />
+                预览
+              </button>
+              <a
+                href={generatedVideo}
+                download
+                className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center"
+              >
+                <Download className="w-5 h-5 mr-2" />
+                下载
               </a>
             </div>
           </div>
         ) : (
-          <div className="h-96 flex items-center justify-center text-gray-400 border-2 border-dashed rounded-xl"><Video className="w-16 h-16 opacity-50" /></div>
+          <div className="h-96 flex items-center justify-center text-white/40 border border-white/12 rounded-xl bg-white/[0.02]">
+            <Video className="w-16 h-16 opacity-40" />
+          </div>
         )}
       </div>
     </div>
@@ -6077,7 +6106,7 @@ function ImageGenerator({
                           e.stopPropagation()
                           refUploadInputRef.current?.click()
                         }}
-                        className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-white/[0.07] hover:text-white/65"
+                        className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.06] transition-colors hover:bg-white/[0.07] hover:ring-white/[0.1] hover:text-white/65"
                       >
                         <Upload className="w-4 h-4" />
                         <span className="text-[11px]">上传</span>
@@ -6090,7 +6119,7 @@ function ImageGenerator({
                           setAssetSelectedIds(new Set())
                           setShowAssetPicker(true)
                         }}
-                        className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-white/[0.07] hover:text-white/65"
+                        className="h-20 rounded-lg flex flex-col items-center justify-center gap-1 bg-white/[0.04] text-white/50 ring-1 ring-inset ring-white/[0.06] transition-colors hover:bg-white/[0.07] hover:ring-white/[0.1] hover:text-white/65"
                       >
                         <Folder className="w-4 h-4" />
                         <span className="text-[11px]">从资产库选择</span>
@@ -6105,7 +6134,7 @@ function ImageGenerator({
                 <div className="text-sm font-medium text-white/75">点击或拖拽上传</div>
                 <div className="flex items-center justify-center gap-2">
                   <label
-                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white/[0.06] ring-1 ring-inset ring-white/[0.1] hover:bg-white/[0.1] text-white/75"
+                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white/[0.04] ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] text-white/80"
                     onClick={(e) => {
                       e.stopPropagation()
                       refUploadInputRef.current?.click()
@@ -6121,7 +6150,7 @@ function ImageGenerator({
                       setAssetSelectedIds(new Set())
                       setShowAssetPicker(true)
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.06] ring-1 ring-inset ring-white/[0.1] hover:bg-white/[0.1] text-white/75"
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] text-white/80"
                   >
                     从资产库选择
                   </button>

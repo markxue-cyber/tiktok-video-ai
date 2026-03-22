@@ -35,7 +35,7 @@ export const TIKGEN_IG_IDB = {
   imageTranslateHistoryFull: 'imageTranslate.historyFull.v1',
   /** 视频工具 · 画质提升历史（含输入/输出 URL） */
   videoUpscaleHistoryFull: 'videoUpscale.historyFull.v1',
-  /** 视频工具 · 创建视频：左侧表单（输入 URL、参数） */
+  /** 视频工具 · 视频增强：左侧表单（输入 URL、参数） */
   videoUpscaleWorkspace: 'videoUpscale.workspace.v1',
   /** 视频工具 · 视频生成：表单 + 进行中任务（刷新后续传） */
   videoGeneratorWorkspace: 'videoGenerator.workspace.v1',
@@ -68,7 +68,7 @@ export type VideoGeneratorWorkspaceV1 = {
   isGenerating: boolean
 }
 
-/** 创建视频（画质提升）左侧工作区 */
+/** 视频增强（画质提升）左侧工作区 */
 export type VideoUpscaleWorkspaceV1 = {
   v: 1
   publicVideoUrl: string
