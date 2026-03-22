@@ -559,29 +559,32 @@ export function VideoUpscaleWorkbench() {
 
   const resLabel = (r: string) => (r === '2k' ? '2K' : r === '4k' ? '4K' : '1080P')
 
+  const videoUpscaleBtnClass =
+    'px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] disabled:opacity-50'
+
   return (
     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-6">视频增强</h2>
+      <div className="tikgen-panel rounded-2xl p-6">
+        <h2 className="text-xl font-bold mb-6 text-white/95">视频增强</h2>
 
         <div className="mb-6">
-          <div className="block text-sm font-medium mb-2">上传视频</div>
-          {/* 始终隐藏原生 file 控件，避免出现「未选择任何文件」且遮挡 video 控件 */}
+          <div className="block text-sm font-medium mb-2 text-white/75">上传视频</div>
           <input
             ref={fileInputRef}
-            id="video-upscale-file-input"
             type="file"
             accept="video/*"
-            className="sr-only"
+            className="hidden"
+            aria-hidden
             tabIndex={-1}
-            aria-label="选择视频文件"
             onChange={(e) => {
               void onPickFile(e.target.files)
               e.target.value = ''
             }}
           />
           <div
-            className="border-2 border-dashed border-gray-300 rounded-xl text-center relative overflow-hidden min-h-[200px]"
+            className={`tikgen-ref-dropzone rounded-xl text-center relative overflow-hidden min-h-[200px] p-2.5 transition-shadow ${
+              previewUrl ? 'cursor-default' : uploading ? 'cursor-wait' : 'cursor-pointer'
+            }`}
             onDragOver={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -591,10 +594,16 @@ export function VideoUpscaleWorkbench() {
               e.stopPropagation()
               void onPickFile(e.dataTransfer?.files || null)
             }}
+            onClick={() => {
+              if (!previewUrl && !uploading) fileInputRef.current?.click()
+            }}
           >
             {previewUrl ? (
-              <div className="relative z-0 flex flex-col items-center p-3 sm:p-4">
-                <div className="w-full max-w-md rounded-xl overflow-hidden bg-black ring-1 ring-black/10">
+              <div
+                className="relative z-0 flex flex-col items-center p-3 sm:p-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="w-full max-w-md rounded-xl overflow-hidden bg-black ring-1 ring-white/12">
                   <video
                     key={previewUrl}
                     src={previewUrl}
@@ -604,59 +613,61 @@ export function VideoUpscaleWorkbench() {
                     className="mx-auto max-h-[min(70vh,520px)] w-full object-contain"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-3">
+                <p className="text-xs text-white/55 mt-3">
                   {file?.name || sourceVideoName ? (
-                    <span className="block truncate max-w-full text-gray-600 mb-0.5">{file?.name || sourceVideoName}</span>
+                    <span className="block truncate max-w-full text-white/75 mb-0.5">{file?.name || sourceVideoName}</span>
                   ) : null}
                   时长 {durationSec}s · 约 {aspectRatio}
-                  {publicVideoUrl ? <span className="text-emerald-600"> · 已上传</span> : uploading ? <span> · 上传中…</span> : null}
+                  {publicVideoUrl ? <span className="text-emerald-400/90"> · 已上传</span> : uploading ? <span className="text-white/50"> · 上传中…</span> : null}
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">使用下方控件可暂停、拖动进度条、全屏播放</p>
+                <p className="text-[11px] text-white/40 mt-1">使用下方控件可暂停、拖动进度条、全屏播放</p>
                 <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleReselectVideo}
-                    className="text-sm text-purple-600 hover:text-purple-800"
-                  >
+                  <button type="button" onClick={handleReselectVideo} className={`${videoUpscaleBtnClass} inline-flex items-center`}>
                     重新选择文件
                   </button>
-                  <span className="text-gray-300">|</span>
                   <button
                     type="button"
                     disabled={uploading}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setVideoAssetSelectedIds(new Set())
                       setShowVideoAssetPicker(true)
                     }}
-                    className="text-sm text-purple-600 hover:text-purple-800 disabled:opacity-50 inline-flex items-center gap-1"
+                    className={`${videoUpscaleBtnClass} inline-flex items-center gap-1`}
                   >
-                    <Folder className="w-3.5 h-3.5" aria-hidden />
+                    <Folder className="w-3.5 h-3.5 text-white/45" aria-hidden />
                     从资产库选择
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 p-6 rounded-xl">
-                <Upload className="w-10 h-10 text-gray-400" />
-                <p className="text-sm font-medium text-gray-600">点击或拖拽上传</p>
-                <p className="text-xs text-gray-400">最大 50MB，时长不超过 60 秒</p>
+              <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 py-6 px-4 rounded-xl">
+                <Upload className="w-10 h-10 text-white/35" />
+                <p className="text-sm font-medium text-white/75">点击或拖拽上传</p>
+                <p className="text-xs text-white/45">最大 50MB，时长不超过 60 秒</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <label
-                    htmlFor="video-upscale-file-input"
-                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700"
-                  >
-                    选择文件
-                  </label>
                   <button
                     type="button"
                     disabled={uploading}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      fileInputRef.current?.click()
+                    }}
+                    className={`${videoUpscaleBtnClass} cursor-pointer`}
+                  >
+                    选择文件
+                  </button>
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setVideoAssetSelectedIds(new Set())
                       setShowVideoAssetPicker(true)
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50 inline-flex items-center gap-1"
+                    className={`${videoUpscaleBtnClass} inline-flex items-center gap-1`}
                   >
-                    <Folder className="w-3.5 h-3.5 opacity-70" aria-hidden />
+                    <Folder className="w-3.5 h-3.5 text-white/45" aria-hidden />
                     从资产库选择
                   </button>
                 </div>
@@ -673,12 +684,12 @@ export function VideoUpscaleWorkbench() {
           </div>
           {uploadError ? (
             <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
-              <p className="text-sm text-red-600 flex-1">{uploadError}</p>
+              <p className="text-sm text-red-300/95 flex-1">{uploadError}</p>
               {file ? (
                 <button
                   type="button"
                   onClick={() => void runUpload(file, { durationSec, aspect: aspectRatio })}
-                  className="text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 shrink-0"
+                  className="text-sm px-3 py-1.5 rounded-lg border border-red-400/30 text-red-200 hover:bg-red-500/15 shrink-0"
                 >
                   重试上传
                 </button>
@@ -689,11 +700,11 @@ export function VideoUpscaleWorkbench() {
 
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium mb-1">目标分辨率</label>
+            <label className="block text-sm font-medium mb-1 text-white/75">目标分辨率</label>
             <select
               value={targetRes}
               onChange={(e) => setTargetRes(e.target.value as '1080p' | '2k' | '4k')}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-3 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/12 focus:ring-2 focus:ring-violet-400/35"
             >
               <option value="1080p">1080P</option>
               <option value="2k">2K</option>
@@ -701,11 +712,11 @@ export function VideoUpscaleWorkbench() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">目标帧率</label>
+            <label className="block text-sm font-medium mb-1 text-white/75">目标帧率</label>
             <select
               value={targetFps}
               onChange={(e) => setTargetFps(Number(e.target.value) as 30 | 60)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              className="tikgen-spec-select w-full appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-3 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/12 focus:ring-2 focus:ring-violet-400/35"
             >
               <option value={30}>30 FPS</option>
               <option value={60}>60 FPS</option>

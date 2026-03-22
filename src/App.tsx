@@ -40,8 +40,6 @@ import {
   Clapperboard,
   Wrench,
   Minimize2,
-  Droplets,
-  Scissors,
   Trash2,
   LayoutGrid,
 } from 'lucide-react'
@@ -865,7 +863,7 @@ async function prefetchAssetsCacheIfNeeded() {
 
 /** 图片 / 视频工具三级 Tab（侧栏 flyout、URL workspace=、工作台子导航共用） */
 type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress'
-type VideoToolsTabId = 'generate' | 'upscale' | 'watermark' | 'subtitle'
+type VideoToolsTabId = 'generate' | 'upscale'
 
 const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNode }[] = [
   { id: 'removeBg', label: '去除背景', icon: <Eraser className="w-4 h-4 shrink-0" /> },
@@ -877,9 +875,10 @@ const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNo
 const VIDEO_TOOLS_TAB_ITEMS: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
   { id: 'generate', label: '视频生成', icon: <Video className="w-4 h-4 shrink-0" /> },
   { id: 'upscale', label: '视频增强', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
-  { id: 'watermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
-  { id: 'subtitle', label: '去字幕', icon: <Scissors className="w-4 h-4 shrink-0" /> },
 ]
+
+const FIRST_IMAGE_TOOL_TAB: ImageToolsTabId = IMAGE_TOOLS_TAB_ITEMS[0]!.id
+const FIRST_VIDEO_TOOL_TAB: VideoToolsTabId = VIDEO_TOOLS_TAB_ITEMS[0]!.id
 
 function isImageToolsTabId(v: string): v is ImageToolsTabId {
   return (IMAGE_TOOLS_TAB_ITEMS as readonly { id: ImageToolsTabId }[]).some((x) => x.id === v)
@@ -888,8 +887,11 @@ function isVideoToolsTabId(v: string): v is VideoToolsTabId {
   return (VIDEO_TOOLS_TAB_ITEMS as readonly { id: VideoToolsTabId }[]).some((x) => x.id === v)
 }
 
-const FIRST_IMAGE_TOOL_TAB: ImageToolsTabId = IMAGE_TOOLS_TAB_ITEMS[0]!.id
-const FIRST_VIDEO_TOOL_TAB: VideoToolsTabId = VIDEO_TOOLS_TAB_ITEMS[0]!.id
+/** 旧版「去水印 / 去字幕」Tab 已下线，会话与深链回落到默认 Tab */
+function normalizeVideoToolsTabId(v: string | null | undefined): VideoToolsTabId {
+  if (v === 'generate' || v === 'upscale') return v
+  return FIRST_VIDEO_TOOL_TAB
+}
 
 function workspaceParamFromNav(
   mainNav: 'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer',
@@ -970,7 +972,7 @@ function App() {
   const [videoToolsTab, setVideoToolsTab] = useState<VideoToolsTabId>(() => {
     try {
       const v = sessionStorage.getItem('tikgen.sess.videoToolsTab')
-      if (v && isVideoToolsTabId(v)) return v
+      return normalizeVideoToolsTabId(v)
     } catch {
       // ignore
     }
@@ -1047,7 +1049,7 @@ function App() {
         } else if (parts[1] === 'tools') {
           setMainNav('video')
           setVideoSubNav('tools')
-          if (parts[2] && isVideoToolsTabId(parts[2])) setVideoToolsTab(parts[2])
+          if (parts[2]) setVideoToolsTab(normalizeVideoToolsTabId(parts[2]))
           else setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
         }
       }
@@ -1298,8 +1300,7 @@ function App() {
       if (videoSubNav === 'tools') {
         if (videoToolsTab === 'generate') return '视频工具-视频生成'
         if (videoToolsTab === 'upscale') return '视频工具-视频增强'
-        if (videoToolsTab === 'watermark') return '视频工具-去水印'
-        return '视频工具-去字幕'
+        return '视频工具'
       }
       return '视频分析'
     }
@@ -1947,8 +1948,6 @@ function App() {
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' && '视频工具 · 视频生成'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 视频增强'}
-                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'watermark' && '视频工具 · 去水印'}
-                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'subtitle' && '视频工具 · 去字幕'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
                 {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && '模板与案例库'}
                 {mainNav === 'creativePlaza' && '创意广场'}
@@ -2193,8 +2192,6 @@ function VideoToolsWorkbench({
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="视频工具" items={VIDEO_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
       {tab === 'upscale' ? <VideoUpscaleWorkbench /> : null}
-      {tab === 'watermark' ? <WorkbenchComingSoon title="去水印" /> : null}
-      {tab === 'subtitle' ? <WorkbenchComingSoon title="去字幕" /> : null}
     </div>
   )
 }
