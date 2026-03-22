@@ -641,10 +641,15 @@ export function VideoUpscaleWorkbench() {
                 </div>
               </div>
             ) : (
-              <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 py-6 px-4 rounded-xl">
-                <Upload className="w-10 h-10 text-white/35" />
-                <p className="text-sm font-medium text-white/75">点击或拖拽上传</p>
-                <p className="text-xs text-white/45">最大 50MB，时长不超过 60 秒</p>
+              <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 py-6 px-4 rounded-xl">
+                <div
+                  className="mb-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.035] ring-1 ring-inset ring-white/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]"
+                  aria-hidden
+                >
+                  <Upload className="h-[18px] w-[18px] text-violet-200/35" strokeWidth={1.35} />
+                </div>
+                <p className="text-sm font-medium text-white/[0.55] tracking-tight">点击或拖拽上传</p>
+                <p className="text-xs text-white/32 leading-relaxed">最大 50MB，时长不超过 60 秒</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"
