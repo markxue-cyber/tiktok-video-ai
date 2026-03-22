@@ -50,6 +50,7 @@ import {
   Minimize2,
   Trash2,
   LayoutGrid,
+  Layers,
 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -94,7 +95,9 @@ import { Sentry } from './sentry'
 import {
   TIKGEN_IG_IDB,
   TIKGEN_IG_LS_BOARD,
+  TIKGEN_IG_LS_BOARD_SIMPLE,
   TIKGEN_IG_LS_HISTORY,
+  TIKGEN_IG_LS_HISTORY_SIMPLE,
   loadSceneRunBoardFromLocalStorage,
   stripBoardForLocalStorage,
   stripHistoryForLocalStorage,
@@ -221,9 +224,9 @@ type ImageGenHistoryTask = {
   errorMessage?: string
 }
 
-function loadImageGenHistoryFromStorage(): ImageGenHistoryTask[] {
+function loadImageGenHistoryFromStorage(lsKey: string = TIKGEN_IG_LS_HISTORY): ImageGenHistoryTask[] {
   try {
-    const raw = localStorage.getItem(TIKGEN_IG_LS_HISTORY)
+    const raw = localStorage.getItem(lsKey)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
@@ -917,6 +920,9 @@ async function prefetchAssetsCacheIfNeeded() {
   }
 }
 
+/** 图片创作二级：图片生成（简版）/ 电商套图 / 图片工具 */
+type ImageSubNavId = 'imageGen' | 'ecommerce' | 'tools'
+
 /** 图片工具三级 Tab（侧栏 flyout、URL workspace=、工作台子导航共用） */
 type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress'
 /** 视频创作二级：生成 / 增强（workspace: video.generate | video.upscale） */
@@ -936,6 +942,10 @@ function isImageToolsTabId(v: string): v is ImageToolsTabId {
   return (IMAGE_TOOLS_TAB_ITEMS as readonly { id: ImageToolsTabId }[]).some((x) => x.id === v)
 }
 
+function isImageSubNavId(v: string): v is ImageSubNavId {
+  return v === 'imageGen' || v === 'ecommerce' || v === 'tools'
+}
+
 function isVideoSubNavId(v: string): v is VideoSubNavId {
   return v === 'generate' || v === 'upscale'
 }
@@ -947,11 +957,12 @@ function normalizeVideoSubNavId(v: string | null | undefined): VideoSubNavId {
 
 function workspaceParamFromNav(
   mainNav: 'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer',
-  imageSubNav: 'generate' | 'tools',
+  imageSubNav: ImageSubNavId,
   imageToolsTab: ImageToolsTabId,
   videoSubNav: VideoSubNavId,
 ): string | null {
-  if (mainNav === 'image' && imageSubNav === 'generate') return 'image.generate'
+  if (mainNav === 'image' && imageSubNav === 'imageGen') return 'image.imageGen'
+  if (mainNav === 'image' && imageSubNav === 'ecommerce') return 'image.ecommerce'
   if (mainNav === 'image' && imageSubNav === 'tools') return `image.tools.${imageToolsTab}`
   if (mainNav === 'video') return `video.${videoSubNav}`
   return null
@@ -992,14 +1003,15 @@ function App() {
   const [mainNav, setMainNav] = useState<
     'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
   >('image')
-  const [imageSubNav, setImageSubNav] = useState<'generate' | 'tools'>(() => {
+  const [imageSubNav, setImageSubNav] = useState<ImageSubNavId>(() => {
     try {
       const v = sessionStorage.getItem('tikgen.sess.imageSubNav')
-      if (v === 'generate' || v === 'tools') return v
+      if (v === 'generate') return 'ecommerce'
+      if (v && isImageSubNavId(v)) return v
     } catch {
       // ignore
     }
-    return 'generate'
+    return 'ecommerce'
   })
   const [imageToolsTab, setImageToolsTab] = useState<ImageToolsTabId>(() => {
     try {
@@ -1073,9 +1085,15 @@ function App() {
       if (!w) return
       const parts = w.split('.').filter(Boolean)
       if (parts[0] === 'image') {
-        if (parts[1] === 'generate') {
+        if (parts[1] === 'imageGen') {
           setMainNav('image')
-          setImageSubNav('generate')
+          setImageSubNav('imageGen')
+        } else if (parts[1] === 'ecommerce') {
+          setMainNav('image')
+          setImageSubNav('ecommerce')
+        } else if (parts[1] === 'generate') {
+          setMainNav('image')
+          setImageSubNav('ecommerce')
         } else if (parts[1] === 'tools') {
           setMainNav('image')
           setImageSubNav('tools')
@@ -1274,14 +1292,14 @@ function App() {
   useEffect(() => {
     if (!isDevAdmin && mainNav === 'developer') {
       setMainNav('image')
-      setImageSubNav('generate')
+      setImageSubNav('ecommerce')
     }
   }, [isDevAdmin, mainNav])
 
   useEffect(() => {
     if (!TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates') {
       setMainNav('image')
-      setImageSubNav('generate')
+      setImageSubNav('ecommerce')
     }
   }, [mainNav])
 
@@ -1325,7 +1343,8 @@ function App() {
 
   const currentPageLabel = useMemo(() => {
     if (mainNav === 'image') {
-      if (imageSubNav === 'generate') return '电商套图'
+      if (imageSubNav === 'imageGen') return '图片生成'
+      if (imageSubNav === 'ecommerce') return '电商套图'
       if (imageSubNav === 'tools') {
         if (imageToolsTab === 'removeBg') return '图片工具-去除背景'
         if (imageToolsTab === 'upscale') return '图片工具-高清放大'
@@ -1800,12 +1819,22 @@ function App() {
             <>
               <NavPrimary
                 collapsed
-                icon={<Image className="w-5 h-5" />}
-                label="电商套图"
-                active={mainNav === 'image' && imageSubNav === 'generate'}
+                icon={<Sparkles className="w-5 h-5" />}
+                label="图片生成"
+                active={mainNav === 'image' && imageSubNav === 'imageGen'}
                 onClick={() => {
                   setMainNav('image')
-                  setImageSubNav('generate')
+                  setImageSubNav('imageGen')
+                }}
+              />
+              <NavPrimary
+                collapsed
+                icon={<Layers className="w-5 h-5" />}
+                label="电商套图"
+                active={mainNav === 'image' && imageSubNav === 'ecommerce'}
+                onClick={() => {
+                  setMainNav('image')
+                  setImageSubNav('ecommerce')
                 }}
               />
               <NavCollapsedToolsFlyout
@@ -1874,18 +1903,28 @@ function App() {
                 active={mainNav === 'image'}
                 onClick={() => {
                   setMainNav('image')
-                  setImageSubNav('generate')
+                  setImageSubNav('imageGen')
                 }}
               />
               <div className="pl-3 space-y-1">
                 <NavSecondary
                   collapsed={false}
                   icon={<Sparkles className="w-4 h-4" />}
-                  label="电商套图"
-                  active={mainNav === 'image' && imageSubNav === 'generate'}
+                  label="图片生成"
+                  active={mainNav === 'image' && imageSubNav === 'imageGen'}
                   onClick={() => {
                     setMainNav('image')
-                    setImageSubNav('generate')
+                    setImageSubNav('imageGen')
+                  }}
+                />
+                <NavSecondary
+                  collapsed={false}
+                  icon={<Layers className="w-4 h-4" />}
+                  label="电商套图"
+                  active={mainNav === 'image' && imageSubNav === 'ecommerce'}
+                  onClick={() => {
+                    setMainNav('image')
+                    setImageSubNav('ecommerce')
                   }}
                 />
                 <NavSecondaryToolsFlyout
@@ -1969,7 +2008,8 @@ function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">
-                {mainNav === 'image' && imageSubNav === 'generate' && '电商套图'}
+                {mainNav === 'image' && imageSubNav === 'imageGen' && '图片生成'}
+                {mainNav === 'image' && imageSubNav === 'ecommerce' && '电商套图'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'upscale' && '图片工具 · 高清放大'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
@@ -2067,8 +2107,21 @@ function App() {
         </header>
         <div className="p-6">
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
-          <div className={mainNav === 'image' && imageSubNav === 'generate' ? '' : 'hidden'}>
-            <ImageGenerator templatePreset={imageTemplatePreset} onTemplateApplied={() => setImageTemplatePreset(null)} />
+          <div className={mainNav === 'image' && imageSubNav === 'imageGen' ? '' : 'hidden'}>
+            <ImageGenerator
+              variant="simple"
+              visible={mainNav === 'image' && imageSubNav === 'imageGen'}
+              templatePreset={imageTemplatePreset}
+              onTemplateApplied={() => setImageTemplatePreset(null)}
+            />
+          </div>
+          <div className={mainNav === 'image' && imageSubNav === 'ecommerce' ? '' : 'hidden'}>
+            <ImageGenerator
+              variant="ecommerce"
+              visible={mainNav === 'image' && imageSubNav === 'ecommerce'}
+              templatePreset={imageTemplatePreset}
+              onTemplateApplied={() => setImageTemplatePreset(null)}
+            />
           </div>
           {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
           <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
@@ -2091,7 +2144,7 @@ function App() {
               onApplyImage={(preset) => {
                 setImageTemplatePreset(preset)
                 setMainNav('image')
-                setImageSubNav('generate')
+                setImageSubNav('ecommerce')
               }}
             />
           )}
@@ -2583,7 +2636,7 @@ function HelpCenter() {
       items: [
         {
           q: '如何分享链接直达某个工具 Tab？',
-          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；电商套图为 ?workspace=image.generate；视频生成为 ?workspace=video.generate；视频增强为 ?workspace=video.upscale。（旧链接 video.tools.*、video.analyze 仍会自动跳转。）进入页面后会同步地址栏。',
+          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；图片生成为 ?workspace=image.imageGen；电商套图为 ?workspace=image.ecommerce（旧版 ?workspace=image.generate 仍会打开电商套图）；视频生成为 ?workspace=video.generate；视频增强为 ?workspace=video.upscale。（旧链接 video.tools.*、video.analyze 仍会自动跳转。）进入页面后会同步地址栏。',
         },
         { q: '模型不可用怎么处理？', a: '切换到标记为可用的模型后重试；优先选择非“暂不可用”模型。' },
         { q: '生成超时怎么办？', a: '先去任务中心查看状态；若失败可点击“重试（保留参数）”，必要时降低分辨率/时长。' },
@@ -3876,10 +3929,22 @@ function ImageFormTip({ text, wide, label = '查看说明' }: { text: string; wi
 function ImageGenerator({
   templatePreset,
   onTemplateApplied,
+  variant = 'ecommerce',
+  visible = true,
 }: {
   templatePreset: ImageTemplatePreset | null
   onTemplateApplied: () => void
+  /** simple：提示词直出，无爆款风格与场景勾选；ecommerce：电商套图完整流程 */
+  variant?: 'ecommerce' | 'simple'
+  /** 为 false 时不写入共享 refs（避免隐藏实例覆盖） */
+  visible?: boolean
 }) {
+  const isSimpleImageGen = variant === 'simple'
+  const idbWorkspaceKey = isSimpleImageGen ? TIKGEN_IG_IDB.workspaceSimple : TIKGEN_IG_IDB.workspace
+  const idbBoardKey = isSimpleImageGen ? TIKGEN_IG_IDB.boardSimple : TIKGEN_IG_IDB.board
+  const idbHistoryKey = isSimpleImageGen ? TIKGEN_IG_IDB.historySimple : TIKGEN_IG_IDB.history
+  const lsHistoryKey = isSimpleImageGen ? TIKGEN_IG_LS_HISTORY_SIMPLE : TIKGEN_IG_LS_HISTORY
+  const lsBoardKey = isSimpleImageGen ? TIKGEN_IG_LS_BOARD_SIMPLE : TIKGEN_IG_LS_BOARD
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [refImages, setRefImages] = useState<Array<{ id: string; url: string; name?: string; source: 'local' | 'asset' }>>([])
@@ -3895,6 +3960,8 @@ function ImageGenerator({
   const refUploadInputRef = useRef<HTMLInputElement | null>(null)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
   const [prompt, setPrompt] = useState('')
+  /** 图片生成（简版）：主提示词输入，不参与爆款风格链路 */
+  const [simpleDirectPrompt, setSimpleDirectPrompt] = useState('')
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
@@ -3999,25 +4066,29 @@ function ImageGenerator({
     }
     void (async () => {
       const [hIdb, bIdb, refsIdb, wsIdb] = await Promise.all([
-        tikgenIgIdbGet<ImageGenHistoryTask[]>(TIKGEN_IG_IDB.history),
-        tikgenIgIdbGet<SceneRunBoard>(TIKGEN_IG_IDB.board),
+        tikgenIgIdbGet<ImageGenHistoryTask[]>(idbHistoryKey),
+        tikgenIgIdbGet<SceneRunBoard>(idbBoardKey),
         tikgenIgIdbGet<Array<{ id: string; url: string; name?: string; source: 'local' | 'asset' }>>(TIKGEN_IG_IDB.refs),
-        tikgenIgIdbGet<TikgenWorkspaceSnapshotV1>(TIKGEN_IG_IDB.workspace),
+        tikgenIgIdbGet<TikgenWorkspaceSnapshotV1>(idbWorkspaceKey),
       ])
       if (cancelled) return
 
-      const hLs = loadImageGenHistoryFromStorage()
+      const hLs = loadImageGenHistoryFromStorage(lsHistoryKey)
       const hMerge = hIdb && Array.isArray(hIdb) && hIdb.length > 0 ? hIdb : hLs
       setImageGenHistory(hMerge)
 
-      const bLs = boardFromRaw(loadSceneRunBoardFromLocalStorage())
+      const bLs = boardFromRaw(loadSceneRunBoardFromLocalStorage(lsBoardKey))
       const bMerge = bIdb && bIdb.id && Array.isArray(bIdb.slots) && bIdb.slots.length > 0 ? bIdb : bLs
       if (bMerge) setSceneRunBoard(bMerge)
 
       if (refsIdb && Array.isArray(refsIdb) && refsIdb.length) setRefImages(refsIdb)
 
       if (wsIdb && wsIdb.v === 1) {
-        setPrompt(String(wsIdb.prompt ?? ''))
+        if (isSimpleImageGen) {
+          setSimpleDirectPrompt(String(wsIdb.prompt ?? ''))
+        } else {
+          setPrompt(String(wsIdb.prompt ?? ''))
+        }
         setOptimizedPrompt(String(wsIdb.optimizedPrompt ?? ''))
         setOptimizedNegativePrompt(String(wsIdb.optimizedNegativePrompt ?? ''))
         setProductAnalysisText(String(wsIdb.productAnalysisText ?? ''))
@@ -4031,8 +4102,13 @@ function ImageGenerator({
             language: String((pi as { language?: string }).language ?? '简体中文'),
           })
         }
-        if (Array.isArray(wsIdb.hotStyles)) setHotStyles(wsIdb.hotStyles as ImageWorkbenchStyleRow[])
-        setSelectedHotStyleIndex(Number(wsIdb.selectedHotStyleIndex) || 0)
+        if (!isSimpleImageGen) {
+          if (Array.isArray(wsIdb.hotStyles)) setHotStyles(wsIdb.hotStyles as ImageWorkbenchStyleRow[])
+          setSelectedHotStyleIndex(Number(wsIdb.selectedHotStyleIndex) || 0)
+        } else {
+          setHotStyles([])
+          setSelectedHotStyleIndex(0)
+        }
         setProductStylePanelOpen(Boolean(wsIdb.productStylePanelOpen))
         if (wsIdb.model) setModel(String(wsIdb.model))
         if (wsIdb.size && IMAGE_ASPECT_OPTIONS.includes(wsIdb.size as ImageAspect)) setSize(wsIdb.size as ImageAspect)
@@ -4129,15 +4205,15 @@ function ImageGenerator({
   )
 
   useEffect(() => {
-    if (!imageGenPersistenceReady) return
+    if (!imageGenPersistenceReady || !visible) return
     const slice = imageGenHistory.slice(0, IMAGE_GEN_HISTORY_MAX)
-    void tikgenIgIdbSet(TIKGEN_IG_IDB.history, slice)
-    tryLocalStorageSetJson(TIKGEN_IG_LS_HISTORY, stripHistoryForLocalStorage(slice))
-  }, [imageGenHistory, imageGenPersistenceReady])
+    void tikgenIgIdbSet(idbHistoryKey, slice)
+    tryLocalStorageSetJson(lsHistoryKey, stripHistoryForLocalStorage(slice))
+  }, [imageGenHistory, imageGenPersistenceReady, visible, idbHistoryKey, lsHistoryKey])
 
   /** 电商套图历史中的成片同步到资产库（单张出图时已写入；此处覆盖刷新恢复/漏写，指纹去重） */
   useEffect(() => {
-    if (!imageGenPersistenceReady) return
+    if (!imageGenPersistenceReady || !visible) return
     for (const task of imageGenHistory) {
       if (task.status === 'failed') continue
       const urls = task.outputUrls || []
@@ -4159,7 +4235,7 @@ function ImageGenerator({
         })
       }
     }
-  }, [imageGenHistory, imageGenPersistenceReady])
+  }, [imageGenHistory, imageGenPersistenceReady, visible])
 
   useEffect(() => {
     sceneRunBoardRef.current = sceneRunBoard
@@ -4220,38 +4296,38 @@ function ImageGenerator({
     if (!imageGenPersistenceReady) return
     void (async () => {
       if (sceneRunBoard) {
-        await tikgenIgIdbSet(TIKGEN_IG_IDB.board, sceneRunBoard)
+        await tikgenIgIdbSet(idbBoardKey, sceneRunBoard)
         tryLocalStorageSetJson(
-          TIKGEN_IG_LS_BOARD,
+          lsBoardKey,
           stripBoardForLocalStorage(sceneRunBoard as unknown as Record<string, unknown>),
         )
       } else {
-        await tikgenIgIdbDelete(TIKGEN_IG_IDB.board)
+        await tikgenIgIdbDelete(idbBoardKey)
         try {
-          localStorage.removeItem(TIKGEN_IG_LS_BOARD)
+          localStorage.removeItem(lsBoardKey)
         } catch {
           // ignore
         }
       }
     })()
-  }, [sceneRunBoard, imageGenPersistenceReady])
+  }, [sceneRunBoard, imageGenPersistenceReady, idbBoardKey, lsBoardKey])
 
   useEffect(() => {
-    if (!imageGenPersistenceReady) return
+    if (!imageGenPersistenceReady || !visible) return
     void tikgenIgIdbSet(TIKGEN_IG_IDB.refs, refImages)
-  }, [refImages, imageGenPersistenceReady])
+  }, [refImages, imageGenPersistenceReady, visible])
 
   useEffect(() => {
-    if (!imageGenPersistenceReady) return
+    if (!imageGenPersistenceReady || !visible) return
     const ws: TikgenWorkspaceSnapshotV1 = {
       v: 1,
-      prompt,
+      prompt: isSimpleImageGen ? simpleDirectPrompt : prompt,
       optimizedPrompt,
       optimizedNegativePrompt,
       productAnalysisText,
       productInfo: { ...productInfo },
-      hotStyles,
-      selectedHotStyleIndex,
+      hotStyles: isSimpleImageGen ? [] : hotStyles,
+      selectedHotStyleIndex: isSimpleImageGen ? 0 : selectedHotStyleIndex,
       productStylePanelOpen,
       model,
       size,
@@ -4263,11 +4339,15 @@ function ImageGenerator({
       imageScenes,
     }
     const t = window.setTimeout(() => {
-      void tikgenIgIdbSet(TIKGEN_IG_IDB.workspace, ws)
+      void tikgenIgIdbSet(idbWorkspaceKey, ws)
     }, 400)
     return () => window.clearTimeout(t)
   }, [
     imageGenPersistenceReady,
+    visible,
+    idbWorkspaceKey,
+    isSimpleImageGen,
+    simpleDirectPrompt,
     prompt,
     optimizedPrompt,
     optimizedNegativePrompt,
@@ -4427,15 +4507,19 @@ function ImageGenerator({
     setProductStylePanelOpen(false)
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
+    setSimpleDirectPrompt('')
   }
 
   const requestRemoveRefImage = (id: string, slotIndex: number) => {
     const isMain = slotIndex === 0
-    const hasAnalysisOrBoard =
-      hotStyles.length > 0 || productAnalysisText.trim() !== '' || sceneRunBoard != null
+    const hasAnalysisOrBoard = isSimpleImageGen
+      ? simpleDirectPrompt.trim() !== '' || sceneRunBoard != null
+      : hotStyles.length > 0 || productAnalysisText.trim() !== '' || sceneRunBoard != null
     if (isMain && hasAnalysisOrBoard) {
       const ok = window.confirm(
-        '删除主参考图后，当前页面内的商品分析、爆款风格与场景看板等内容将被清空。是否继续删除？',
+        isSimpleImageGen
+          ? '删除主参考图后，当前提示词与进行中的生成任务将被清空。是否继续删除？'
+          : '删除主参考图后，当前页面内的商品分析、爆款风格与场景看板等内容将被清空。是否继续删除？',
       )
       if (!ok) return
       clearImageGenPageAfterMainRefRemoved()
@@ -4672,14 +4756,15 @@ function ImageGenerator({
   }, [imageModelOptions, model])
 
   useEffect(() => {
-    if (!templatePreset) return
+    if (!templatePreset || !visible) return
     if (templatePreset.model) setModel(String(templatePreset.model))
     if (templatePreset.aspectRatio) setSize(String(templatePreset.aspectRatio) as ImageAspect)
     if (templatePreset.resolution) setResolution(String(templatePreset.resolution) as ImageRes)
-    setPrompt(String(templatePreset.prompt || ''))
+    if (isSimpleImageGen) setSimpleDirectPrompt(String(templatePreset.prompt || ''))
+    else setPrompt(String(templatePreset.prompt || ''))
     setPromptGenOutputSettings(null)
     onTemplateApplied()
-  }, [templatePreset, onTemplateApplied])
+  }, [templatePreset, onTemplateApplied, visible, isSimpleImageGen])
 
   /** 卡片上已有完整 imagePrompt 时直接应用；否则走 image-prompt 接口兜底 */
   const regeneratePromptFromStyleApi = async (idx: number) => {
@@ -5644,6 +5729,61 @@ function ImageGenerator({
     }
   }
 
+  /** 图片生成（简版）：规划 6 场景后立即批量出图，不在右侧展示场景勾选板 */
+  const handleSimpleStartGenerate = async () => {
+    if (!refImages.length) {
+      alert('请至少上传1张参考图')
+      return
+    }
+    const base = simpleDirectPrompt.trim()
+    if (!base) {
+      alert('请输入提示词')
+      return
+    }
+    setGenErrorText('')
+    setGenErrorCode('UNKNOWN')
+    setSceneBoardPreparing(true)
+    setGenProgress(1)
+    const stopProgress = startSmoothGenProgress()
+    try {
+      const rows = await runImageScenePlan(base, null, productInfo)
+      if (!rows) {
+        stopProgress()
+        setGenProgress(0)
+        return
+      }
+      const taskId = `ig_${Date.now()}_${Math.random().toString(16).slice(2)}`
+      const refThumb = refImageDataUrl || refImages[0]?.url || ''
+      const builtBoard: SceneRunBoard = {
+        id: taskId,
+        ts: Date.now(),
+        refThumb,
+        basePrompt: base,
+        slots: rows.map((sc) => ({
+          key: sc.key,
+          title: sc.title,
+          description: sc.description,
+          imagePrompt: sc.imagePrompt,
+          selected: true,
+          status: 'pending' as const,
+        })),
+      }
+      flushSync(() => {
+        setSceneRunBoard(builtBoard)
+      })
+      stopProgress()
+      await completeGenProgress()
+      await runBatchGenerateForBoard(builtBoard)
+    } catch (e: any) {
+      stopProgress()
+      setGenProgress(0)
+      setGenErrorText(e?.message || '生成失败')
+      setGenErrorCode(e?.code || 'UNKNOWN')
+    } finally {
+      setSceneBoardPreparing(false)
+    }
+  }
+
   const runSceneSlotGeneration = async (
     boardId: string,
     slotIndex: number,
@@ -5694,10 +5834,9 @@ function ImageGenerator({
     })
   }
 
-  const handleBatchGenerateSelectedScenes = async () => {
-    const board = sceneRunBoardRef.current
-    if (!board || !refImages.length || !board.basePrompt.trim()) return
-    const selEntries = board.slots.map((s, i) => ({ s, i })).filter(({ s }) => s.selected)
+  const runBatchGenerateForBoard = async (snap: SceneRunBoard | null) => {
+    if (!snap || !refImages.length || !snap.basePrompt.trim()) return
+    const selEntries = snap.slots.map((s, i) => ({ s, i })).filter(({ s }) => s.selected)
     if (!selEntries.length) return
 
     const indices: number[] = []
@@ -5706,7 +5845,6 @@ function ImageGenerator({
     })
     if (!indices.length) return
 
-    const snap = board
     const basePrompt = snap.basePrompt
     const slotSnap = indices.map((i) => ({ i, slot: { ...snap.slots[i] } }))
     const refUrl = refImageDataUrl || undefined
@@ -5740,12 +5878,17 @@ function ImageGenerator({
     }
   }
 
+  const handleBatchGenerateSelectedScenes = async () => {
+    await runBatchGenerateForBoard(sceneRunBoardRef.current)
+  }
+
   const handleRetryGenBanner = async () => {
     if (!sceneRunBoard) {
-      void handlePrepareSceneBoard()
+      if (isSimpleImageGen) void handleSimpleStartGenerate()
+      else void handlePrepareSceneBoard()
       return
     }
-    await handleBatchGenerateSelectedScenes()
+    await runBatchGenerateForBoard(sceneRunBoardRef.current)
   }
 
   const downloadUrlsStaggered = (items: { url: string; name: string }[]) => {
@@ -6272,7 +6415,26 @@ function ImageGenerator({
           <div className="rounded-lg border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200/95">{aiError}</div>
         ) : null}
 
-        {productStylePanelOpen ? (
+        {isSimpleImageGen ? (
+          <section className="flex flex-col gap-2">
+            <div className="mb-1 flex items-center gap-1.5">
+              <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">提示词</div>
+              <ImageFormTip
+                wide
+                label="说明"
+                text="描述画面内容、风格、构图等；将结合参考图与模型设置生成一组图片。与电商套图一致，后台仍会规划多镜头并批量出图，右侧仅展示生成历史。"
+              />
+            </div>
+            <textarea
+              value={simpleDirectPrompt}
+              onChange={(e) => setSimpleDirectPrompt(e.target.value)}
+              className="w-full min-h-[168px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 resize-y"
+              placeholder="例如：产品在阳光下的木质桌面上，清新自然光，浅景深，电商主图风格…"
+            />
+          </section>
+        ) : null}
+
+        {!isSimpleImageGen && productStylePanelOpen ? (
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -6565,8 +6727,8 @@ function ImageGenerator({
         </section>
         ) : null}
 
-        <div className={`flex flex-col gap-5 ${productStylePanelOpen ? 'mt-1' : 'mt-6'}`}>
-          {!productStylePanelOpen && refImages.length > 0 ? (
+        <div className={`flex flex-col gap-5 ${!isSimpleImageGen && productStylePanelOpen ? 'mt-1' : 'mt-6'}`}>
+          {!isSimpleImageGen && !productStylePanelOpen && refImages.length > 0 ? (
             <div className="space-y-2">
               {oneClickNeedRefHint ? (
                 <span className="block text-center text-xs text-amber-400/95" role="status">
@@ -6607,8 +6769,46 @@ function ImageGenerator({
             </div>
           ) : null}
 
-          {/* 已传图但未完成「一键分析」前只露出分析按钮；未传图或已展开模块后仍显示免费生成预览 */}
-          {productStylePanelOpen || refImages.length === 0 ? (
+          {/* 简版：始终显示「开始生成」；电商：已传图但未完成「一键分析」前只露出分析按钮；未传图或已展开模块后显示免费生成预览 */}
+          {isSimpleImageGen ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => void handleSimpleStartGenerate()}
+                disabled={sceneBoardPreparing || !simpleDirectPrompt.trim() || !refImages.length}
+                title={
+                  !refImages.length
+                    ? '请先上传参考图'
+                    : !simpleDirectPrompt.trim()
+                      ? '请输入提示词'
+                      : '根据提示词规划并立即生成图片'
+                }
+                className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
+                  sceneBoardPreparing || (simpleDirectPrompt.trim() && refImages.length > 0)
+                    ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
+                    : 'cursor-not-allowed bg-white/[0.06] text-white/35'
+                }`}
+              >
+                {!sceneBoardPreparing && simpleDirectPrompt.trim() && refImages.length > 0 ? (
+                  <span
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent to-white/[0.1] opacity-80"
+                    aria-hidden
+                  />
+                ) : null}
+                {sceneBoardPreparing ? (
+                  <>
+                    <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
+                    <span className="relative">正在规划场景…</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
+                    <span className="relative">开始生成</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : productStylePanelOpen || refImages.length === 0 ? (
             <div>
               <button
                 type="button"
@@ -6674,13 +6874,17 @@ function ImageGenerator({
           <div className="mb-6">
             <GenerationLoadingCard
               title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
-              subtitle="正在规划 6 组场景，完成后可在右侧用「一键生成图片」批量出图"
+              subtitle={
+                isSimpleImageGen
+                  ? '正在根据提示词规划场景，完成后将自动开始出图…'
+                  : '正在规划 6 组场景，完成后可在右侧用「一键生成图片」批量出图'
+              }
               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
               progressText={`准备进度：${Math.max(1, Math.min(99, genProgress))}%`}
             />
           </div>
         ) : null}
-        {sceneRunBoard ? (
+        {!isSimpleImageGen && sceneRunBoard ? (
           <div className="mb-8 overflow-visible rounded-xl bg-black/20 p-4 ring-1 ring-inset ring-white/[0.07]">
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -6962,7 +7166,9 @@ function ImageGenerator({
             <Image className="w-14 h-14 mb-3 opacity-35" />
             <p className="text-sm text-white/55">暂无归档记录</p>
             <p className="text-xs text-white/40 mt-1 max-w-xs">
-              左侧「免费生成预览」加载 6 场景后，在此点击「一键生成图片」批量出图；进度与结果会保存在生成历史中，刷新页面仍可继续。
+              {isSimpleImageGen
+                ? '在左侧填写提示词并上传参考图，点击「开始生成」；进度与结果保存在生成历史中，刷新页面仍可继续。'
+                : '左侧「免费生成预览」加载 6 场景后，在此点击「一键生成图片」批量出图；进度与结果会保存在生成历史中，刷新页面仍可继续。'}
             </p>
           </div>
         ) : null}

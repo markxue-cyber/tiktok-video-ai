@@ -4,7 +4,10 @@
  */
 
 export const TIKGEN_IG_LS_HISTORY = 'tikgen.imageGenHistory.v1'
+/** 图片生成（简版）独立 localStorage，避免与电商套图双实例互相覆盖 */
+export const TIKGEN_IG_LS_HISTORY_SIMPLE = 'tikgen.imageGenHistory.simple.v1'
 export const TIKGEN_IG_LS_BOARD = 'tikgen.sceneRunBoard.v1'
+export const TIKGEN_IG_LS_BOARD_SIMPLE = 'tikgen.sceneRunBoard.simple.v1'
 
 const IDB_NAME = 'tikgen_image_gen'
 const IDB_STORE = 'kv'
@@ -12,9 +15,13 @@ const IDB_VER = 1
 
 export const TIKGEN_IG_IDB = {
   history: 'imageGenHistory.v1',
+  historySimple: 'imageGenHistory.simple.v1',
   board: 'sceneRunBoard.v1',
+  /** 图片生成（简版）：与电商套图分开展示看板，避免互相覆盖 */
+  boardSimple: 'sceneRunBoard.simple.v1',
   refs: 'refImages.v1',
   workspace: 'workspace.v1',
+  workspaceSimple: 'workspace.simple.v1',
   /** 去除背景：待上传图 + 分辨率/格式（data URL 较大，放 IDB） */
   removeBgWorkspace: 'removeBg.workspace.v1',
   /** 去除背景：进行中的批量任务，用于刷新后续传 */
@@ -248,10 +255,12 @@ export function tryLocalStorageSetJson(key: string, value: unknown): boolean {
   }
 }
 
-export function loadSceneRunBoardFromLocalStorage(): Record<string, unknown> | null {
+export function loadSceneRunBoardFromLocalStorage(
+  key: string = TIKGEN_IG_LS_BOARD,
+): Record<string, unknown> | null {
   try {
     if (typeof localStorage === 'undefined') return null
-    const raw = localStorage.getItem(TIKGEN_IG_LS_BOARD)
+    const raw = localStorage.getItem(key)
     if (!raw) return null
     const p = JSON.parse(raw)
     if (p && typeof p.id === 'string' && typeof p.ts === 'number' && Array.isArray(p.slots)) return p
