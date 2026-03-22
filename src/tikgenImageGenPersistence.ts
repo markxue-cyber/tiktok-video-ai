@@ -1,5 +1,5 @@
 /**
- * 图片生成页持久化：localStorage 容量小（~5MB），data URL 参考图 + 看板 JSON 易触发 QuotaExceeded 且被静默忽略。
+ * 电商套图页持久化：localStorage 容量小（~5MB），data URL 参考图 + 看板 JSON 易触发 QuotaExceeded 且被静默忽略。
  * 完整数据写入 IndexedDB；localStorage 仅存去掉巨型 data: 的精简副本作兜底。
  */
 

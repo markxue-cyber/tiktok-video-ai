@@ -782,7 +782,7 @@ function GenerationLoadingCard({
 const LOADING_COPY = {
   tech: {
     image: {
-      title: '图片生成中',
+      title: '电商套图生成中',
       subtitle: '正在进行多阶段渲染与细节增强，请稍等片刻...',
       chips: ['构图', '光影', '质检'],
     },
@@ -794,7 +794,7 @@ const LOADING_COPY = {
   },
   premium: {
     image: {
-      title: '图片生成中',
+      title: '电商套图生成中',
       subtitle: '高品质画面正在精修中，请稍候...',
       chips: ['构图美学', '光影层次', '品质校验'],
     },
@@ -1325,7 +1325,7 @@ function App() {
 
   const currentPageLabel = useMemo(() => {
     if (mainNav === 'image') {
-      if (imageSubNav === 'generate') return '图片生成'
+      if (imageSubNav === 'generate') return '电商套图'
       if (imageSubNav === 'tools') {
         if (imageToolsTab === 'removeBg') return '图片工具-去除背景'
         if (imageToolsTab === 'upscale') return '图片工具-高清放大'
@@ -1344,7 +1344,7 @@ function App() {
     if (mainNav === 'assets') return '资产库'
     if (mainNav === 'benefits') return '个人权益'
     if (mainNav === 'developer' && isDevAdmin) return '开发者后台'
-    return '图片生成'
+    return '电商套图'
   }, [mainNav, imageSubNav, imageToolsTab, videoSubNav, isDevAdmin])
 
   const ANN_READ_KEY = user?.id ? `tikgen.ann.read.${user.id}` : 'tikgen.ann.read.guest'
@@ -1492,7 +1492,7 @@ function App() {
           <h2 className="text-3xl font-bold text-white text-center mb-16">核心功能</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center mb-6"><Video className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">AI视频生成</h3><p className="text-white/60">输入文案自动生成视频</p></div>
-            <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center mb-6"><Image className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">AI图片生成</h3><p className="text-white/60">文字描述生成精美图片</p></div>
+            <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center mb-6"><Image className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">电商套图</h3><p className="text-white/60">参考图与商品分析，多场景主图与投放素材一键出图</p></div>
             <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center mb-6"><Sparkles className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">智能提示词</h3><p className="text-white/60">GPT-4o 自动解析商品并生成脚本/提示词</p></div>
           </div>
           <div className="grid md:grid-cols-3 gap-6 mt-10">
@@ -1801,7 +1801,7 @@ function App() {
               <NavPrimary
                 collapsed
                 icon={<Image className="w-5 h-5" />}
-                label="图片生成"
+                label="电商套图"
                 active={mainNav === 'image' && imageSubNav === 'generate'}
                 onClick={() => {
                   setMainNav('image')
@@ -1881,7 +1881,7 @@ function App() {
                 <NavSecondary
                   collapsed={false}
                   icon={<Sparkles className="w-4 h-4" />}
-                  label="图片生成"
+                  label="电商套图"
                   active={mainNav === 'image' && imageSubNav === 'generate'}
                   onClick={() => {
                     setMainNav('image')
@@ -1969,7 +1969,7 @@ function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">
-                {mainNav === 'image' && imageSubNav === 'generate' && '图片生成'}
+                {mainNav === 'image' && imageSubNav === 'generate' && '电商套图'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'upscale' && '图片工具 · 高清放大'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
@@ -2425,7 +2425,7 @@ function TemplatesLibrary({
                 className="mt-4 w-full py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm font-medium"
                 onClick={() => onApplyImage(t.preset)}
               >
-                一键套用到图片生成
+                一键套用到电商套图
               </button>
             </div>
           ))}
@@ -2579,11 +2579,11 @@ function HelpCenter() {
       ],
     },
     {
-      title: '图片/视频生成',
+      title: '电商套图/视频生成',
       items: [
         {
           q: '如何分享链接直达某个工具 Tab？',
-          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；图片生成为 ?workspace=image.generate；视频生成为 ?workspace=video.generate；视频增强为 ?workspace=video.upscale。（旧链接 video.tools.*、video.analyze 仍会自动跳转。）进入页面后会同步地址栏。',
+          a: '在地址栏使用查询参数 workspace，例如：图片工具·高清放大为 ?workspace=image.tools.upscale；电商套图为 ?workspace=image.generate；视频生成为 ?workspace=video.generate；视频增强为 ?workspace=video.upscale。（旧链接 video.tools.*、video.analyze 仍会自动跳转。）进入页面后会同步地址栏。',
         },
         { q: '模型不可用怎么处理？', a: '切换到标记为可用的模型后重试；优先选择非“暂不可用”模型。' },
         { q: '生成超时怎么办？', a: '先去任务中心查看状态；若失败可点击“重试（保留参数）”，必要时降低分辨率/时长。' },
@@ -3839,7 +3839,7 @@ function VideoGenerator({
   )
 }
 
-/** 图片生成页：hover / 聚焦显示说明；图标无按钮方框感 */
+/** 电商套图页：hover / 聚焦显示说明；图标无按钮方框感 */
 function ImageFormTip({ text, wide, label = '查看说明' }: { text: string; wide?: boolean; label?: string }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
@@ -4135,7 +4135,7 @@ function ImageGenerator({
     tryLocalStorageSetJson(TIKGEN_IG_LS_HISTORY, stripHistoryForLocalStorage(slice))
   }, [imageGenHistory, imageGenPersistenceReady])
 
-  /** 图片生成历史中的成片同步到资产库（单张出图时已写入；此处覆盖刷新恢复/漏写，指纹去重） */
+  /** 电商套图历史中的成片同步到资产库（单张出图时已写入；此处覆盖刷新恢复/漏写，指纹去重） */
   useEffect(() => {
     if (!imageGenPersistenceReady) return
     for (const task of imageGenHistory) {
@@ -4620,7 +4620,7 @@ function ImageGenerator({
           .filter((m: any) => {
             const id = String(m?.id || '')
             const types: string[] = Array.isArray(m?.supported_endpoint_types) ? m.supported_endpoint_types.map(String) : []
-            // 部分模型（如 nano-banana 系列）可能未标注 image-generation，但仍可用于图片生成
+            // 部分模型（如 nano-banana 系列）可能未标注 image-generation，但仍可用于电商套图
             return types.includes('image-generation') || looksLikeImageModel(id)
           })
           .map((m: any) => ({ id: String(m.id), name: String(m.id) }))
@@ -7875,7 +7875,7 @@ function Assets() {
               ))}
       </div>
           </div>
-          <p className="text-sm text-gray-500">包含：视频生成、图片生成成功后的结果，自动归档到当前账号。</p>
+          <p className="text-sm text-gray-500">包含：视频生成、电商套图成功后的结果，自动归档到当前账号。</p>
           <div className="mt-4">
             {loading ? (
               <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>

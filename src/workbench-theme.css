@@ -471,7 +471,7 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)) !important;
 }
 
-/* 图片生成页：单面板；不用内阴影顶线，避免看起来像横条分隔 */
+/* 电商套图页：单面板；不用内阴影顶线，避免看起来像横条分隔 */
 .workbench-root .tikgen-panel {
   background: linear-gradient(165deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
