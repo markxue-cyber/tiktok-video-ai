@@ -132,6 +132,23 @@
   box-shadow: 0 18px 50px rgba(0,0,0,.35) !important;
 }
 
+/*
+ * 主导航：未选中项不要出现「淡淡底框」，避免每项都像卡片、选中态不突出。
+ * 选中：一级 = bg-gradient-to-r；二级 / 图片工具 = bg-purple-50
+ */
+.workbench-root aside nav button.group:not([class*='bg-gradient-to-r']) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.workbench-root aside nav div.pl-3 > button:not([class*='bg-purple-50']) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.workbench-root aside nav div.pl-3 div.relative button:not([class*='bg-purple-50']) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 /* 侧栏二级选中态：Tailwind purple-700 在深色玻璃上像「黑字」，统一提亮 */
 .workbench-root aside [class*='bg-purple-50'],
 .workbench-root aside [class*='bg-purple-50/'] {

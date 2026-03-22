@@ -2199,10 +2199,10 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
       title={collapsed ? label : undefined}
       className={`group relative w-full flex items-center ${collapsed ? 'justify-center px-2 overflow-visible' : 'space-x-3 px-4'} py-3 rounded-xl transition-[background-color,box-shadow] duration-200 ${
         active
-          ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
+          ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-none'
           : clickable
-            ? 'text-gray-700 hover:bg-gray-100'
-            : 'text-gray-600 cursor-default'
+            ? 'bg-transparent text-gray-700 hover:bg-white/[0.06]'
+            : 'bg-transparent text-gray-600 cursor-default'
       }`}
     >
       {icon}
@@ -2218,7 +2218,7 @@ function NavSecondary({ icon, label, active, onClick, collapsed, className = '' 
       onClick={onClick}
       title={collapsed ? label : undefined}
       className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-200 text-sm ${
-        active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
+        active ? 'bg-purple-50 text-purple-700 shadow-none' : 'bg-transparent text-gray-600 hover:bg-white/[0.06]'
       } ${className}`}
     >
       {icon}
@@ -2253,7 +2253,7 @@ function NavSecondaryToolsFlyout({
         onClick={onActivateDefault}
         title={label}
         className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-200 text-sm ${
-          active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
+          active ? 'bg-purple-50 text-purple-700 shadow-none' : 'bg-transparent text-gray-600 hover:bg-white/[0.06]'
         }`}
       >
         <span className="flex items-center space-x-2 min-w-0">
