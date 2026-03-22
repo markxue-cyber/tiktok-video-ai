@@ -48,6 +48,8 @@ export type VideoAnalyzeChatMessage = {
   id: string
   role: 'user' | 'assistant'
   text: string
+  /** 大视频：直传后的公网 URL（小图/小视频仍可用 data URL） */
+  videoRemoteUrl?: string
   videoDataUrl?: string
   imageDataUrls?: string[]
 }

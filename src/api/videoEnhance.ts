@@ -69,6 +69,22 @@ export async function requestVideoUpscaleUploadSign(params: {
   contentType: string
   fileSize: number
 }): Promise<VideoUpscaleSignResult> {
+  return requestVideoUploadSignWithSubfolder(params, 'video-upscale')
+}
+
+/** 视频分析：直传到 `video-analyze/` 前缀，避免与画质提升混用目录 */
+export async function requestVideoAnalyzeUploadSign(params: {
+  fileName: string
+  contentType: string
+  fileSize: number
+}): Promise<VideoUpscaleSignResult> {
+  return requestVideoUploadSignWithSubfolder(params, 'video-analyze')
+}
+
+async function requestVideoUploadSignWithSubfolder(
+  params: { fileName: string; contentType: string; fileSize: number },
+  bucketSubfolder: 'video-upscale' | 'video-analyze',
+): Promise<VideoUpscaleSignResult> {
   const token = localStorage.getItem('tikgen.accessToken') || ''
   if (!token) throw new Error('请先登录')
   const resp = await fetch('/api/video-upscale-sign', {
@@ -77,7 +93,7 @@ export async function requestVideoUpscaleUploadSign(params: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(params),
+    body: JSON.stringify({ ...params, bucketSubfolder }),
   })
   const rawText = await resp.text()
   let data: any = {}

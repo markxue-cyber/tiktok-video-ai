@@ -15,6 +15,8 @@ type ChatMessage = {
 type ClientTurn = {
   role: 'user' | 'assistant'
   text: string
+  /** 本应用 Supabase Storage 公网地址，避免整段 Base64 撑爆网关 */
+  videoUrl?: string | null
   videoDataUrl?: string | null
   imageDataUrls?: string[] | null
 }
@@ -27,17 +29,36 @@ function isDataUrl(u: string) {
   return typeof u === 'string' && u.startsWith('data:') && u.includes('base64,')
 }
 
-function buildUserContent(turn: ClientTurn): string | ContentPart[] {
+/** 仅允许本项目的 Supabase 公开资源，防止 SSRF */
+function isAllowedPublicVideoUrl(urlStr: string, supabaseBaseUrl: string): boolean {
+  try {
+    const u = new URL(urlStr.trim())
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
+    const base = new URL(supabaseBaseUrl)
+    if (u.host !== base.host) return false
+    return u.pathname.includes('/storage/v1/object/public/assets/')
+  } catch {
+    return false
+  }
+}
+
+function buildUserContent(turn: ClientTurn, supabaseUrlForAllowlist: string): string | ContentPart[] {
   const text = String(turn.text || '').trim()
-  const v = turn.videoDataUrl && isDataUrl(turn.videoDataUrl) ? turn.videoDataUrl : ''
+  const remote =
+    turn.videoUrl && String(turn.videoUrl).trim().startsWith('http') && isAllowedPublicVideoUrl(turn.videoUrl, supabaseUrlForAllowlist)
+      ? String(turn.videoUrl).trim()
+      : ''
+  const v = !remote && turn.videoDataUrl && isDataUrl(turn.videoDataUrl) ? turn.videoDataUrl : ''
   const imgs = (turn.imageDataUrls || []).filter((x) => isDataUrl(String(x))).slice(0, MAX_IMAGES)
 
-  if (!v && imgs.length === 0) {
+  if (!remote && !v && imgs.length === 0) {
     return text || '（用户未输入文字）'
   }
 
   const parts: ContentPart[] = []
-  if (v) {
+  if (remote) {
+    parts.push({ type: 'video_url', video_url: { url: remote } })
+  } else if (v) {
     parts.push({ type: 'video_url', video_url: { url: v } })
   }
   for (const url of imgs) {
@@ -50,14 +71,14 @@ function buildUserContent(turn: ClientTurn): string | ContentPart[] {
   return parts
 }
 
-function turnsToMessages(turns: ClientTurn[]): ChatMessage[] {
+function turnsToMessages(turns: ClientTurn[], supabaseUrlForAllowlist: string): ChatMessage[] {
   const out: ChatMessage[] = []
   for (const t of turns) {
     if (t.role === 'assistant') {
       out.push({ role: 'assistant', content: String(t.text || '').trim() || '…' })
       continue
     }
-    out.push({ role: 'user', content: buildUserContent(t) })
+    out.push({ role: 'user', content: buildUserContent(t, supabaseUrlForAllowlist) })
   }
   return out
 }
@@ -91,6 +112,7 @@ export default async function handler(req: any, res: any) {
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
+    const supabasePublicAllowlist = process.env.SUPABASE_URL || ''
 
     const { turns, language } = req.body || {}
     if (!Array.isArray(turns) || turns.length === 0) {
@@ -101,6 +123,25 @@ export default async function handler(req: any, res: any) {
     for (const t of turns) {
       if (t?.videoDataUrl && typeof t.videoDataUrl === 'string') {
         videoChars += t.videoDataUrl.length
+      }
+    }
+    for (const t of turns) {
+      const vu = t?.videoUrl && typeof t.videoUrl === 'string' ? t.videoUrl.trim() : ''
+      if (vu) {
+        if (!supabasePublicAllowlist) {
+          return res.status(200).json({
+            success: false,
+            error: '服务端未配置 SUPABASE_URL，无法使用云端视频链接。',
+            code: 'MISSING_CONFIG',
+          })
+        }
+        if (!isAllowedPublicVideoUrl(vu, supabasePublicAllowlist)) {
+          return res.status(200).json({
+            success: false,
+            error: '非法 videoUrl：仅支持本平台存储的公开视频地址。',
+            code: 'BAD_VIDEO_URL',
+          })
+        }
       }
     }
     if (videoChars > MAX_VIDEO_CHARS) {
@@ -136,7 +177,8 @@ export default async function handler(req: any, res: any) {
       ].join('\n'),
     }
 
-    const messages: ChatMessage[] = [system, ...turnsToMessages(turns as ClientTurn[])]
+    const allow = supabasePublicAllowlist || 'https://invalid.local'
+    const messages: ChatMessage[] = [system, ...turnsToMessages(turns as ClientTurn[], allow)]
 
     const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
     const resp = await fetch(url, {

@@ -91,7 +91,9 @@ export default async function handler(req: any, res: any) {
     }
 
     const safe = fileName.replace(/[^\w.\-]/g, '_')
-    const objectPath = `${userId}/video-upscale/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
+    const subRaw = String(body.bucketSubfolder || 'video-upscale').replace(/[^\w-]/g, '')
+    const sub = subRaw === 'video-analyze' ? 'video-analyze' : 'video-upscale'
+    const objectPath = `${userId}/${sub}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
 
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
     await ensureAssetsBucket(serviceKey)

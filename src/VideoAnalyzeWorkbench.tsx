@@ -13,6 +13,8 @@ import {
   Video,
   X,
 } from 'lucide-react'
+import { createAssetAPI } from './api/assets'
+import { requestVideoAnalyzeUploadSign, uploadVideoFileToSignedUrl } from './api/videoEnhance'
 import { videoAnalyzeChat, type VideoAnalyzeTurn } from './api/videoAnalyze'
 import {
   TIKGEN_IG_IDB,
@@ -22,8 +24,23 @@ import {
   type VideoAnalyzeSessionStored,
 } from './tikgenImageGenPersistence'
 
-const MAX_VIDEO_BYTES = 18 * 1024 * 1024
+/** 未登录或走 Base64 时：需低于网关单次请求体上限（约 4.5MB），约 2.5MB 内 */
+const MAX_INLINE_VIDEO_BYTES = Math.floor(2.5 * 1024 * 1024)
+/** 与 /api/video-upscale-sign 一致 */
+const MAX_REMOTE_VIDEO_BYTES = 50 * 1024 * 1024
 const SESSIONS_CAP = 40
+
+type SessionVideoPick = { name: string; dataUrl?: string; remoteUrl?: string }
+
+function chatMessageToTurn(m: VideoAnalyzeChatMessage): VideoAnalyzeTurn {
+  return {
+    role: m.role,
+    text: m.text,
+    videoUrl: m.videoRemoteUrl,
+    videoDataUrl: m.videoDataUrl,
+    imageDataUrls: m.imageDataUrls,
+  }
+}
 
 const PLACEHOLDER_EMPTY = '上传视频文件或粘贴 TikTok 视频链接，然后问我任何问题…'
 const PLACEHOLDER_ACTIVE = '向我提问任何与视频相关的问题…'
@@ -77,7 +94,11 @@ function uid() {
 function readFileAsDataUrl(file: File, maxBytes: number): Promise<string> {
   return new Promise((resolve, reject) => {
     if (file.size > maxBytes) {
-      reject(new Error(`文件过大（上限约 ${Math.round(maxBytes / 1024 / 1024)}MB）`))
+      reject(
+        new Error(
+          `视频过大（当前约 ${(file.size / 1024 / 1024).toFixed(1)}MB）。未登录时仅支持约 ${Math.round(maxBytes / 1024 / 1024)}MB 以内（避免请求体超限）；登录后可直传最大约 50MB。`,
+        ),
+      )
       return
     }
     const r = new FileReader()
@@ -145,7 +166,8 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
   const [inputText, setInputText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
 
-  const [sessionVideo, setSessionVideo] = useState<{ name: string; dataUrl: string } | null>(null)
+  const [sessionVideo, setSessionVideo] = useState<SessionVideoPick | null>(null)
+  const [videoUploading, setVideoUploading] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -239,8 +261,53 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
       setError('请选择视频文件（如 mp4 / webm）')
       return
     }
+    if (f.size > MAX_REMOTE_VIDEO_BYTES) {
+      setError('视频超过 50MB 上限')
+      return
+    }
+
+    const token = localStorage.getItem('tikgen.accessToken') || ''
+
+    if (f.size > MAX_INLINE_VIDEO_BYTES) {
+      if (!token) {
+        setError(
+          '大视频需登录后使用云端直传（最大约 50MB，不占用对话请求体积）。请先登录，或压缩到约 2.5MB 以内再传。',
+        )
+        return
+      }
+      setVideoUploading(true)
+      setSessionVideo(null)
+      setError('')
+      try {
+        const sign = await requestVideoAnalyzeUploadSign({
+          fileName: f.name,
+          contentType: f.type || 'video/mp4',
+          fileSize: f.size,
+        })
+        await uploadVideoFileToSignedUrl(sign.signedUrl, sign.token, f)
+        setSessionVideo({ name: f.name, remoteUrl: sign.publicUrl })
+        try {
+          await createAssetAPI({
+            source: 'user_upload',
+            type: 'video',
+            url: sign.publicUrl,
+            name: f.name,
+            metadata: { from: 'video_analyze_input' },
+          })
+        } catch {
+          // 资产入库失败不阻断分析
+        }
+      } catch (err: any) {
+        setError(err?.message || '云端上传失败')
+        setSessionVideo(null)
+      } finally {
+        setVideoUploading(false)
+      }
+      return
+    }
+
     try {
-      const dataUrl = await readFileAsDataUrl(f, MAX_VIDEO_BYTES)
+      const dataUrl = await readFileAsDataUrl(f, MAX_INLINE_VIDEO_BYTES)
       setSessionVideo({ name: f.name, dataUrl })
       setError('')
     } catch (err: any) {
@@ -249,7 +316,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
   }
 
   const send = async () => {
-    if (busy) return
+    if (busy || videoUploading) return
     const textBase = inputText.trim()
     const linkLine = linkUrl.trim() ? `参考链接：${linkUrl.trim()}` : ''
     const text = [textBase, linkLine].filter(Boolean).join('\n').trim()
@@ -264,6 +331,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
       role: 'user',
       text: finalText,
       videoDataUrl: sessionVideo?.dataUrl,
+      videoRemoteUrl: sessionVideo?.remoteUrl,
     }
 
     const nextMessages = [...messages, userMsg]
@@ -272,18 +340,8 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
     setError('')
 
     const payloadTurns: VideoAnalyzeTurn[] = [
-      ...nextMessages.slice(0, -1).map((m) => ({
-        role: m.role,
-        text: m.text,
-        videoDataUrl: m.videoDataUrl,
-        imageDataUrls: m.imageDataUrls,
-      })),
-      {
-        role: 'user',
-        text: userMsg.text,
-        videoDataUrl: userMsg.videoDataUrl,
-        imageDataUrls: userMsg.imageDataUrls,
-      },
+      ...nextMessages.slice(0, -1).map((m) => chatMessageToTurn(m)),
+      chatMessageToTurn(userMsg),
     ]
 
     try {
@@ -303,7 +361,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
   }
 
   const startNewChat = async () => {
-    if (busy) return
+    if (busy || videoUploading) return
     await archiveCurrentToHistory()
     setMessages([])
     setSessionVideo(null)
@@ -315,7 +373,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
   }
 
   const openSession = async (sid: string) => {
-    if (busy || sid === activeSessionId) return
+    if (busy || videoUploading || sid === activeSessionId) return
     await archiveCurrentToHistory()
     const hit = sessionsRef.current.find((s) => s.id === sid)
     if (!hit) return
@@ -352,7 +410,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
             <button
               key={it.id}
               type="button"
-              disabled={busy}
+              disabled={busy || videoUploading}
               onClick={() => onPickIntent(it.id)}
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors disabled:opacity-45 ${
                 intent === it.id ? it.activeClass : it.idleClass
@@ -368,15 +426,24 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
   )
 
   const attachmentChips =
-    sessionVideo || linkUrl ? (
+    sessionVideo || linkUrl || videoUploading ? (
       <div className="flex flex-wrap gap-2">
+        {videoUploading ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 pl-2.5 pr-2 py-0.5 text-[11px] text-amber-100/90 ring-1 ring-amber-400/25">
+            <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+            正在上传视频…
+          </span>
+        ) : null}
         {sessionVideo ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-black/35 pl-2 pr-1 py-0.5 text-[11px] text-white/75 ring-1 ring-white/12">
             <Video className="w-3 h-3 opacity-80" />
-            <span className="max-w-[200px] truncate">{sessionVideo.name}</span>
+            <span className="max-w-[200px] truncate">
+              {sessionVideo.name}
+              {sessionVideo.remoteUrl ? ' · 云端' : ''}
+            </span>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || videoUploading}
               className="p-0.5 rounded-full hover:bg-white/10"
               onClick={() => setSessionVideo(null)}
               aria-label="移除视频"
@@ -391,7 +458,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
             <span className="max-w-[220px] truncate">{linkUrl}</span>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || videoUploading}
               className="p-0.5 rounded-full hover:bg-white/10"
               onClick={() => setLinkUrl('')}
               aria-label="移除链接"
@@ -409,7 +476,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
         <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={onVideoFile} />
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || videoUploading}
           onClick={() => videoInputRef.current?.click()}
           className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium bg-black/25 text-white/82 ring-1 ring-white/[0.12] hover:bg-black/35 disabled:opacity-45"
         >
@@ -418,7 +485,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
         </button>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || videoUploading}
           onClick={addLink}
           className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium bg-black/25 text-white/82 ring-1 ring-white/[0.12] hover:bg-black/35 disabled:opacity-45"
         >
@@ -428,12 +495,16 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
       </div>
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || videoUploading}
         onClick={() => void send()}
         title="发送"
         className="shrink-0 w-11 h-11 rounded-full bg-zinc-200 text-zinc-900 flex items-center justify-center hover:bg-zinc-100 disabled:opacity-40 shadow-md shadow-black/40"
       >
-        {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUp className="w-5 h-5" strokeWidth={2.2} />}
+        {busy || videoUploading ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <ArrowUp className="w-5 h-5" strokeWidth={2.2} />
+        )}
       </button>
     </div>
   )
@@ -448,7 +519,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
               <div className="shrink-0 flex justify-end px-4 pt-3 pb-1">
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || videoUploading}
                   onClick={() => void startNewChat()}
                   className="text-[11px] text-violet-200/90 hover:text-violet-100 disabled:opacity-40"
                 >
@@ -461,7 +532,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
                   <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    disabled={busy}
+                    disabled={busy || videoUploading}
                     placeholder={textareaPlaceholder}
                     className="mt-4 w-full flex-1 min-h-[200px] resize-none rounded-xl bg-[#1e1e24] px-4 py-3.5 text-[15px] leading-relaxed text-white/90 placeholder:text-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 disabled:opacity-50"
                   />
@@ -478,7 +549,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
                 <span className="text-xs font-medium text-white/45">视频分析</span>
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || videoUploading}
                   onClick={() => void startNewChat()}
                   className="text-[11px] text-violet-200/85 hover:text-violet-100 disabled:opacity-40"
                 >
@@ -545,7 +616,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
                   <textarea
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    disabled={busy}
+                    disabled={busy || videoUploading}
                     rows={3}
                     placeholder={textareaPlaceholder}
                     className="w-full resize-none bg-transparent px-3.5 py-3 text-sm text-white/88 placeholder:text-white/32 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/25 focus-visible:ring-inset disabled:opacity-50 min-h-[4.5rem]"
@@ -580,7 +651,7 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
                   <button
                     key={s.id}
                     type="button"
-                    disabled={busy}
+                    disabled={busy || videoUploading}
                     onClick={() => void openSession(s.id)}
                     className={`w-full text-left rounded-xl px-3 py-2.5 flex gap-2.5 transition-colors ring-1 ring-inset disabled:opacity-45 ${
                       active
