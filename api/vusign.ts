@@ -1,20 +1,53 @@
-// 签发 Supabase Storage 直传地址（REST，与 storage-js createSignedUploadUrl 一致）
-import { requireUser } from './_supabase.js'
+// 视频画质提升：签发 Storage 直传（由 /api/video-upscale-sign rewrite 至此，与 assets-create 命名风格一致）
+function sendJson(res: any, status: number, payload: any) {
+  try {
+    return res.status(status).json(payload)
+  } catch {
+    return res.status(status).end(JSON.stringify(payload))
+  }
+}
 
-const MAX_BYTES = 50 * 1024 * 1024
-
-function mustEnv(name) {
+function mustEnv(name: string) {
   const v = process.env[name]
   if (!v) throw new Error(`缺少环境变量 ${name}`)
   return v
 }
 
-function baseUrl() {
+function supabaseBase() {
   return String(mustEnv('SUPABASE_URL')).replace(/\/$/, '')
 }
 
-async function ensureAssetsBucket(serviceKey) {
-  await fetch(`${baseUrl()}/storage/v1/bucket`, {
+async function parseJson(resp: Response) {
+  const text = await resp.text()
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    return { _raw: text }
+  }
+}
+
+async function requireUser(req: any) {
+  const auth = String(req.headers?.authorization || '')
+  const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : ''
+  if (!token) throw new Error('未登录（缺少 Authorization Bearer token）')
+  const anonKey = mustEnv('SUPABASE_ANON_KEY')
+  const resp = await fetch(`${supabaseBase()}/auth/v1/user`, {
+    method: 'GET',
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  const data: any = await parseJson(resp as any)
+  if (!resp.ok) throw new Error(data?.error_description || data?.message || '登录已失效，请重新登录')
+  const user = data?.user || data
+  const userId = user?.id || user?.sub
+  if (!userId) throw new Error('登录已失效，请重新登录')
+  return { userId: String(userId) }
+}
+
+async function ensureAssetsBucket(serviceKey: string) {
+  await fetch(`${supabaseBase()}/storage/v1/bucket`, {
     method: 'POST',
     headers: {
       apikey: serviceKey,
@@ -30,30 +63,17 @@ async function ensureAssetsBucket(serviceKey) {
   })
 }
 
-function safeJson(res) {
-  return res.text().then((t) => {
-    try {
-      return t ? JSON.parse(t) : {}
-    } catch {
-      return { _raw: t }
-    }
-  })
-}
+const MAX_BYTES = 50 * 1024 * 1024
 
-export default async function handler(req, res) {
-  // 统一 JSON，避免前端只看到 500
-  const ok = (payload) => res.status(200).json(payload)
+export default async function handler(req: any, res: any) {
+  const ok = (payload: any) => sendJson(res, 200, payload)
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method not allowed' })
+    return sendJson(res, 405, { success: false, error: 'Method not allowed' })
   }
 
   try {
-    const { user } = await requireUser(req)
-    const userId = user?.id
-    if (!userId) {
-      return ok({ success: false, error: '无法识别用户', code: 'AUTH' })
-    }
+    const { userId } = await requireUser(req)
 
     const body = req.body && typeof req.body === 'object' ? req.body : {}
     const fileName = String(body.fileName || 'video.mp4').slice(0, 200)
@@ -76,8 +96,7 @@ export default async function handler(req, res) {
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
     await ensureAssetsBucket(serviceKey)
 
-    const storageV1 = `${baseUrl()}/storage/v1`
-    // bucketId/path → POST .../object/upload/sign/assets/userId/...
+    const storageV1 = `${supabaseBase()}/storage/v1`
     const signPath = `assets/${objectPath}`
     const signUrl = `${storageV1}/object/upload/sign/${signPath}`
 
@@ -86,10 +105,12 @@ export default async function handler(req, res) {
       headers: {
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
       },
+      body: '{}',
     })
 
-    const signJson = await safeJson(signResp)
+    const signJson: any = await parseJson(signResp as any)
 
     if (!signResp.ok) {
       const msg =
@@ -117,9 +138,10 @@ export default async function handler(req, res) {
     }
 
     const relStr = String(rel).trim()
-    const fullSigned = relStr.startsWith('http://') || relStr.startsWith('https://')
-      ? relStr
-      : `${storageV1}${relStr.startsWith('/') ? relStr : `/${relStr}`}`
+    const fullSigned =
+      relStr.startsWith('http://') || relStr.startsWith('https://')
+        ? relStr
+        : `${storageV1}${relStr.startsWith('/') ? relStr : `/${relStr}`}`
 
     let token = ''
     try {
@@ -131,7 +153,7 @@ export default async function handler(req, res) {
     if (!token) {
       return ok({
         success: false,
-        error: '签发地址中缺少 token，请确认 Storage 版本支持 upload/sign',
+        error: '签发地址中缺少 token，请确认 Storage 支持 upload/sign',
         code: 'SIGN_BAD_RESPONSE',
         raw: signJson,
       })
@@ -146,8 +168,8 @@ export default async function handler(req, res) {
       path: objectPath,
       publicUrl,
     })
-  } catch (e) {
-    console.error('[video-upscale-sign]', e)
+  } catch (e: any) {
+    console.error('[vusign]', e)
     return ok({
       success: false,
       error: e?.message || '签名服务异常',

@@ -79,9 +79,19 @@ export async function requestVideoUpscaleUploadSign(params: {
     },
     body: JSON.stringify(params),
   })
-  const data = await resp.json().catch(() => ({}))
+  const rawText = await resp.text()
+  let data: any = {}
+  try {
+    data = rawText ? JSON.parse(rawText) : {}
+  } catch {
+    data = { error: rawText?.slice(0, 400) || '响应非 JSON' }
+  }
   if (!resp.ok || !data?.success) {
-    const detail = data?.error || data?.message || (typeof data?.raw === 'object' ? JSON.stringify(data.raw).slice(0, 200) : '')
+    const detail =
+      data?.error ||
+      data?.message ||
+      (typeof data?.raw === 'object' ? JSON.stringify(data.raw).slice(0, 200) : '') ||
+      (resp.status >= 500 ? `服务暂不可用(${resp.status})，请稍后重试或联系管理员` : '')
     throw new Error(detail || `签名失败(${resp.status})`)
   }
   return {
