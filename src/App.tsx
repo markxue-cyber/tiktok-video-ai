@@ -43,6 +43,7 @@ import {
   Droplets,
   Scissors,
   Trash2,
+  LayoutGrid,
 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -890,7 +891,7 @@ const FIRST_IMAGE_TOOL_TAB: ImageToolsTabId = IMAGE_TOOLS_TAB_ITEMS[0]!.id
 const FIRST_VIDEO_TOOL_TAB: VideoToolsTabId = VIDEO_TOOLS_TAB_ITEMS[0]!.id
 
 function workspaceParamFromNav(
-  mainNav: 'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer',
+  mainNav: 'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer',
   imageSubNav: 'generate' | 'tools',
   imageToolsTab: ImageToolsTabId,
   videoSubNav: 'tools' | 'analyze',
@@ -936,7 +937,7 @@ function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [authResendBusy, setAuthResendBusy] = useState(false)
   const [mainNav, setMainNav] = useState<
-    'image' | 'video' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
+    'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
   >('image')
   const [imageSubNav, setImageSubNav] = useState<'generate' | 'tools'>(() => {
     try {
@@ -1302,6 +1303,7 @@ function App() {
       return '视频分析'
     }
     if (TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates') return '模板与案例库'
+    if (mainNav === 'creativePlaza') return '创意广场'
     if (mainNav === 'tasks') return '任务中心'
     if (mainNav === 'assets') return '资产库'
     if (mainNav === 'benefits') return '个人权益'
@@ -1792,6 +1794,13 @@ function App() {
                   goVideoToolsTab(id)
                 }}
               />
+              <NavPrimary
+                collapsed
+                icon={<LayoutGrid className="w-5 h-5" />}
+                label="创意广场"
+                active={mainNav === 'creativePlaza'}
+                onClick={() => setMainNav('creativePlaza')}
+              />
               {TEMPLATES_LIBRARY_ENABLED ? (
                 <NavPrimary collapsed icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
               ) : null}
@@ -1890,6 +1899,13 @@ function App() {
                 />
               </div>
 
+              <NavPrimary
+                collapsed={false}
+                icon={<LayoutGrid className="w-5 h-5" />}
+                label="创意广场"
+                active={mainNav === 'creativePlaza'}
+                onClick={() => setMainNav('creativePlaza')}
+              />
               {TEMPLATES_LIBRARY_ENABLED ? (
                 <NavPrimary collapsed={false} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
               ) : null}
@@ -1935,6 +1951,7 @@ function App() {
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'subtitle' && '视频工具 · 去字幕'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
                 {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && '模板与案例库'}
+                {mainNav === 'creativePlaza' && '创意广场'}
                 {mainNav === 'tasks' && '任务中心'}
                 {mainNav === 'assets' && '资产库'}
                 {mainNav === 'benefits' && '个人权益'}
@@ -2042,6 +2059,7 @@ function App() {
             <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
           </div>
           {mainNav === 'video' && videoSubNav === 'analyze' ? <WorkbenchComingSoon title="视频分析" /> : null}
+          {mainNav === 'creativePlaza' ? <CreativePlazaPage /> : null}
           {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && (
             <TemplatesLibrary
               onApplyVideo={(preset) => {
@@ -2075,6 +2093,20 @@ function App() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function CreativePlazaPage() {
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-white rounded-2xl border p-10 shadow-sm text-center">
+        <LayoutGrid className="w-14 h-14 mx-auto text-purple-500 mb-4" strokeWidth={1.5} />
+        <h2 className="text-xl font-bold text-gray-900">创意广场</h2>
+        <p className="mt-2 text-sm text-gray-500 max-w-md mx-auto leading-relaxed">
+          精选灵感、模板案例与社区活动将在这里聚合，便于发现爆款思路与可复用创意。功能建设中，敬请期待。
+        </p>
+      </div>
     </div>
   )
 }
