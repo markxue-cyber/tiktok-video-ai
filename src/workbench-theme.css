@@ -498,11 +498,11 @@
   color: rgba(255, 255, 255, 0.92);
 }
 
-/* 一键分析：爆款风格卡片依次渐入 */
-@keyframes workbenchHotStyleCardIn {
+/* 一键分析：阶段提示轻入 */
+@keyframes workbenchStatusSoftIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -510,8 +510,108 @@
   }
 }
 
+.workbench-root .workbench-oneclick-status {
+  animation: workbenchStatusSoftIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 商品分析渐进写入：柔和描边呼吸 */
+@keyframes workbenchProductStreamGlow {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.28), 0 0 0 1px rgba(139, 92, 246, 0.12);
+  }
+}
+
+.workbench-root textarea.workbench-product-analysis-streaming {
+  animation: workbenchProductStreamGlow 1.35s ease-in-out infinite;
+}
+
+/* 爆款风格骨架：依次浮入 + 流光 */
+@keyframes workbenchSkeletonSlotIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes workbenchSkeletonShimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.workbench-root .workbench-hs-skeleton-slot {
+  --wb-sk: 0;
+  opacity: 0;
+  animation: workbenchSkeletonSlotIn 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--wb-sk) * 72ms);
+}
+
+.workbench-root .workbench-skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 42%,
+    rgba(196, 181, 253, 0.07) 50%,
+    rgba(255, 255, 255, 0.04) 58%,
+    transparent 100%
+  );
+  animation: workbenchSkeletonShimmer 1.85s ease-in-out infinite;
+}
+
+/* 一键分析：爆款风格卡片依次渐入（略带回弹、轻模糊收束） */
+@keyframes workbenchHotStyleCardIn {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.94);
+    filter: blur(3px);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0.5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
 .workbench-root .workbench-hot-style-card-reveal {
   opacity: 0;
-  animation: workbenchHotStyleCardIn 0.42s ease-out forwards;
+  animation: workbenchHotStyleCardIn 0.58s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-root .workbench-hot-style-card-reveal,
+  .workbench-root .workbench-hs-skeleton-slot,
+  .workbench-root .workbench-oneclick-status {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  .workbench-root .workbench-skeleton-shimmer::after {
+    animation: none !important;
+  }
+  .workbench-root textarea.workbench-product-analysis-streaming {
+    animation: none !important;
+  }
 }
 

@@ -398,24 +398,51 @@ function filterProductAnalysisText(raw: string): string {
   return out.join('\n')
 }
 
-/** 一键分析：商品分析区渐进展示（多行按行、少行按字符块） */
+/** 一键分析：商品分析区渐进展示（长行再拆段，观感更丝滑） */
 function buildProductAnalysisRevealSteps(full: string): string[] {
   const s = String(full || '')
   if (!s.trim()) return ['']
   const lines = s.split('\n')
-  if (lines.length >= 2) {
-    const steps: string[] = []
-    for (let i = 1; i <= lines.length; i += 1) {
-      steps.push(lines.slice(0, i).join('\n'))
+  const expanded: string[] = []
+  const maxChunk = 48
+
+  const chunkLongLine = (line: string) => {
+    let rest = line
+    while (rest.length > 0) {
+      if (rest.length <= maxChunk) {
+        expanded.push(rest)
+        break
+      }
+      let cut = maxChunk
+      const windowEnd = Math.min(rest.length, maxChunk + 14)
+      const slice = rest.slice(0, windowEnd)
+      const punct = Math.max(
+        slice.lastIndexOf('、'),
+        slice.lastIndexOf('，'),
+        slice.lastIndexOf('；'),
+        slice.lastIndexOf(' '),
+        slice.lastIndexOf('　'),
+      )
+      if (punct > Math.floor(maxChunk * 0.45)) cut = punct + 1
+      expanded.push(rest.slice(0, cut))
+      rest = rest.slice(cut).replace(/^[、，；\s　]+/, '')
     }
-    return steps
   }
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      expanded.push('')
+      continue
+    }
+    if (line.length <= maxChunk + 8) expanded.push(line)
+    else chunkLongLine(line)
+  }
+
+  if (expanded.length === 0) return ['']
   const steps: string[] = []
-  const chunkSize = 38
-  for (let end = chunkSize; end < s.length; end += chunkSize) {
-    steps.push(s.slice(0, end))
+  for (let i = 1; i <= expanded.length; i += 1) {
+    steps.push(expanded.slice(0, i).join('\n'))
   }
-  steps.push(s)
   return steps
 }
 
@@ -3962,6 +3989,9 @@ function ImageGenerator({
   /** 一键分析拆分阶段：用于文案与爆款区骨架 */
   const [oneClickAnalysisPhase, setOneClickAnalysisPhase] = useState<'product' | 'styles' | null>(null)
   const productAnalysisRevealTimerRef = useRef<number | null>(null)
+  const productAnalysisWorkbenchTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  /** 商品分析渐进写入时：轻微高亮，提示「正在流出」 */
+  const [productAnalysisStreamReveal, setProductAnalysisStreamReveal] = useState(false)
   /** 每完成一次一键分析里的「爆款风格」请求 +1，用于卡片渐入动画重放 */
   const [hotStylesRevealEpoch, setHotStylesRevealEpoch] = useState(0)
   /** 商品分析 + 爆款风格：默认折叠，上传参考图并点击「一键分析」后展开 */
@@ -4754,24 +4784,37 @@ function ImageGenerator({
       window.clearTimeout(productAnalysisRevealTimerRef.current)
       productAnalysisRevealTimerRef.current = null
     }
+    setProductAnalysisStreamReveal(false)
   }
 
   const scheduleProductAnalysisReveal = (jobId: number, fullText: string) => {
     clearProductAnalysisRevealTimers()
+    setProductAnalysisStreamReveal(true)
     const steps = buildProductAnalysisRevealSteps(fullText)
     let i = 0
+    const scrollTextareaToEnd = () => {
+      requestAnimationFrame(() => {
+        const el = productAnalysisWorkbenchTextareaRef.current
+        if (!el) return
+        el.scrollTop = el.scrollHeight
+      })
+    }
     const tick = () => {
       if (jobId !== aiJobRef.current) return
       setProductAnalysisText(steps[i] ?? '')
+      scrollTextareaToEnd()
       i += 1
       if (i >= steps.length) {
         productAnalysisRevealTimerRef.current = null
+        setProductAnalysisStreamReveal(false)
+        scrollTextareaToEnd()
         return
       }
       const prev = steps[i - 1] ?? ''
       const cur = steps[i] ?? ''
       const delta = Math.max(1, cur.length - prev.length)
-      const delay = Math.min(95, Math.max(12, Math.round(delta * 0.3)))
+      /** 大段略慢、小段轻快，整体更顺滑 */
+      const delay = Math.min(175, Math.max(16, 20 + Math.sqrt(delta) * 2.35))
       productAnalysisRevealTimerRef.current = window.setTimeout(tick, delay)
     }
     productAnalysisRevealTimerRef.current = window.setTimeout(tick, 0)
@@ -6340,18 +6383,27 @@ function ImageGenerator({
               </button>
             </div>
             {workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'product' ? (
-              <p className="text-[11px] text-violet-200/80 mb-1.5" role="status">
+              <p
+                className="workbench-oneclick-status text-[11px] text-violet-200/80 mb-1.5"
+                role="status"
+              >
                 正在分析参考图中的商品信息…
               </p>
             ) : workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles' ? (
-              <p className="text-[11px] text-violet-200/80 mb-1.5" role="status">
+              <p
+                className="workbench-oneclick-status text-[11px] text-violet-200/80 mb-1.5"
+                role="status"
+              >
                 商品分析已就绪，正在生成 4 套爆款风格…
               </p>
             ) : null}
             <textarea
+              ref={productAnalysisWorkbenchTextareaRef}
               value={productAnalysisText}
               onChange={(e) => setProductAnalysisText(e.target.value)}
-              className="w-full resize-y min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+              className={`w-full resize-y min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 transition-[box-shadow] duration-300 ${
+                productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''
+              }`}
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
           </div>
@@ -6393,10 +6445,11 @@ function ImageGenerator({
                     {[0, 1, 2, 3].map((slot) => (
                       <div
                         key={slot}
-                        className="rounded-2xl bg-[#16161c] ring-1 ring-inset ring-white/[0.1] px-3.5 py-3 min-h-[7.5rem] animate-pulse"
+                        className="workbench-hs-skeleton-slot workbench-skeleton-shimmer relative overflow-hidden rounded-2xl bg-[#16161c] ring-1 ring-inset ring-white/[0.1] px-3.5 py-3 min-h-[7.5rem]"
+                        style={{ '--wb-sk': slot } as CSSProperties}
                       >
-                        <div className="h-4 w-16 rounded-md bg-white/[0.08]" />
-                        <div className="mt-3 space-y-2">
+                        <div className="relative z-[1] h-4 w-16 rounded-md bg-white/[0.08]" />
+                        <div className="relative z-[1] mt-3 space-y-2">
                           <div className="h-2 w-full rounded bg-white/[0.06]" />
                           <div className="h-2 rounded bg-white/[0.06] w-[85%]" />
                           <div className="h-2 rounded bg-white/[0.06] w-[60%]" />
@@ -6404,7 +6457,7 @@ function ImageGenerator({
                       </div>
                     ))}
                   </div>
-                  <p className="text-center text-[11px] text-white/42" role="status">
+                  <p className="workbench-oneclick-status text-center text-[11px] text-white/42" role="status">
                     {oneClickAnalysisPhase === 'product'
                       ? '爆款风格将在商品分析完成后生成…'
                       : '正在生成爆款风格方案…'}
@@ -6479,7 +6532,7 @@ function ImageGenerator({
                     }`}
                     style={
                       hotStylesRevealEpoch > 0
-                        ? ({ animationDelay: `${idx * 105}ms` } satisfies CSSProperties)
+                        ? ({ animationDelay: `${idx * 118}ms` } satisfies CSSProperties)
                         : undefined
                     }
                   >
