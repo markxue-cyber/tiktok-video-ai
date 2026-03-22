@@ -113,7 +113,19 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: false, error: msg, code: inferCode(msg) })
       }
       if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
-      const { prompt, model, duration, aspect_ratio, resolution, refImage } = req.body || {}
+      const {
+        prompt,
+        model,
+        duration,
+        aspect_ratio,
+        resolution,
+        refImage,
+        videoEnhance,
+        inputVideoUrl,
+        targetResolution,
+        targetFps,
+        videoDurationSec,
+      } = req.body || {}
 
       const pickFirstString = (v: any): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
       const findTaskIdDeep = (obj: any): string => {
@@ -149,36 +161,88 @@ export default async function handler(req, res) {
         'sora': 'sora-2',
         'kling': 'doubao-seedance-1-5-pro-251215',
         'runway': 'veo3',
-        'seedance': 'doubao-seedance-1-5-pro-251215'
+        'seedance': 'doubao-seedance-1-5-pro-251215',
       }
-      
-      const apiModel = model ? (modelMap[model] || model) : 'doubao-seedance-1-5-pro-251215'
+
+      const inputUrl = String(inputVideoUrl || '').trim()
+      const isVideoEnhance = Boolean(videoEnhance) && inputUrl.length > 0
+
+      let apiModel: string
+      let finalPrompt: string
+      let finalDuration: number
+      let finalAspect: string
+      let finalResolution: string
+      let upstreamExtra: Record<string, unknown>
+
+      if (isVideoEnhance) {
+        apiModel = 'sora-2'
+        const tr = String(targetResolution || '1080p').toLowerCase()
+        const resMap: Record<string, string> = {
+          '1080p': '1080p',
+          '1080': '1080p',
+          '2k': '1440p',
+          '1440p': '1440p',
+          '4k': '2160p',
+          '2160p': '2160p',
+        }
+        finalResolution = resMap[tr] || '1080p'
+        const fpsN = Number(targetFps) === 60 ? 60 : 30
+        const dur = Number(videoDurationSec)
+        finalDuration = Math.max(1, Math.min(60, Number.isFinite(dur) ? Math.ceil(dur) : 10))
+        finalAspect = String(aspect_ratio || '9:16')
+        finalPrompt = [
+          '[Video quality enhancement]',
+          `Upscale and enhance the provided source video toward ${finalResolution} quality and ${fpsN} FPS where supported.`,
+          'Preserve original content, motion, composition, and subject identity. No new objects or watermarks.',
+          'Reduce compression artifacts and noise while keeping temporal consistency.',
+          '（画质提升：在保持原视频内容与运动一致的前提下提升清晰度与观感，按目标参数输出。）',
+        ].join('\n')
+        upstreamExtra = {
+          input_video: inputUrl,
+          video: inputUrl,
+          source_video: inputUrl,
+          reference_video: inputUrl,
+          video_url: inputUrl,
+          fps: fpsN,
+          frame_rate: fpsN,
+          target_fps: fpsN,
+          target_resolution: finalResolution,
+        }
+      } else {
+        apiModel = model ? (modelMap[model] || model) : 'doubao-seedance-1-5-pro-251215'
+        finalPrompt = prompt || '生成一个视频'
+        finalDuration = Number(duration) || 10
+        finalAspect = aspect_ratio || '9:16'
+        finalResolution = resolution || '720p'
+        upstreamExtra = {
+          image: refImage,
+          input_image: refImage,
+          reference_image: refImage,
+        }
+      }
+
       const enabled = await ensureModelEnabled(String(apiModel), 'video')
       if (!enabled) {
         return res.status(200).json({ success: false, error: `模型 ${apiModel} 已被后台禁用`, code: 'MODEL_UNAVAILABLE' })
       }
-      
-      console.log('Submitting with model:', apiModel)
+
+      console.log('Submitting with model:', apiModel, isVideoEnhance ? '(video enhance)' : '')
 
       const submitResponse = await fetch('https://api.linkapi.org/v2/videos/generations', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // 聚合API/上游可能使用 content 字段而非 prompt
-          content: prompt || '生成一个视频',
-          prompt: prompt || '生成一个视频',
+          content: finalPrompt,
+          prompt: finalPrompt,
           model: apiModel,
-          duration: Number(duration) || 10,
-          aspect_ratio: aspect_ratio || '9:16',
-          resolution: resolution || '720p',
-          // 尝试以常见字段名透传参考图（不同聚合/模型可能字段不同）
-          image: refImage,
-          input_image: refImage,
-          reference_image: refImage,
-        })
+          duration: finalDuration,
+          aspect_ratio: finalAspect,
+          resolution: finalResolution,
+          ...upstreamExtra,
+        }),
       })
 
       const submitData = await submitResponse.json()
@@ -219,7 +283,7 @@ export default async function handler(req, res) {
         status: 'submitted',
         provider_task_id: taskId,
         output_url: null,
-        raw: { submit: submitData },
+        raw: { submit: submitData, feature: isVideoEnhance ? 'video_enhance' : 'video_generate' },
       })
       await finalizeConsumption(req, { taskId: taskId, message: result.message }, taskId)
       return res.status(200).json(result)

@@ -33,6 +33,8 @@ export const TIKGEN_IG_IDB = {
   imageUpscaleHistoryFull: 'imageUpscale.historyFull.v1',
   imageCompressHistoryFull: 'imageCompress.historyFull.v1',
   imageTranslateHistoryFull: 'imageTranslate.historyFull.v1',
+  /** 视频工具 · 画质提升历史（含输入/输出 URL） */
+  videoUpscaleHistoryFull: 'videoUpscale.historyFull.v1',
 } as const
 
 export type TikgenWorkspaceSnapshotV1 = {

@@ -60,6 +60,7 @@ import { applyImageStyleTags } from './api/imageStyle'
 import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
 import { createOrder, getOrderStatus } from './api/payments'
 import { createAssetAPI, deleteAssetAPI, listAssetsAPI, updateAssetAPI, type AssetItem } from './api/assets'
+import { VideoUpscaleWorkbench } from './VideoUpscaleWorkbench'
 import { AI_ASSET_CREATED_EVENT, archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 import { listTasksAPI, type GenerationTaskItem } from './api/tasks'
 import { getMonitoringStatsAPI, type MonitoringStats } from './api/monitoring'
@@ -2190,7 +2191,7 @@ function VideoToolsWorkbench({
   return (
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="视频工具" items={VIDEO_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
-      {tab === 'upscale' ? <WorkbenchComingSoon title="画质提升" /> : null}
+      {tab === 'upscale' ? <VideoUpscaleWorkbench /> : null}
       {tab === 'watermark' ? <WorkbenchComingSoon title="去水印" /> : null}
       {tab === 'subtitle' ? <WorkbenchComingSoon title="去字幕" /> : null}
     </div>
