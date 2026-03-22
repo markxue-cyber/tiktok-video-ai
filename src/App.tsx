@@ -99,7 +99,9 @@ import {
   TIKGEN_IG_LS_BOARD_SIMPLE,
   TIKGEN_IG_LS_HISTORY,
   TIKGEN_IG_LS_HISTORY_SIMPLE,
+  isLikelyPersistedImageUrl,
   loadSceneRunBoardFromLocalStorage,
+  mergeImageGenHistorySnapshots,
   stripBoardForLocalStorage,
   stripHistoryForLocalStorage,
   tikgenIgIdbDelete,
@@ -731,23 +733,30 @@ function guessAssetType(file: File): 'image' | 'video' {
   return String(file.type || '').startsWith('video/') ? 'video' : 'image'
 }
 
-async function safeArchiveAsset(params: { source: 'user_upload' | 'ai_generated'; type: 'image' | 'video'; url: string; name?: string; metadata?: any }) {
+async function safeArchiveAsset(params: {
+  source: 'user_upload' | 'ai_generated'
+  type: 'image' | 'video'
+  url: string
+  name?: string
+  metadata?: any
+}): Promise<string | null> {
   try {
-    if (!params.url) return
+    if (!params.url) return null
     if (params.source === 'ai_generated') {
-      await archiveAiMediaOnce({
+      return await archiveAiMediaOnce({
         url: params.url,
         type: params.type,
         name: params.name,
         metadata: params.metadata,
       })
-      return
     }
-    await createAssetAPI(params)
+    const data = await createAssetAPI(params)
+    return String(data?.asset?.url || params.url || '').trim() || null
   } catch (e) {
     // Never block core generation/upload UX due to archive write failure.
     // Keep a trace for debugging when user reports missing assets.
     console.error('[assets] archive failed:', e)
+    return null
   }
 }
 
@@ -3974,6 +3983,8 @@ function ImageGenerator({
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
   const [imageGenHistory, setImageGenHistory] = useState<ImageGenHistoryTask[]>([])
+  /** 生成历史缩略图加载失败（临时链过期、空链等） */
+  const [histImageLoadFailed, setHistImageLoadFailed] = useState<Record<string, true>>({})
   const [historyLightbox, setHistoryLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
@@ -4082,7 +4093,19 @@ function ImageGenerator({
       if (cancelled) return
 
       const hLs = loadImageGenHistoryFromStorage(lsHistoryKey)
-      const hMerge = hIdb && Array.isArray(hIdb) && hIdb.length > 0 ? hIdb : hLs
+      const hMerged = mergeImageGenHistorySnapshots(hIdb, hLs) as unknown[]
+      const hMerge = hMerged
+        .filter((x: any) => x && typeof x.id === 'string' && typeof x.ts === 'number')
+        .map((t: any) => ({
+          ...t,
+          refThumb: String(t.refThumb || ''),
+          outputUrls: Array.isArray(t.outputUrls) ? t.outputUrls.map((u: unknown) => String(u || '')) : [],
+          status:
+            t.status === 'active' || t.status === 'failed' || t.status === 'completed'
+              ? t.status
+              : 'completed',
+        }))
+        .slice(0, IMAGE_GEN_HISTORY_MAX) as ImageGenHistoryTask[]
       setImageGenHistory(hMerge)
 
       const bLs = boardFromRaw(loadSceneRunBoardFromLocalStorage(lsBoardKey))
@@ -4220,29 +4243,54 @@ function ImageGenerator({
     tryLocalStorageSetJson(lsHistoryKey, stripHistoryForLocalStorage(slice))
   }, [imageGenHistory, imageGenPersistenceReady, visible, idbHistoryKey, lsHistoryKey])
 
-  /** 电商套图历史中的成片同步到资产库（单张出图时已写入；此处覆盖刷新恢复/漏写，指纹去重） */
+  /** 电商套图历史：将仍为临时链的成片镜像入库，并把 Supabase 永久 URL 写回 outputUrls（刷新后仍可预览） */
   useEffect(() => {
     if (!imageGenPersistenceReady || !visible) return
-    for (const task of imageGenHistory) {
-      if (task.status === 'failed') continue
-      const urls = task.outputUrls || []
-      for (let i = 0; i < urls.length; i++) {
-        const url = urls[i]
-        if (!url) continue
-        void safeArchiveAsset({
-          source: 'ai_generated',
-          type: 'image',
-          url,
-          name: `tikgen-${task.id}-${i + 1}.png`,
-          metadata: {
-            from: 'image_generator',
-            task_id: task.id,
-            index: i,
-            modelLabel: task.modelLabel,
-            sync: 'history',
-          },
-        })
+    let cancelled = false
+    void (async () => {
+      for (const task of imageGenHistory) {
+        if (cancelled) return
+        if (task.status === 'failed') continue
+        const urls = task.outputUrls || []
+        for (let i = 0; i < urls.length; i++) {
+          if (cancelled) return
+          const url = String(urls[i] || '').trim()
+          if (!url) continue
+          if (/\/storage\/v1\/object\/public\/assets\//.test(url)) continue
+          const archived = await safeArchiveAsset({
+            source: 'ai_generated',
+            type: 'image',
+            url,
+            name: `tikgen-${task.id}-${i + 1}.png`,
+            metadata: {
+              from: 'image_generator',
+              task_id: task.id,
+              index: i,
+              modelLabel: task.modelLabel,
+              sync: 'history',
+            },
+          })
+          if (cancelled) return
+          if (
+            archived &&
+            archived !== url &&
+            /\/storage\/v1\/object\/public\/assets\//.test(archived)
+          ) {
+            setImageGenHistory((prev) =>
+              prev.map((t) => {
+                if (t.id !== task.id) return t
+                const next = [...(t.outputUrls || [])]
+                if (String(next[i] || '').trim() !== url) return t
+                next[i] = archived
+                return { ...t, outputUrls: next }
+              }),
+            )
+          }
+        }
       }
+    })()
+    return () => {
+      cancelled = true
     }
   }, [imageGenHistory, imageGenPersistenceReady, visible])
 
@@ -5729,14 +5777,16 @@ function ImageGenerator({
         imageCount: 1,
         signal,
       })
-      await safeArchiveAsset({
+      const archivedUrl = await safeArchiveAsset({
         source: 'ai_generated',
         type: 'image',
         url: r.imageUrl,
         name: `image-${boardId}-${slotIndex + 1}.png`,
         metadata: { from: 'image_generator', model, size, resolution, scene: slot.title, variant: isSimpleImageGen ? 'simple' : 'ecommerce' },
       })
-      return { slotIndex, ok: true, imageUrl: r.imageUrl }
+      const outUrl =
+        archivedUrl && isLikelyPersistedImageUrl(archivedUrl) ? archivedUrl : r.imageUrl
+      return { slotIndex, ok: true, imageUrl: outUrl }
     } catch (e: any) {
       if (e?.name === 'AbortError' || signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: slot.title } })
@@ -6010,10 +6060,13 @@ function ImageGenerator({
   }
 
   const handleDownloadAllHistoryTask = (task: ImageGenHistoryTask) => {
-    const items = task.outputUrls.map((url, idx) => ({
-      url,
-      name: `tikgen-${task.id}-${idx + 1}.png`,
-    }))
+    const items = task.outputUrls
+      .map((url, idx) => ({ url: String(url || '').trim(), idx }))
+      .filter(({ url }) => isLikelyPersistedImageUrl(url))
+      .map(({ url, idx }) => ({
+        url,
+        name: `tikgen-${task.id}-${idx + 1}.png`,
+      }))
     if (items.length) downloadUrlsStaggered(items)
   }
 
@@ -7409,14 +7462,27 @@ function ImageGenerator({
                         <div className="space-y-2">
                           <button
                             type="button"
+                            disabled={
+                              task.outputUrls.filter((u) => isLikelyPersistedImageUrl(String(u || '').trim()))
+                                .length === 0
+                            }
                             onClick={() => handleDownloadAllHistoryTask(task)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08]"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Download className="w-3.5 h-3.5" />
-                            下载全部图片（{task.outputUrls.length}）
+                            下载全部图片（
+                            {
+                              task.outputUrls.filter((u) => isLikelyPersistedImageUrl(String(u || '').trim()))
+                                .length
+                            }
+                            ）
                           </button>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {task.outputUrls.map((url, idx) => {
+                              const urlClean = String(url || '').trim()
+                              const histKey = `${task.id}:${idx}`
+                              const urlMissing = !isLikelyPersistedImageUrl(urlClean)
+                              const urlBroken = urlMissing || Boolean(histImageLoadFailed[histKey])
                               const rawLabel = task.sceneLabels?.[idx] || `图 ${idx + 1}`
                               const { display: titleSansParen, parenHints } = splitSceneHistoryTitleForDisplay(rawLabel)
                               const labelDisplay = titleSansParen || `图 ${idx + 1}`
@@ -7458,34 +7524,55 @@ function ImageGenerator({
                                     </div>
                                   </div>
                                   <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/35">
-                                    <img
-                                      src={url}
-                                      alt=""
-                                      className="absolute inset-0 h-full w-full object-cover pointer-events-none select-none"
-                                      draggable={false}
-                                    />
-                                    {/* 下载角标在点击层之上，且勿对整卡 inset-0 启用 pointer-events-auto，否则会挡住放大点击 */}
-                                    <a
-                                      href={url}
-                                      download={`tikgen-${task.id}-${idx + 1}.png`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
-                                      title="下载"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Download className="w-4 h-4" />
-                                    </a>
-                                    <button
-                                      type="button"
-                                      className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setHistoryLightbox({ url, downloadName: `tikgen-${task.id}-${idx + 1}.png` })
-                                      }}
-                                      title="点击放大预览"
-                                      aria-label="放大预览图片"
-                                    />
+                                    {urlBroken ? (
+                                      <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 px-3 py-4 text-center">
+                                        <Image className="w-9 h-9 text-white/25 shrink-0" aria-hidden />
+                                        <p className="text-[11px] leading-snug text-white/50">
+                                          {urlMissing
+                                            ? '无有效图片地址（本地记录可能不完整）'
+                                            : '图片链接已失效或无法加载'}
+                                        </p>
+                                        <p className="text-[10px] leading-snug text-white/35">
+                                          聚合 API 返回的地址可能是临时链，过期后无法预览。新图会自动尝试同步到「资产」；也可在资产页按时间查找。
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <img
+                                          src={urlClean}
+                                          alt=""
+                                          className="absolute inset-0 h-full w-full object-cover pointer-events-none select-none"
+                                          draggable={false}
+                                          onError={() =>
+                                            setHistImageLoadFailed((p) => ({ ...p, [histKey]: true }))
+                                          }
+                                        />
+                                        <a
+                                          href={urlClean}
+                                          download={`tikgen-${task.id}-${idx + 1}.png`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
+                                          title="下载"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <Download className="w-4 h-4" />
+                                        </a>
+                                        <button
+                                          type="button"
+                                          className="absolute inset-0 z-[2] cursor-zoom-in touch-manipulation border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-inset"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setHistoryLightbox({
+                                              url: urlClean,
+                                              downloadName: `tikgen-${task.id}-${idx + 1}.png`,
+                                            })
+                                          }}
+                                          title="点击放大预览"
+                                          aria-label="放大预览图片"
+                                        />
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               )

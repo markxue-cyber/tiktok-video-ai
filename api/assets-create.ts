@@ -42,14 +42,16 @@ async function ensureAssetsBucket(serviceKey: string) {
   })
 }
 
-async function uploadDataUrlToStorage(params: { userId: string; kind: 'image' | 'video'; dataUrl: string; name?: string; serviceKey: string }) {
-  const m = String(params.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/)
-  if (!m) throw new Error('非法 data URL')
-  const mime = m[1]
-  const b64 = m[2]
-  const bytes = Buffer.from(b64, 'base64')
+async function uploadBytesToStorage(params: {
+  userId: string
+  kind: 'image' | 'video'
+  bytes: Buffer
+  contentType: string
+  name?: string
+  serviceKey: string
+}) {
   const fallbackExt = params.kind === 'video' ? 'mp4' : 'png'
-  const ext = extFromMime(mime, fallbackExt)
+  const ext = extFromMime(params.contentType, fallbackExt)
   const safeName = String(params.name || `${params.kind}.${ext}`).replace(/[^\w.\-]/g, '_')
   const objectPath = `${params.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
 
@@ -60,10 +62,10 @@ async function uploadDataUrlToStorage(params: { userId: string; kind: 'image' | 
     headers: {
       apikey: params.serviceKey,
       Authorization: `Bearer ${params.serviceKey}`,
-      'Content-Type': mime || 'application/octet-stream',
+      'Content-Type': params.contentType || 'application/octet-stream',
       'x-upsert': 'true',
     },
-    body: bytes as any,
+    body: params.bytes as any,
   })
   if (!upResp.ok) {
     const upData = await parseJson(upResp)
@@ -71,6 +73,65 @@ async function uploadDataUrlToStorage(params: { userId: string; kind: 'image' | 
   }
 
   return `${baseUrl()}/storage/v1/object/public/assets/${objectPath}`
+}
+
+async function uploadDataUrlToStorage(params: { userId: string; kind: 'image' | 'video'; dataUrl: string; name?: string; serviceKey: string }) {
+  const m = String(params.dataUrl || '').match(/^data:([^;]+);base64,(.+)$/)
+  if (!m) throw new Error('非法 data URL')
+  const mime = m[1]
+  const b64 = m[2]
+  const bytes = Buffer.from(b64, 'base64')
+  return uploadBytesToStorage({
+    userId: params.userId,
+    kind: params.kind,
+    bytes,
+    contentType: mime || 'application/octet-stream',
+    name: params.name,
+    serviceKey: params.serviceKey,
+  })
+}
+
+function isAlreadyOurPublicAssetUrl(u: string) {
+  return String(u || '').includes('/storage/v1/object/public/assets/')
+}
+
+/** 将聚合 API 返回的临时 http(s) 图片拉取并写入本库 Storage，得到长期可访问的公开 URL */
+async function mirrorRemoteAiImageToStorage(params: { userId: string; imageUrl: string; name?: string; serviceKey: string }) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 90000)
+  let fetchResp: Response
+  try {
+    fetchResp = await fetch(params.imageUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; TikgenAssetMirror/1.0)',
+        Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!fetchResp.ok) throw new Error(`拉取远程图片失败 HTTP ${fetchResp.status}`)
+  const ct = fetchResp.headers.get('content-type') || 'image/png'
+  const ctLower = ct.toLowerCase()
+  if (!ctLower.startsWith('image/') && !ctLower.includes('octet-stream')) {
+    throw new Error(`远程响应不是图片 (${ct})`)
+  }
+  const buf = Buffer.from(await fetchResp.arrayBuffer())
+  if (!buf.length) throw new Error('远程图片内容为空')
+  const maxBytes = 35 * 1024 * 1024
+  if (buf.length > maxBytes) throw new Error('远程图片过大')
+  const contentType = ctLower.includes('octet-stream') ? 'image/png' : ct
+  return uploadBytesToStorage({
+    userId: params.userId,
+    kind: 'image',
+    bytes: buf,
+    contentType,
+    name: params.name,
+    serviceKey: params.serviceKey,
+  })
 }
 
 async function parseJson(resp: Response) {
@@ -119,16 +180,33 @@ export default async function handler(req, res) {
     if (!assetUrl) return sendJson(res, 400, { success: false, error: '缺少 url' })
 
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
-    const finalUrl =
-      assetUrl.startsWith('data:')
-        ? await uploadDataUrlToStorage({
-            userId,
-            kind: kind as 'image' | 'video',
-            dataUrl: assetUrl,
-            name: name ? String(name) : undefined,
-            serviceKey,
-          })
-        : assetUrl
+    let finalUrl = assetUrl
+    if (assetUrl.startsWith('data:')) {
+      finalUrl = await uploadDataUrlToStorage({
+        userId,
+        kind: kind as 'image' | 'video',
+        dataUrl: assetUrl,
+        name: name ? String(name) : undefined,
+        serviceKey,
+      })
+    } else if (
+      src === 'ai_generated' &&
+      kind === 'image' &&
+      (assetUrl.startsWith('http://') || assetUrl.startsWith('https://')) &&
+      !isAlreadyOurPublicAssetUrl(assetUrl)
+    ) {
+      try {
+        finalUrl = await mirrorRemoteAiImageToStorage({
+          userId,
+          imageUrl: assetUrl,
+          name: name ? String(name) : undefined,
+          serviceKey,
+        })
+      } catch (e: any) {
+        console.warn('[assets-create] mirror ai image failed, using original url:', e?.message || e)
+        finalUrl = assetUrl
+      }
+    }
 
     const resp = await fetch(`${baseUrl()}/rest/v1/assets`, {
       method: 'POST',
