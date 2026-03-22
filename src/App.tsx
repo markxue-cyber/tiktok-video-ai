@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal, flushSync } from 'react-dom'
 import {
   Video,
   Image,
@@ -1058,20 +1058,56 @@ function App() {
     }
   }, [page])
 
-  /** 与当前页同步 workspace 参数，便于复制链接直达三级 Tab */
+  /** 侧栏三级菜单：同步 flush DOM，避免内容已切换而 Tab 高亮滞后一帧 */
+  const goImageToolsTab = useCallback((tab: ImageToolsTabId) => {
+    flushSync(() => {
+      setMainNav('image')
+      setImageSubNav('tools')
+      setImageToolsTab(tab)
+    })
+  }, [])
+  const goVideoToolsTab = useCallback((tab: VideoToolsTabId) => {
+    flushSync(() => {
+      setMainNav('video')
+      setVideoSubNav('tools')
+      setVideoToolsTab(tab)
+    })
+  }, [])
+
+  /** 工作台顶部 Tab 点击：同步提交，避免与主题 transition 叠加产生高亮滞后 */
+  const onWorkbenchImageTabChange = useCallback((t: ImageToolsTabId) => {
+    flushSync(() => setImageToolsTab(t))
+  }, [])
+  const onWorkbenchVideoTabChange = useCallback((t: VideoToolsTabId) => {
+    flushSync(() => setVideoToolsTab(t))
+  }, [])
+
+  /** 与当前页同步 workspace 参数；延后两帧再 replaceState，让 Tab 高亮与内容先完成绘制 */
   useEffect(() => {
     if (page !== 'home' || typeof window === 'undefined') return
-    try {
-      const nextW = workspaceParamFromNav(mainNav, imageSubNav, imageToolsTab, videoSubNav, videoToolsTab)
-      const sp = new URLSearchParams(window.location.search)
-      if (nextW) sp.set('workspace', nextW)
-      else sp.delete('workspace')
-      const qs = sp.toString()
-      const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
-      const cur = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`
-      if (nextUrl !== cur) window.history.replaceState(null, '', nextUrl)
-    } catch {
-      // ignore
+    let cancelled = false
+    const raf = { inner: null as number | null }
+    const id0 = requestAnimationFrame(() => {
+      raf.inner = requestAnimationFrame(() => {
+        if (cancelled) return
+        try {
+          const nextW = workspaceParamFromNav(mainNav, imageSubNav, imageToolsTab, videoSubNav, videoToolsTab)
+          const sp = new URLSearchParams(window.location.search)
+          if (nextW) sp.set('workspace', nextW)
+          else sp.delete('workspace')
+          const qs = sp.toString()
+          const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`
+          const cur = `${window.location.pathname}${window.location.search}${window.location.hash || ''}`
+          if (nextUrl !== cur) window.history.replaceState(null, '', nextUrl)
+        } catch {
+          // ignore
+        }
+      })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(id0)
+      if (raf.inner != null) cancelAnimationFrame(raf.inner)
     }
   }, [page, mainNav, imageSubNav, imageToolsTab, videoSubNav, videoToolsTab])
 
@@ -1739,16 +1775,10 @@ function App() {
                 label="图片工具"
                 active={mainNav === 'image' && imageSubNav === 'tools'}
                 flyoutItems={IMAGE_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
-                onClickDefault={() => {
-                  setMainNav('image')
-                  setImageSubNav('tools')
-                  setImageToolsTab(FIRST_IMAGE_TOOL_TAB)
-                }}
+                onClickDefault={() => goImageToolsTab(FIRST_IMAGE_TOOL_TAB)}
                 onPickTool={(id) => {
                   if (!isImageToolsTabId(id)) return
-                  setMainNav('image')
-                  setImageSubNav('tools')
-                  setImageToolsTab(id)
+                  goImageToolsTab(id)
                 }}
               />
               <NavCollapsedToolsFlyout
@@ -1756,16 +1786,10 @@ function App() {
                 label="视频工具"
                 active={mainNav === 'video' && videoSubNav === 'tools'}
                 flyoutItems={VIDEO_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
-                onClickDefault={() => {
-                  setMainNav('video')
-                  setVideoSubNav('tools')
-                  setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
-                }}
+                onClickDefault={() => goVideoToolsTab(FIRST_VIDEO_TOOL_TAB)}
                 onPickTool={(id) => {
                   if (!isVideoToolsTabId(id)) return
-                  setMainNav('video')
-                  setVideoSubNav('tools')
-                  setVideoToolsTab(id)
+                  goVideoToolsTab(id)
                 }}
               />
               {TEMPLATES_LIBRARY_ENABLED ? (
@@ -1822,16 +1846,10 @@ function App() {
                   active={mainNav === 'image' && imageSubNav === 'tools'}
                   flyoutItems={IMAGE_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
                   activeThirdId={mainNav === 'image' && imageSubNav === 'tools' ? imageToolsTab : null}
-                  onActivateDefault={() => {
-                    setMainNav('image')
-                    setImageSubNav('tools')
-                    setImageToolsTab(FIRST_IMAGE_TOOL_TAB)
-                  }}
+                  onActivateDefault={() => goImageToolsTab(FIRST_IMAGE_TOOL_TAB)}
                   onPickThird={(id) => {
                     if (!isImageToolsTabId(id)) return
-                    setMainNav('image')
-                    setImageSubNav('tools')
-                    setImageToolsTab(id)
+                    goImageToolsTab(id)
                   }}
                 />
               </div>
@@ -1854,16 +1872,10 @@ function App() {
                   active={mainNav === 'video' && videoSubNav === 'tools'}
                   flyoutItems={VIDEO_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
                   activeThirdId={mainNav === 'video' && videoSubNav === 'tools' ? videoToolsTab : null}
-                  onActivateDefault={() => {
-                    setMainNav('video')
-                    setVideoSubNav('tools')
-                    setVideoToolsTab(FIRST_VIDEO_TOOL_TAB)
-                  }}
+                  onActivateDefault={() => goVideoToolsTab(FIRST_VIDEO_TOOL_TAB)}
                   onPickThird={(id) => {
                     if (!isVideoToolsTabId(id)) return
-                    setMainNav('video')
-                    setVideoSubNav('tools')
-                    setVideoToolsTab(id)
+                    goVideoToolsTab(id)
                   }}
                 />
                 <NavSecondary
@@ -2017,10 +2029,10 @@ function App() {
           </div>
           {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
           <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
-            <ImageToolsWorkbench tab={imageToolsTab} onTabChange={setImageToolsTab} />
+            <ImageToolsWorkbench tab={imageToolsTab} onTabChange={onWorkbenchImageTabChange} />
           </div>
           {mainNav === 'video' && videoSubNav === 'tools' ? (
-            <VideoToolsWorkbench tab={videoToolsTab} onTabChange={setVideoToolsTab} />
+            <VideoToolsWorkbench tab={videoToolsTab} onTabChange={onWorkbenchVideoTabChange} />
           ) : null}
           <div
             className={
@@ -2097,7 +2109,7 @@ function WorkbenchSubTabNav<T extends string>({
           key={t.id}
           type="button"
           onClick={() => onTabChange(t.id)}
-          className={`-mb-px inline-flex min-h-[2.5rem] items-center justify-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+          className={`-mb-px inline-flex min-h-[2.5rem] items-center justify-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-none sm:px-4 ${
             tab === t.id
               ? 'border-pink-400 text-white'
               : 'border-transparent text-white/55 hover:border-white/25 hover:text-white/90'
@@ -2162,7 +2174,7 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
       onMouseEnter={onMouseEnter}
       onClick={clickable ? onClick : undefined}
       title={collapsed ? label : undefined}
-      className={`group relative w-full flex items-center ${collapsed ? 'justify-center px-2 overflow-visible' : 'space-x-3 px-4'} py-3 rounded-xl transition-all ${
+      className={`group relative w-full flex items-center ${collapsed ? 'justify-center px-2 overflow-visible' : 'space-x-3 px-4'} py-3 rounded-xl transition-[background-color,box-shadow] duration-200 ${
         active
           ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
           : clickable
@@ -2182,7 +2194,7 @@ function NavSecondary({ icon, label, active, onClick, collapsed, className = '' 
     <button
       onClick={onClick}
       title={collapsed ? label : undefined}
-      className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-all text-sm ${
+      className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-200 text-sm ${
         active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
       } ${className}`}
     >
@@ -2217,7 +2229,7 @@ function NavSecondaryToolsFlyout({
         type="button"
         onClick={onActivateDefault}
         title={label}
-        className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-all text-sm ${
+        className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-200 text-sm ${
           active ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'
         }`}
       >
@@ -2233,13 +2245,13 @@ function NavSecondaryToolsFlyout({
           role="menu"
           aria-label={`${label}子功能`}
         >
-          <div className="rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl min-w-[10rem]">
+          <div className="workbench-sidebar-flyout rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl min-w-[10rem]">
             {flyoutItems.map((it) => (
               <button
                 key={it.id}
                 type="button"
                 role="menuitem"
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                className={`w-full text-left px-3 py-2 text-sm transition-[background-color] duration-150 hover:bg-gray-50 ${
                   active && activeThirdId === it.id ? 'text-purple-700 font-medium bg-purple-50/60' : 'text-gray-700'
                 }`}
                 onClick={() => {
@@ -2287,13 +2299,13 @@ function NavCollapsedToolsFlyout({
           role="menu"
           aria-label={`${label}子功能`}
         >
-          <div className="rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl min-w-[9.5rem]">
+          <div className="workbench-sidebar-flyout rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl min-w-[9.5rem]">
             {flyoutItems.map((it) => (
               <button
                 key={it.id}
                 type="button"
                 role="menuitem"
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 transition-[background-color] duration-150 hover:bg-gray-50"
                 onClick={() => {
                   onPickTool(it.id)
                   setOpen(false)

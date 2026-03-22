@@ -132,6 +132,42 @@
   box-shadow: 0 18px 50px rgba(0,0,0,.35) !important;
 }
 
+/* 侧栏二级选中态：Tailwind purple-700 在深色玻璃上像「黑字」，统一提亮 */
+.workbench-root aside [class*='bg-purple-50'],
+.workbench-root aside [class*='bg-purple-50/'] {
+  background: rgba(124, 58, 237, 0.2) !important;
+  border-color: rgba(167, 139, 250, 0.28) !important;
+}
+.workbench-root aside [class*='text-purple-700'] {
+  color: rgba(216, 200, 255, 0.96) !important;
+}
+
+/* 三级菜单：全局 .bg-white 被压成透明，侧栏 flyout 单独做实底 */
+.workbench-root aside .workbench-sidebar-flyout {
+  background: rgba(18, 22, 48, 0.97) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
+}
+.workbench-root aside .workbench-sidebar-flyout button {
+  color: rgba(237, 230, 255, 0.9) !important;
+}
+.workbench-root aside .workbench-sidebar-flyout button:hover {
+  background: rgba(124, 58, 237, 0.22) !important;
+  color: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* 从「选中渐变字」切到普通态时，去掉 background-clip，避免 transition 中间帧发黑 */
+.workbench-root aside button:not(.text-white) {
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+}
+.workbench-root aside button:not(.text-white) span {
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  background-image: none !important;
+}
+
 .workbench-root .border {
   border-color: rgba(255,255,255,.12) !important;
 }
