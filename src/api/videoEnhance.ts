@@ -81,7 +81,8 @@ export async function requestVideoUpscaleUploadSign(params: {
   })
   const data = await resp.json().catch(() => ({}))
   if (!resp.ok || !data?.success) {
-    throw new Error(data?.error || `签名失败(${resp.status})`)
+    const detail = data?.error || data?.message || (typeof data?.raw === 'object' ? JSON.stringify(data.raw).slice(0, 200) : '')
+    throw new Error(detail || `签名失败(${resp.status})`)
   }
   return {
     signedUrl: data.signedUrl,
@@ -91,14 +92,18 @@ export async function requestVideoUpscaleUploadSign(params: {
   }
 }
 
-/** 将文件 PUT 到 Supabase 签名 URL */
-export async function uploadVideoFileToSignedUrl(signedUrl: string, uploadToken: string, file: File): Promise<void> {
+/**
+ * 按 Supabase storage-js uploadToSignedUrl：PUT + FormData（token 已在 signedUrl 查询参数中）
+ * @param _uploadToken 保留兼容，可忽略
+ */
+export async function uploadVideoFileToSignedUrl(signedUrl: string, _uploadToken: string, file: File): Promise<void> {
+  const form = new FormData()
+  form.append('cacheControl', '3600')
+  form.append('', file)
   const r = await fetch(signedUrl, {
     method: 'PUT',
-    body: file,
+    body: form,
     headers: {
-      Authorization: `Bearer ${uploadToken}`,
-      'Content-Type': file.type || 'video/mp4',
       'x-upsert': 'true',
     },
   })

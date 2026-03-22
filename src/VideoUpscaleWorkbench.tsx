@@ -382,8 +382,7 @@ export function VideoUpscaleWorkbench() {
   return (
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <h2 className="text-xl font-bold mb-2">画质提升</h2>
-        <p className="text-sm text-gray-500 mb-6">上传短视频（≤50MB、≤60秒），选择目标分辨率与帧率，使用 Sora 2.0 进行画质提升。</p>
+        <h2 className="text-xl font-bold mb-6">画质提升</h2>
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">上传视频</label>
@@ -465,14 +464,6 @@ export function VideoUpscaleWorkbench() {
               <option value={60}>60 FPS</option>
             </select>
           </div>
-        </div>
-
-        <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-xs text-gray-600 mb-6">
-          <div className="font-medium text-gray-800 mb-1">处理说明</div>
-          <ul className="list-disc pl-4 space-y-1">
-            <li>模型固定为 Sora 2.0（sora-2），与聚合上游能力一致。</li>
-            <li>大文件通过云存储直传，无需整文件经过本站接口。</li>
-          </ul>
         </div>
 
         <button
