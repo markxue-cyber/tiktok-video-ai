@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowUp,
   Clapperboard,
+  Copy,
+  FileDown,
   FileText,
-  ImagePlus,
   Link2,
   Loader2,
   MessageCircle,
   Sparkles,
-  Upload,
+  Video,
   X,
 } from 'lucide-react'
 import { videoAnalyzeChat, type VideoAnalyzeTurn } from './api/videoAnalyze'
@@ -21,9 +22,11 @@ import {
 } from './tikgenImageGenPersistence'
 
 const MAX_VIDEO_BYTES = 18 * 1024 * 1024
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024
-const MAX_IMAGE_FILES = 4
 const SESSIONS_CAP = 40
+
+const PLACEHOLDER_EMPTY =
+  '上传视频文件或粘贴 TikTok 视频链接，然后问我任何问题…（可先点选「想做什么」标签填入预设提示）'
+const PLACEHOLDER_ACTIVE = '向我提问任何与视频相关的问题…'
 
 type IntentId = 'analyze_script' | 'same_style_prompt' | 'selling_points'
 
@@ -104,24 +107,47 @@ function mergeSessions(
   return [next, ...rest].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, SESSIONS_CAP)
 }
 
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+}
+
+function downloadTextFile(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
   const [hydrated, setHydrated] = useState(false)
   const [sessions, setSessions] = useState<VideoAnalyzeSessionStored[]>([])
   const [activeSessionId, setActiveSessionId] = useState(() => uid())
   const [messages, setMessages] = useState<VideoAnalyzeChatMessage[]>([])
   const [intent, setIntent] = useState<IntentId>('analyze_script')
-  const [inputText, setInputText] = useState(INTENTS[0].prompt)
+  const [inputText, setInputText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
 
   const [sessionVideo, setSessionVideo] = useState<{ name: string; dataUrl: string } | null>(null)
-  const [sessionImages, setSessionImages] = useState<{ name: string; dataUrl: string }[]>([])
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [copyFlashId, setCopyFlashId] = useState<string | null>(null)
 
   const videoInputRef = useRef<HTMLInputElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const visibleRef = useRef(visible)
   const sessionsRef = useRef(sessions)
   const messagesRef = useRef(messages)
@@ -140,7 +166,6 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
     activeSessionIdRef.current = activeSessionId
   }, [activeSessionId])
 
-  /** 初始加载会话列表 */
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -176,7 +201,6 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
     await persistAll(mergeSessions(sessionsRef.current, row))
   }, [persistAll])
 
-  /** 离开视频分析页：当前对话写入会话历史并清空主对话区 */
   useEffect(() => {
     if (!hydrated) return
     if (visible) return
@@ -184,8 +208,8 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
       await archiveCurrentToHistory()
       setMessages([])
       setSessionVideo(null)
-      setSessionImages([])
       setLinkUrl('')
+      setInputText('')
       setError('')
       setActiveSessionId(uid())
     })()
@@ -218,42 +242,22 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
     }
   }
 
-  const onImageFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).slice(0, MAX_IMAGE_FILES)
-    e.target.value = ''
-    const next: { name: string; dataUrl: string }[] = []
-    try {
-      for (const f of files) {
-        if (!f.type.startsWith('image/')) continue
-        const dataUrl = await readFileAsDataUrl(f, MAX_IMAGE_BYTES)
-        next.push({ name: f.name, dataUrl })
-      }
-      if (next.length) {
-        setSessionImages((prev) => [...prev, ...next].slice(0, MAX_IMAGE_FILES))
-        setError('')
-      }
-    } catch (err: any) {
-      setError(err?.message || '图片读取失败')
-    }
-  }
-
   const send = async () => {
     if (busy) return
     const textBase = inputText.trim()
     const linkLine = linkUrl.trim() ? `参考链接：${linkUrl.trim()}` : ''
     const text = [textBase, linkLine].filter(Boolean).join('\n').trim()
-    if (!text && !sessionVideo && sessionImages.length === 0) {
-      setError('请输入内容，或上传视频/图片')
+    if (!text && !sessionVideo) {
+      setError('请上传视频、粘贴链接或输入问题')
       return
     }
-    const finalText = text || '请根据上传的视频与图片回答。'
+    const finalText = text || '请根据我上传的视频回答。'
 
     const userMsg: VideoAnalyzeChatMessage = {
       id: uid(),
       role: 'user',
       text: finalText,
       videoDataUrl: sessionVideo?.dataUrl,
-      imageDataUrls: sessionImages.length ? sessionImages.map((x) => x.dataUrl) : undefined,
     }
 
     const nextMessages = [...messages, userMsg]
@@ -297,11 +301,11 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
     await archiveCurrentToHistory()
     setMessages([])
     setSessionVideo(null)
-    setSessionImages([])
     setLinkUrl('')
+    setInputText('')
     setError('')
     setActiveSessionId(uid())
-    onPickIntent(intent)
+    setIntent('analyze_script')
   }
 
   const openSession = async (sid: string) => {
@@ -312,31 +316,54 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
     setActiveSessionId(hit.id)
     setMessages(hit.messages.map((m) => ({ ...m })))
     setSessionVideo(null)
-    setSessionImages([])
     setLinkUrl('')
+    setInputText('')
     setError('')
-    const lastUser = [...hit.messages].reverse().find((m) => m.role === 'user')
-    setInputText(lastUser?.text || INTENTS.find((x) => x.id === intent)?.prompt || '')
   }
 
   const addLink = () => {
-    const u = window.prompt('粘贴视频或网页链接（模型未必能访问外链，仅作文字参考）：', linkUrl)
+    const u = window.prompt('粘贴 TikTok 或其它视频链接（模型未必能直接访问，仅作文字参考）：', linkUrl)
     if (u === null) return
     setLinkUrl(u.trim())
   }
 
+  const onCopyAssistant = async (id: string, text: string) => {
+    await copyToClipboard(text)
+    setCopyFlashId(id)
+    window.setTimeout(() => setCopyFlashId(null), 1600)
+  }
+
+  const hasConversation = messages.length > 0
+  const textareaPlaceholder = hasConversation ? PLACEHOLDER_ACTIVE : PLACEHOLDER_EMPTY
+
   return (
     <div className="max-w-[1280px] mx-auto px-4 pb-10">
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
-        {/* 左侧：对话 */}
-        <div className="space-y-4 min-w-0">
-          <div className="rounded-2xl bg-[#16161c] ring-1 ring-inset ring-white/[0.08] shadow-[0_20px_50px_-24px_rgba(0,0,0,0.65)] overflow-hidden flex flex-col min-h-[480px] max-h-[min(78vh,820px)]">
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-              {messages.length === 0 ? (
-                <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-center px-4">
-                  <Clapperboard className="w-10 h-10 text-violet-300/50 mb-3" strokeWidth={1.25} />
-                  <p className="text-sm text-white/45">上传视频或图片，选择「想做什么」或自由输入，开始对话</p>
-                  <p className="text-xs text-white/30 mt-2">支持多轮问答；离开本页后当前对话会收入右侧历史</p>
+        {/* 左侧：单一对话容器（消息区 + 底部输入区一体） */}
+        <div className="min-w-0">
+          <div className="rounded-2xl bg-[#1a1a1f] ring-1 ring-inset ring-white/[0.09] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.75)] overflow-hidden flex flex-col h-[min(85vh,880px)]">
+            <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-2.5 border-b border-white/[0.06] bg-black/20">
+              <span className="text-xs font-medium text-white/45">视频分析</span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void startNewChat()}
+                className="text-[11px] text-violet-200/85 hover:text-violet-100 disabled:opacity-40"
+              >
+                + 新对话
+              </button>
+            </div>
+
+            {/* 消息滚动区 */}
+            <div
+              ref={scrollRef}
+              className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4 bg-[#141418]/80"
+            >
+              {!hasConversation ? (
+                <div className="min-h-[120px] flex flex-col justify-center px-1 py-6">
+                  <p className="text-[13px] text-white/38 leading-relaxed max-w-md">
+                    在下方选择「想做什么」、上传视频或添加链接，输入问题后发送即可开始。
+                  </p>
                 </div>
               ) : (
                 messages.map((m) => (
@@ -345,20 +372,42 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
                     className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                      className={`max-w-[94%] rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${
                         m.role === 'user'
-                          ? 'bg-violet-600/35 text-white/90 ring-1 ring-violet-400/25'
-                          : 'bg-black/30 text-white/80 ring-1 ring-white/[0.06]'
+                          ? 'bg-violet-600/28 text-white/90 ring-1 ring-violet-400/22'
+                          : 'bg-[#25252c] text-white/[0.82] ring-1 ring-white/[0.07]'
                       }`}
                     >
                       <pre className="whitespace-pre-wrap font-sans break-words">{m.text}</pre>
+                      {m.role === 'assistant' ? (
+                        <div className="mt-3 pt-3 border-t border-white/[0.08] flex items-center justify-end gap-3">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 text-[11px] text-white/45 hover:text-white/75 transition-colors"
+                            onClick={() => void onCopyAssistant(m.id, m.text)}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            {copyFlashId === m.id ? '已复制' : '复制'}
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 text-[11px] text-white/45 hover:text-white/75 transition-colors"
+                            onClick={() =>
+                              downloadTextFile(m.text, `视频分析-${new Date().toISOString().slice(0, 10)}.txt`)
+                            }
+                          >
+                            <FileDown className="w-3.5 h-3.5" />
+                            查看文件
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ))
               )}
               {busy ? (
                 <div className="flex justify-start">
-                  <div className="rounded-2xl px-3 py-2 bg-black/25 text-white/50 text-xs flex items-center gap-2 ring-1 ring-white/[0.06]">
+                  <div className="rounded-2xl px-3.5 py-2.5 bg-[#25252c] text-white/45 text-xs flex items-center gap-2 ring-1 ring-white/[0.06]">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     GPT-4o 正在思考…
                   </div>
@@ -367,9 +416,10 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
               <div ref={chatEndRef} />
             </div>
 
-            <div className="border-t border-white/[0.06] p-3 space-y-3 bg-black/20">
+            {/* 底部输入区（参考图2：标签 + 大输入 + 上传视频/链接 + 发送） */}
+            <div className="shrink-0 border-t border-white/[0.07] p-3 sm:p-4 space-y-3 bg-[#1e1e24]">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-white/40 shrink-0">想做什么</span>
+                <span className="text-xs text-white/38 shrink-0">想做什么</span>
                 <div className="flex flex-wrap gap-2">
                   {INTENTS.map((it) => (
                     <button
@@ -394,136 +444,98 @@ export function VideoAnalyzeWorkbench({ visible }: { visible: boolean }) {
                 </div>
               </div>
 
-              <textarea
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                disabled={busy}
-                rows={4}
-                placeholder="可编辑上方预设提示，或完全自定义输入…"
-                className="w-full resize-none rounded-xl bg-black/30 px-3 py-2.5 text-sm text-white/88 placeholder:text-white/30 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/35 disabled:opacity-50"
-              />
-
-              {(sessionVideo || sessionImages.length > 0 || linkUrl) && (
-                <div className="flex flex-wrap gap-2">
-                  {sessionVideo ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] pl-2 pr-1 py-0.5 text-[11px] text-white/70 ring-1 ring-white/10">
-                      <Upload className="w-3 h-3 opacity-70" />
-                      <span className="max-w-[200px] truncate">{sessionVideo.name}</span>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="p-0.5 rounded-full hover:bg-white/10"
-                        onClick={() => setSessionVideo(null)}
-                        aria-label="移除视频"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                  ) : null}
-                  {sessionImages.map((im, idx) => (
-                    <span
-                      key={`${im.name}_${idx}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] pl-2 pr-1 py-0.5 text-[11px] text-white/70 ring-1 ring-white/10"
-                    >
-                      <ImagePlus className="w-3 h-3 opacity-70" />
-                      <span className="max-w-[160px] truncate">{im.name}</span>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="p-0.5 rounded-full hover:bg-white/10"
-                        onClick={() => setSessionImages((prev) => prev.filter((_, i) => i !== idx))}
-                        aria-label="移除图片"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                  {linkUrl ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 pl-2 pr-1 py-0.5 text-[11px] text-sky-100/90 ring-1 ring-sky-400/25">
-                      <Link2 className="w-3 h-3 opacity-80" />
-                      <span className="max-w-[200px] truncate">{linkUrl}</span>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="p-0.5 rounded-full hover:bg-white/10"
-                        onClick={() => setLinkUrl('')}
-                        aria-label="移除链接"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                  ) : null}
-                </div>
-              )}
-
-              {error ? <p className="text-xs text-rose-300/95">{error}</p> : null}
-
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={onVideoFile}
-                  />
-                  <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={onImageFiles}
-                  />
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => videoInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-white/[0.06] text-white/75 ring-1 ring-white/12 hover:bg-white/[0.1] disabled:opacity-45"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    上传视频
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => imageInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-white/[0.06] text-white/75 ring-1 ring-white/12 hover:bg-white/[0.1] disabled:opacity-45"
-                  >
-                    <ImagePlus className="w-3.5 h-3.5" />
-                    上传图片
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={addLink}
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-white/[0.06] text-white/75 ring-1 ring-white/12 hover:bg-white/[0.1] disabled:opacity-45"
-                  >
-                    <Link2 className="w-3.5 h-3.5" />
-                    添加链接
-                  </button>
-                </div>
-                <button
-                  type="button"
+              <div className="rounded-xl bg-[#25252c] ring-1 ring-inset ring-white/[0.08] overflow-hidden">
+                <textarea
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
                   disabled={busy}
-                  onClick={() => void send()}
-                  title="发送"
-                  className="shrink-0 w-10 h-10 rounded-full bg-white text-zinc-900 flex items-center justify-center hover:bg-white/95 disabled:opacity-40 shadow-lg shadow-black/30"
-                >
-                  {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUp className="w-5 h-5" strokeWidth={2.2} />}
-                </button>
+                  rows={hasConversation ? 3 : 4}
+                  placeholder={textareaPlaceholder}
+                  className="w-full resize-none bg-transparent px-3.5 py-3 text-sm text-white/88 placeholder:text-white/32 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/25 focus-visible:ring-inset disabled:opacity-50 min-h-[5.5rem]"
+                />
+
+                {(sessionVideo || linkUrl) && (
+                  <div className="px-3 pb-2 flex flex-wrap gap-2">
+                    {sessionVideo ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-black/30 pl-2 pr-1 py-0.5 text-[11px] text-white/70 ring-1 ring-white/10">
+                        <Video className="w-3 h-3 opacity-80" />
+                        <span className="max-w-[200px] truncate">{sessionVideo.name}</span>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="p-0.5 rounded-full hover:bg-white/10"
+                          onClick={() => setSessionVideo(null)}
+                          aria-label="移除视频"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ) : null}
+                    {linkUrl ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/12 pl-2 pr-1 py-0.5 text-[11px] text-sky-100/85 ring-1 ring-sky-400/22">
+                        <Link2 className="w-3 h-3 opacity-80" />
+                        <span className="max-w-[220px] truncate">{linkUrl}</span>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="p-0.5 rounded-full hover:bg-white/10"
+                          onClick={() => setLinkUrl('')}
+                          aria-label="移除链接"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+
+                {error ? <p className="px-3 pb-2 text-xs text-rose-300/95">{error}</p> : null}
+
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-white/[0.06] bg-black/15">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={onVideoFile}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => videoInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-white/[0.06] text-white/78 ring-1 ring-white/12 hover:bg-white/[0.1] disabled:opacity-45"
+                    >
+                      <Video className="w-3.5 h-3.5 opacity-90" />
+                      上传视频
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={addLink}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-white/[0.06] text-white/78 ring-1 ring-white/12 hover:bg-white/[0.1] disabled:opacity-45"
+                    >
+                      <Link2 className="w-3.5 h-3.5 opacity-90" />
+                      添加链接
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void send()}
+                    title="发送"
+                    className="shrink-0 w-10 h-10 rounded-full bg-white text-zinc-900 flex items-center justify-center hover:bg-white/95 disabled:opacity-40 shadow-md shadow-black/35"
+                  >
+                    {busy ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <ArrowUp className="w-5 h-5" strokeWidth={2.2} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void startNewChat()}
-            className="text-xs text-violet-200/80 hover:text-violet-100 underline-offset-2 hover:underline disabled:opacity-45"
-          >
-            + 新对话（当前会话将保存到右侧历史）
-          </button>
         </div>
 
         {/* 右侧：会话历史 */}
