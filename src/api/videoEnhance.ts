@@ -164,7 +164,7 @@ export async function submitVideoEnhanceJob(params: VideoEnhanceSubmitParams): P
       throw err
     }
     if (!data.taskId) throw new Error('提交成功但未返回 taskId')
-    return { taskId: data.taskId, message: data.message || '画质提升处理中，请稍候…' } as VideoSubmitResult
+    return { taskId: data.taskId, message: data.message || '创建视频处理中，请稍候…' } as VideoSubmitResult
   }
 
   let token = localStorage.getItem('tikgen.accessToken') || ''

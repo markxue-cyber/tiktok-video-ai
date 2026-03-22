@@ -478,6 +478,17 @@
   box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.22) !important;
 }
 
+/* 视频创作等浅色卡片上的参考图区：与 tikgen-ref-dropzone 同构，适配白底 */
+.workbench-root .tikgen-ref-dropzone-light {
+  background: rgba(249, 250, 251, 0.92) !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.1) !important;
+}
+
+.workbench-root .tikgen-ref-dropzone-light:hover {
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.28) !important;
+}
+
 /* 图片工作台：模型 / 分辨率 / 比例 一行三列下拉 */
 .workbench-root select.tikgen-spec-select {
   background-color: rgba(0, 0, 0, 0.32) !important;

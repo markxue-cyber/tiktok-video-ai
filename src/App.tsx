@@ -97,6 +97,7 @@ import {
   tikgenIgIdbSet,
   tryLocalStorageSetJson,
   type TikgenWorkspaceSnapshotV1,
+  type VideoGeneratorWorkspaceV1,
 } from './tikgenImageGenPersistence'
 import './workbench-theme.css'
 import { ImageToolWorkbench } from './ImageToolWorkbench'
@@ -875,7 +876,7 @@ const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNo
 
 const VIDEO_TOOLS_TAB_ITEMS: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
   { id: 'generate', label: '视频生成', icon: <Video className="w-4 h-4 shrink-0" /> },
-  { id: 'upscale', label: '画质提升', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
+  { id: 'upscale', label: '创建视频', icon: <WandSparkles className="w-4 h-4 shrink-0" /> },
   { id: 'watermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
   { id: 'subtitle', label: '去字幕', icon: <Scissors className="w-4 h-4 shrink-0" /> },
 ]
@@ -1296,7 +1297,7 @@ function App() {
     if (mainNav === 'video') {
       if (videoSubNav === 'tools') {
         if (videoToolsTab === 'generate') return '视频工具-视频生成'
-        if (videoToolsTab === 'upscale') return '视频工具-画质提升'
+        if (videoToolsTab === 'upscale') return '视频工具-创建视频'
         if (videoToolsTab === 'watermark') return '视频工具-去水印'
         return '视频工具-去字幕'
       }
@@ -1945,7 +1946,7 @@ function App() {
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' && '视频工具 · 视频生成'}
-                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 画质提升'}
+                {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 创建视频'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'watermark' && '视频工具 · 去水印'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'subtitle' && '视频工具 · 去字幕'}
                 {mainNav === 'video' && videoSubNav === 'analyze' && '视频分析'}
@@ -2673,7 +2674,6 @@ function VideoGenerator({
 }) {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
-  const [refImages, setRefImages] = useState<Array<{ id: string; url: string; name?: string; source: 'local' | 'asset' }>>([])
   const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
   const [assetList, setAssetList] = useState<AssetItem[]>([])
@@ -2681,6 +2681,7 @@ function VideoGenerator({
   const [assetSelectedIds, setAssetSelectedIds] = useState<Set<string>>(new Set())
   const [refUploadBusy, setRefUploadBusy] = useState(false)
   const assetCacheRef = useRef<{ user_upload: AssetItem[] | null; ai_generated: AssetItem[] | null }>({ user_upload: null, ai_generated: null })
+  const videoRefUploadInputRef = useRef<HTMLInputElement | null>(null)
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
   const [size, setSize] = useState<VideoAspect>('9:16')
@@ -2709,6 +2710,122 @@ function VideoGenerator({
   const [unavailableVideoMap, setUnavailableVideoMap] = useState<Record<string, string>>({})
   const stopPollingRef = useRef(false)
   const aiJobRef = useRef(0)
+  const [videoGenPersistenceReady, setVideoGenPersistenceReady] = useState(false)
+  const skipVideoGenPersistRef = useRef(true)
+  const resumeVideoGenPollRef = useRef(false)
+  /** 已从 IndexedDB 恢复工作台时，避免可用性接口再把模型覆盖成「推荐模型」 */
+  const restoredVideoGenWorkspaceRef = useRef(false)
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const w = await tikgenIgIdbGet<VideoGeneratorWorkspaceV1>(TIKGEN_IG_IDB.videoGeneratorWorkspace)
+        if (w && w.v === 1) {
+          restoredVideoGenWorkspaceRef.current = true
+          setPrompt(String(w.prompt || ''))
+          setModel(String(w.model || 'sora-2'))
+          setSize((w.size as VideoAspect) || '9:16')
+          setResolution((w.resolution as VideoRes) || '720p')
+          setDurationSec((Number(w.durationSec) as VideoDur) || 10)
+          const dataRef = String(w.refImageDataUrl || '')
+          const prevRaw = String(w.refImagePreviewUrl || '')
+          const previewOk = prevRaw && !prevRaw.startsWith('blob:') ? prevRaw : dataRef
+          setRefImagePreviewUrl(previewOk)
+          setRefImageDataUrl(dataRef)
+          const pi = w.productInfo as ProductInfo | undefined
+          if (pi && typeof pi === 'object') {
+            setProductInfo({
+              name: String(pi.name || ''),
+              category: String(pi.category || ''),
+              sellingPoints: String(pi.sellingPoints || ''),
+              targetAudience: String(pi.targetAudience || ''),
+              language: String(pi.language || '简体中文'),
+            })
+          }
+          setScripts(Array.isArray(w.scripts) ? w.scripts.map(String) : [])
+          setScriptBatches(Array.isArray(w.scriptBatches) ? w.scriptBatches.map((b) => (Array.isArray(b) ? b.map(String) : [])) : [])
+          setScriptBatchIdx(Number(w.scriptBatchIdx) || 0)
+          setScriptRefreshCount(Number(w.scriptRefreshCount) || 0)
+          setSelectedScript(String(w.selectedScript || ''))
+          setOptimizedPrompt(String(w.optimizedPrompt || ''))
+          setTags(Array.isArray(w.tags) ? w.tags.map(String) : [])
+          setGeneratedVideo(String(w.generatedVideo || ''))
+          setTaskId(String(w.taskId || ''))
+          setProgress(String(w.progress || '0%'))
+          setStatusText(String(w.statusText || ''))
+          setErrorText(String(w.errorText || ''))
+          setErrorCode(String(w.errorCode || 'UNKNOWN'))
+          const needResume = !!(w.taskId && !w.generatedVideo && !w.errorText && w.isGenerating)
+          resumeVideoGenPollRef.current = needResume
+          if (needResume) setIsGenerating(true)
+        }
+      } catch {
+        // ignore
+      }
+      skipVideoGenPersistRef.current = true
+      setVideoGenPersistenceReady(true)
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (!videoGenPersistenceReady) return
+    if (skipVideoGenPersistRef.current) {
+      skipVideoGenPersistRef.current = false
+      return
+    }
+    const refPrev =
+      refImagePreviewUrl.startsWith('blob:') && refImageDataUrl ? refImageDataUrl : refImagePreviewUrl
+    const snap: VideoGeneratorWorkspaceV1 = {
+      v: 1,
+      prompt,
+      model,
+      size,
+      resolution,
+      durationSec,
+      refImagePreviewUrl: refPrev,
+      refImageDataUrl,
+      productInfo: { ...productInfo } as unknown as Record<string, unknown>,
+      scripts,
+      scriptBatches,
+      scriptBatchIdx,
+      scriptRefreshCount,
+      selectedScript,
+      optimizedPrompt,
+      tags,
+      generatedVideo,
+      taskId,
+      progress,
+      statusText,
+      errorText,
+      errorCode,
+      isGenerating,
+    }
+    void tikgenIgIdbSet(TIKGEN_IG_IDB.videoGeneratorWorkspace, snap)
+  }, [
+    videoGenPersistenceReady,
+    prompt,
+    model,
+    size,
+    resolution,
+    durationSec,
+    refImagePreviewUrl,
+    refImageDataUrl,
+    productInfo,
+    scripts,
+    scriptBatches,
+    scriptBatchIdx,
+    scriptRefreshCount,
+    selectedScript,
+    optimizedPrompt,
+    tags,
+    generatedVideo,
+    taskId,
+    progress,
+    statusText,
+    errorText,
+    errorCode,
+    isGenerating,
+  ])
 
   useEffect(() => {
     ;(async () => {
@@ -2729,7 +2846,13 @@ function VideoGenerator({
               if (c.enabled === false) map[id] = String(c.note || '后台已禁用')
               if (!recommended && c.recommended === true && c.enabled !== false) recommended = id
             }
-            if (recommended && VIDEO_MODELS.some((m) => m.id === recommended)) setModel(recommended)
+            if (
+              recommended &&
+              VIDEO_MODELS.some((m) => m.id === recommended) &&
+              !restoredVideoGenWorkspaceRef.current
+            ) {
+              setModel(recommended)
+            }
           }
         } catch {
           // ignore controls loading failures
@@ -2771,6 +2894,88 @@ function VideoGenerator({
     setPrompt(String(templatePreset.prompt || ''))
     onTemplateApplied()
   }, [templatePreset, onTemplateApplied])
+
+  const revokeVideoRefBlobUrl = (url: string) => {
+    if (url.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(url)
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  const clearVideoRefImage = () => {
+    setRefImagePreviewUrl((prev) => {
+      revokeVideoRefBlobUrl(prev)
+      return ''
+    })
+    setRefImageDataUrl('')
+  }
+
+  const handleVideoRefLocalFiles = async (files: FileList | null) => {
+    const f = files?.[0]
+    if (!f || !String(f.type || '').startsWith('image/')) return
+    setRefUploadBusy(true)
+    try {
+      setRefImagePreviewUrl((prev) => {
+        revokeVideoRefBlobUrl(prev)
+        return URL.createObjectURL(f)
+      })
+      const dataUrl = await fileToDataUrl(f)
+      setRefImageDataUrl(dataUrl)
+      await safeArchiveAsset({
+        source: 'user_upload',
+        type: 'image',
+        url: dataUrl,
+        name: f.name,
+        metadata: { from: 'video_generator_ref', mime: f.type, size: f.size },
+      })
+    } finally {
+      setRefUploadBusy(false)
+    }
+  }
+
+  const loadVideoAssetPicker = async (source: 'user_upload' | 'ai_generated') => {
+    const cached = assetCacheRef.current[source]
+    if (cached && cached.length) {
+      setAssetList(cached)
+      return
+    }
+    setAssetBusy(true)
+    try {
+      const r = await listAssetsAPI({ source, type: 'image', limit: 60, offset: 0 })
+      const rows = (r.assets || []).filter((x) => x.type === 'image')
+      setAssetList(rows)
+      assetCacheRef.current[source] = rows
+    } finally {
+      setAssetBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showAssetPicker) return
+    void loadVideoAssetPicker(assetTab)
+  }, [showAssetPicker, assetTab])
+
+  const toggleVideoAssetPick = (id: string) => {
+    setAssetSelectedIds((prev) => {
+      if (prev.has(id)) return new Set()
+      return new Set([id])
+    })
+  }
+
+  const confirmVideoAssetPick = () => {
+    const picked = assetList.find((x) => assetSelectedIds.has(x.id))
+    setAssetSelectedIds(new Set())
+    setShowAssetPicker(false)
+    if (!picked) return
+    setRefImagePreviewUrl((prev) => {
+      revokeVideoRefBlobUrl(prev)
+      return picked.url
+    })
+    setRefImageDataUrl(picked.url)
+  }
 
   const renderScriptStructured = (raw: string) => {
     let text = String(raw || '')
@@ -3045,6 +3250,70 @@ function VideoGenerator({
     ].join('\n')
   }, [optimizedPrompt, selectedScript, prompt, productInfo, size, resolution, durationSec])
 
+  const pollVideoGenerateTask = useCallback(
+    async (submitTaskId: string) => {
+      stopPollingRef.current = false
+      try {
+        for (let i = 0; i < 120; i++) {
+          if (stopPollingRef.current) return
+          await new Promise((r) => setTimeout(r, 5000))
+          if (stopPollingRef.current) return
+
+          const s = await checkVideoStatus(submitTaskId)
+          setProgress(s.progress || '0%')
+
+          const status = (s.status || '').toLowerCase()
+          if (status === 'succeeded' || status === 'success' || status === 'completed') {
+            if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
+            setGeneratedVideo(s.videoUrl)
+            Sentry.captureMessage('video_generation_success', { level: 'info', extra: { taskId: submitTaskId, model } })
+            await safeArchiveAsset({
+              source: 'ai_generated',
+              type: 'video',
+              url: s.videoUrl,
+              name: `video-${Date.now()}.mp4`,
+              metadata: { from: 'video_generator', model, size, resolution, durationSec },
+            })
+            setStatusText('生成完成')
+            setIsGenerating(false)
+            return
+          }
+
+          if (status === 'failed' || status === 'error') {
+            const err: any = new Error(s.failReason || '生成失败')
+            err.code = s.failCode || 'UNKNOWN'
+            throw err
+          }
+
+          setStatusText(`生成中... ${s.progress || ''}`.trim())
+        }
+
+        const err: any = new Error('生成超时，请稍后在任务列表中查看')
+        err.code = 'UPSTREAM_TIMEOUT'
+        throw err
+      } catch (e: any) {
+        Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
+        setErrorText(e?.message || '生成失败')
+        setErrorCode(e?.code || 'UNKNOWN')
+        setIsGenerating(false)
+        setStatusText('')
+      }
+    },
+    [model, size, resolution, durationSec],
+  )
+
+  useEffect(() => {
+    if (!videoGenPersistenceReady || !resumeVideoGenPollRef.current) return
+    const tid = taskId
+    if (!tid) {
+      resumeVideoGenPollRef.current = false
+      setIsGenerating(false)
+      return
+    }
+    resumeVideoGenPollRef.current = false
+    void pollVideoGenerateTask(tid)
+  }, [videoGenPersistenceReady, taskId, pollVideoGenerateTask])
+
   const handleGenerate = async () => {
     if (!refImageDataUrl) { alert('请先上传参考图'); return }
     if (!prompt) { alert('请输入视频文案描述'); return }
@@ -3061,44 +3330,7 @@ function VideoGenerator({
       const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage: refImageDataUrl })
       setTaskId(submit.taskId)
       setStatusText(submit.message || '视频生成中...')
-
-      for (let i = 0; i < 120; i++) { // 最多轮询约10分钟
-        if (stopPollingRef.current) return
-        await new Promise(r => setTimeout(r, 5000))
-        if (stopPollingRef.current) return
-
-        const s = await checkVideoStatus(submit.taskId)
-        setProgress(s.progress || '0%')
-
-        const status = (s.status || '').toLowerCase()
-        if (status === 'succeeded' || status === 'success' || status === 'completed') {
-          if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
-          setGeneratedVideo(s.videoUrl)
-          Sentry.captureMessage('video_generation_success', { level: 'info', extra: { taskId: submit.taskId, model } })
-          await safeArchiveAsset({
-            source: 'ai_generated',
-            type: 'video',
-            url: s.videoUrl,
-            name: `video-${Date.now()}.mp4`,
-            metadata: { from: 'video_generator', model, size, resolution, durationSec },
-          })
-          setStatusText('生成完成')
-    setIsGenerating(false)
-          return
-        }
-
-        if (status === 'failed' || status === 'error') {
-          const err: any = new Error(s.failReason || '生成失败')
-          err.code = s.failCode || 'UNKNOWN'
-          throw err
-        }
-
-        setStatusText(`生成中... ${s.progress || ''}`.trim())
-      }
-
-      const err: any = new Error('生成超时，请稍后在任务列表中查看')
-      err.code = 'UPSTREAM_TIMEOUT'
-      throw err
+      await pollVideoGenerateTask(submit.taskId)
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
       setErrorText(e?.message || '生成失败')
@@ -3296,44 +3528,103 @@ function VideoGenerator({
   }
 
   return (
+    <>
     <div className="grid lg:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
         <h2 className="text-xl font-bold mb-6">创建视频</h2>
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">上传参考图</label>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center relative">
+          <div
+            className={`tikgen-ref-dropzone-light rounded-xl p-2.5 relative transition-shadow ${refImagePreviewUrl ? 'cursor-default' : 'cursor-pointer'}`}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onDrop={async (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              await handleVideoRefLocalFiles(e.dataTransfer?.files || null)
+            }}
+            onClick={() => {
+              if (!refImagePreviewUrl) videoRefUploadInputRef.current?.click()
+            }}
+          >
             <input
+              ref={videoRefUploadInputRef}
               type="file"
               accept="image/*"
+              disabled={refUploadBusy}
               onChange={async (e: any) => {
-                const f: File | undefined = e.target.files?.[0]
-                if (!f) return
-                setRefUploadBusy(true)
-                try {
-                  const preview = URL.createObjectURL(f)
-                  setRefImagePreviewUrl(preview)
-                  const dataUrl = await fileToDataUrl(f)
-                  setRefImageDataUrl(dataUrl)
-                  await safeArchiveAsset({
-                    source: 'user_upload',
-                    type: 'image',
-                    url: dataUrl,
-                    name: f.name,
-                    metadata: { from: 'video_generator_ref', mime: f.type, size: f.size },
-                  })
-                } finally {
-                  setRefUploadBusy(false)
-                }
+                await handleVideoRefLocalFiles(e.target.files || null)
+                e.target.value = ''
               }}
-              className="absolute inset-0 opacity-0 cursor-pointer"
+              className="hidden"
             />
             {refImagePreviewUrl ? (
-              <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto" />
+              <div className="flex flex-col items-center justify-center gap-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                <img src={refImagePreviewUrl} alt="参考图" className="max-h-40 mx-auto rounded-lg ring-1 ring-inset ring-gray-200/90" />
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    disabled={refUploadBusy}
+                    onClick={() => videoRefUploadInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                  >
+                    选择文件
+                  </button>
+                  <button
+                    type="button"
+                    disabled={refUploadBusy}
+                    onClick={() => {
+                      setAssetSelectedIds(new Set())
+                      setShowAssetPicker(true)
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50 inline-flex items-center gap-1"
+                  >
+                    <Folder className="w-3.5 h-3.5 opacity-70" aria-hidden />
+                    从资产库选择
+                  </button>
+                  <button
+                    type="button"
+                    disabled={refUploadBusy}
+                    onClick={clearVideoRefImage}
+                    className="px-3 py-1.5 rounded-lg text-xs text-red-600/90 ring-1 ring-inset ring-red-200 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    清除
+                  </button>
+                </div>
+              </div>
             ) : (
-              <>
-                <Upload className="w-10 h-10 mx-auto text-gray-400" />
-                <p className="text-gray-500 mt-2">点击上传参考图</p>
-              </>
+              <div className="flex min-h-[104px] flex-col items-center justify-center gap-2.5 py-4 text-center">
+                <Upload className="w-7 h-7 mx-auto text-gray-400" />
+                <div className="text-sm font-medium text-gray-600">点击或拖拽上传</div>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    disabled={refUploadBusy}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      videoRefUploadInputRef.current?.click()
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs cursor-pointer bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50"
+                  >
+                    选择文件
+                  </button>
+                  <button
+                    type="button"
+                    disabled={refUploadBusy}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAssetSelectedIds(new Set())
+                      setShowAssetPicker(true)
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs bg-white ring-1 ring-inset ring-gray-200 hover:bg-gray-50 text-gray-700 disabled:opacity-50 inline-flex items-center gap-1"
+                  >
+                    <Folder className="w-3.5 h-3.5 opacity-70" aria-hidden />
+                    从资产库选择
+                  </button>
+                </div>
+              </div>
             )}
             {refUploadBusy && (
               <div className="absolute inset-0 rounded-xl bg-black/35 backdrop-blur-[1px] flex items-center justify-center">
@@ -3344,7 +3635,7 @@ function VideoGenerator({
               </div>
             )}
           </div>
-          {refUploadBusy ? <div className="mt-2 text-xs text-gray-500">正在上传参考图，请稍候...</div> : null}
+          {refUploadBusy ? <div className="mt-2 text-xs text-gray-500">正在处理参考图，请稍候...</div> : null}
         </div>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
@@ -3451,6 +3742,74 @@ function VideoGenerator({
         )}
       </div>
     </div>
+    {showAssetPicker && (
+      <div className="fixed inset-0 z-50 bg-black/55 flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl max-h-[88vh] overflow-hidden bg-white rounded-2xl border shadow-2xl flex flex-col">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <div className="text-lg font-semibold">从资产库选择参考图</div>
+            <button type="button" onClick={() => setShowAssetPicker(false)} className="p-1.5 rounded-lg hover:bg-gray-100" aria-label="关闭">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="px-5 py-3 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAssetTab('user_upload')}
+                className={`px-3 py-1.5 rounded-lg text-sm border-2 ${assetTab === 'user_upload' ? 'bg-gray-900 text-white border-purple-400 shadow-[0_0_0_1px_rgba(167,139,250,0.55)]' : 'bg-gray-100 text-gray-700 border-transparent hover:bg-gray-200/70'}`}
+              >
+                本地上传
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssetTab('ai_generated')}
+                className={`px-3 py-1.5 rounded-lg text-sm border-2 ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white border-purple-400 shadow-[0_0_0_1px_rgba(167,139,250,0.55)]' : 'bg-gray-100 text-gray-700 border-transparent hover:bg-gray-200/70'}`}
+              >
+                AI 生成
+              </button>
+            </div>
+            <div className="text-sm text-gray-500">已选 {assetSelectedIds.size}/1</div>
+          </div>
+          <div className="p-5 overflow-auto flex-1">
+            {assetBusy ? (
+              <div className="text-sm text-gray-500">加载中...</div>
+            ) : assetList.length === 0 ? (
+              <div className="text-sm text-gray-500">暂无可选图片资产</div>
+            ) : (
+              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                {assetList.map((a) => {
+                  const checked = assetSelectedIds.has(a.id)
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => toggleVideoAssetPick(a.id)}
+                      className={`relative rounded-xl overflow-hidden border transition-all ${checked ? 'border-purple-500 ring-2 ring-purple-300 shadow-[0_0_0_2px_rgba(168,85,247,.35)]' : 'border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <img src={a.url} alt={a.name || 'asset'} className="w-full h-24 object-cover" />
+                      {checked && (
+                        <div className="absolute right-1.5 top-1.5 w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center">
+                          ✓
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <div className="px-5 py-4 border-t flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setShowAssetPicker(false)} className="px-4 py-2 rounded-lg border">
+              取消
+            </button>
+            <button type="button" onClick={confirmVideoAssetPick} className="px-4 py-2 rounded-lg bg-purple-600 text-white">
+              确认选择{assetSelectedIds.size ? `（${assetSelectedIds.size}）` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
