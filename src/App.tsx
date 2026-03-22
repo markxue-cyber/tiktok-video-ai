@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import {
   Video,
@@ -387,6 +396,27 @@ function filterProductAnalysisText(raw: string): string {
     out.push(line)
   }
   return out.join('\n')
+}
+
+/** 一键分析：商品分析区渐进展示（多行按行、少行按字符块） */
+function buildProductAnalysisRevealSteps(full: string): string[] {
+  const s = String(full || '')
+  if (!s.trim()) return ['']
+  const lines = s.split('\n')
+  if (lines.length >= 2) {
+    const steps: string[] = []
+    for (let i = 1; i <= lines.length; i += 1) {
+      steps.push(lines.slice(0, i).join('\n'))
+    }
+    return steps
+  }
+  const steps: string[] = []
+  const chunkSize = 38
+  for (let end = chunkSize; end < s.length; end += chunkSize) {
+    steps.push(s.slice(0, end))
+  }
+  steps.push(s)
+  return steps
 }
 
 /** 爆款风格卡片外露文案：约 4 行内（超出由 line-clamp 截断） */
@@ -3929,6 +3959,11 @@ function ImageGenerator({
   const [hotStylesReanalyzeBusy, setHotStylesReanalyzeBusy] = useState(false)
   const [oneClickNeedRefHint, setOneClickNeedRefHint] = useState(false)
   const oneClickHintTimerRef = useRef(0)
+  /** 一键分析拆分阶段：用于文案与爆款区骨架 */
+  const [oneClickAnalysisPhase, setOneClickAnalysisPhase] = useState<'product' | 'styles' | null>(null)
+  const productAnalysisRevealTimerRef = useRef<number | null>(null)
+  /** 每完成一次一键分析里的「爆款风格」请求 +1，用于卡片渐入动画重放 */
+  const [hotStylesRevealEpoch, setHotStylesRevealEpoch] = useState(0)
   /** 商品分析 + 爆款风格：默认折叠，上传参考图并点击「一键分析」后展开 */
   const [productStylePanelOpen, setProductStylePanelOpen] = useState(false)
   const [productAnalysisText, setProductAnalysisText] = useState('')
@@ -4095,6 +4130,15 @@ function ImageGenerator({
       stylePromptAnchorRef.current = null
     }
   }, [hotStyles, stylePromptHoverIdx])
+
+  useEffect(() => {
+    return () => {
+      if (productAnalysisRevealTimerRef.current != null) {
+        window.clearTimeout(productAnalysisRevealTimerRef.current)
+        productAnalysisRevealTimerRef.current = null
+      }
+    }
+  }, [])
 
   const historyGrouped = useMemo(() => {
     const list =
@@ -4705,6 +4749,34 @@ function ImageGenerator({
     void regeneratePromptFromStyleApi(idx)
   }
 
+  const clearProductAnalysisRevealTimers = () => {
+    if (productAnalysisRevealTimerRef.current != null) {
+      window.clearTimeout(productAnalysisRevealTimerRef.current)
+      productAnalysisRevealTimerRef.current = null
+    }
+  }
+
+  const scheduleProductAnalysisReveal = (jobId: number, fullText: string) => {
+    clearProductAnalysisRevealTimers()
+    const steps = buildProductAnalysisRevealSteps(fullText)
+    let i = 0
+    const tick = () => {
+      if (jobId !== aiJobRef.current) return
+      setProductAnalysisText(steps[i] ?? '')
+      i += 1
+      if (i >= steps.length) {
+        productAnalysisRevealTimerRef.current = null
+        return
+      }
+      const prev = steps[i - 1] ?? ''
+      const cur = steps[i] ?? ''
+      const delta = Math.max(1, cur.length - prev.length)
+      const delay = Math.min(95, Math.max(12, Math.round(delta * 0.3)))
+      productAnalysisRevealTimerRef.current = window.setTimeout(tick, delay)
+    }
+    productAnalysisRevealTimerRef.current = window.setTimeout(tick, 0)
+  }
+
   const handleOneClickFill = async () => {
     if (!refImages.length) {
       window.clearTimeout(oneClickHintTimerRef.current)
@@ -4715,36 +4787,60 @@ function ImageGenerator({
     const jobId = ++aiJobRef.current
     setOneClickNeedRefHint(false)
     setAiError('')
+    clearProductAnalysisRevealTimers()
+    setProductStylePanelOpen(true)
+    setOneClickAnalysisPhase('product')
     setWorkbenchFullAnalysisBusy(true)
+
+    const hotStylesRollback = hotStyles.slice()
     let nextProduct: ProductInfo = productInfo
     let analysisText = productAnalysisText
-    let styles: { title: string; description: string; imagePrompt?: string }[] = hotStyles
+    let styles: ImageWorkbenchStyleRow[] = []
+    let gotProductResponse = false
     try {
-      const w = await imageWorkbenchAnalysis({
+      const wProduct = await imageWorkbenchAnalysis({
         refImage: refImageDataUrl,
         language: productInfo.language || '简体中文',
-        mode: 'full',
+        mode: 'product',
       })
       if (jobId !== aiJobRef.current) return
+      gotProductResponse = true
       nextProduct = {
-        name: w.product?.name || '',
-        category: w.product?.category || '',
-        sellingPoints: w.product?.sellingPoints || '',
-        targetAudience: w.product?.targetAudience || '',
-        language: w.product?.language || productInfo.language || '简体中文',
+        name: wProduct.product?.name || '',
+        category: wProduct.product?.category || '',
+        sellingPoints: wProduct.product?.sellingPoints || '',
+        targetAudience: wProduct.product?.targetAudience || '',
+        language: wProduct.product?.language || productInfo.language || '简体中文',
       }
-      analysisText = filterProductAnalysisText(w.productAnalysisText || '')
-      styles = sanitizeWorkbenchStylesFromApi(w.styles || [])
-      setProductAnalysisText(analysisText)
+      analysisText = filterProductAnalysisText(wProduct.productAnalysisText || '')
       setProductInfo(nextProduct)
+      scheduleProductAnalysisReveal(jobId, analysisText)
+
+      setOneClickAnalysisPhase('styles')
+      setHotStyles([])
+
+      const wStyles = await imageWorkbenchAnalysis({
+        refImage: refImageDataUrl,
+        language: nextProduct.language || '简体中文',
+        mode: 'styles',
+      })
+      if (jobId !== aiJobRef.current) return
+      styles = sanitizeWorkbenchStylesFromApi(wStyles.styles || [])
       setHotStyles(styles)
+      setHotStylesRevealEpoch((e) => e + 1)
       setSelectedHotStyleIndex(0)
     } catch (e: any) {
       if (jobId !== aiJobRef.current) return
+      clearProductAnalysisRevealTimers()
+      setHotStyles(hotStylesRollback)
+      if (gotProductResponse) setProductAnalysisText(analysisText)
       setAiError(e?.message || '分析失败')
       return
     } finally {
-      if (aiJobRef.current === jobId) setWorkbenchFullAnalysisBusy(false)
+      if (aiJobRef.current === jobId) {
+        setWorkbenchFullAnalysisBusy(false)
+        setOneClickAnalysisPhase(null)
+      }
     }
     if (jobId !== aiJobRef.current) return
     const style0 = styles[0]
@@ -4804,6 +4900,7 @@ function ImageGenerator({
     const stylePick = hotStyles[selStyleIdx]
     const jobId = ++aiJobRef.current
     setAiError('')
+    clearProductAnalysisRevealTimers()
     setProductAnalysisOnlyBusy(true)
     let nextProduct: ProductInfo = productInfo
     let analysisText = productAnalysisText
@@ -6209,7 +6306,11 @@ function ImageGenerator({
                   <Wand2 className="mr-1 h-4 w-4 shrink-0 opacity-90" />
                 )}
                 {workbenchFullAnalysisBusy
-                  ? '分析中…'
+                  ? oneClickAnalysisPhase === 'product'
+                    ? '分析商品中…'
+                    : oneClickAnalysisPhase === 'styles'
+                      ? '生成爆款风格中…'
+                      : '分析中…'
                   : promptRegenBusy && promptRegenSource === 'oneClick'
                     ? '生成描述中…'
                     : '重新分析'}
@@ -6238,6 +6339,15 @@ function ImageGenerator({
                     : 'AI 生成'}
               </button>
             </div>
+            {workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'product' ? (
+              <p className="text-[11px] text-violet-200/80 mb-1.5" role="status">
+                正在分析参考图中的商品信息…
+              </p>
+            ) : workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles' ? (
+              <p className="text-[11px] text-violet-200/80 mb-1.5" role="status">
+                商品分析已就绪，正在生成 4 套爆款风格…
+              </p>
+            ) : null}
             <textarea
               value={productAnalysisText}
               onChange={(e) => setProductAnalysisText(e.target.value)}
@@ -6277,27 +6387,52 @@ function ImageGenerator({
               </button>
             </div>
             {hotStyles.length === 0 ? (
-              <div className="space-y-2">
-                <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
-                  上传主参考图后，点击顶部或本行右侧「重新分析」生成爆款风格（标题建议 4 字）
+              workbenchFullAnalysisBusy && (oneClickAnalysisPhase === 'product' || oneClickAnalysisPhase === 'styles') ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 items-stretch gap-3 overflow-visible">
+                    {[0, 1, 2, 3].map((slot) => (
+                      <div
+                        key={slot}
+                        className="rounded-2xl bg-[#16161c] ring-1 ring-inset ring-white/[0.1] px-3.5 py-3 min-h-[7.5rem] animate-pulse"
+                      >
+                        <div className="h-4 w-16 rounded-md bg-white/[0.08]" />
+                        <div className="mt-3 space-y-2">
+                          <div className="h-2 w-full rounded bg-white/[0.06]" />
+                          <div className="h-2 rounded bg-white/[0.06] w-[85%]" />
+                          <div className="h-2 rounded bg-white/[0.06] w-[60%]" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-center text-[11px] text-white/42" role="status">
+                    {oneClickAnalysisPhase === 'product'
+                      ? '爆款风格将在商品分析完成后生成…'
+                      : '正在生成爆款风格方案…'}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomStylePromptOnly('')
-                    setCustomStyleModalOpen(true)
-                  }}
-                  className="flex min-h-0 w-full flex-col items-center justify-center rounded-2xl bg-black/15 px-3.5 py-6 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-[#1e1e26] hover:ring-violet-400/25"
-                >
-                  <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                  <span className="text-[10px] text-white/45 mt-1">用一段话描述你想要的画面与商品关系</span>
-                </button>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
+                    上传主参考图后，点击顶部或本行右侧「重新分析」生成爆款风格（标题建议 4 字）
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomStylePromptOnly('')
+                      setCustomStyleModalOpen(true)
+                    }}
+                    className="flex min-h-0 w-full flex-col items-center justify-center rounded-2xl bg-black/15 px-3.5 py-6 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-[#1e1e26] hover:ring-violet-400/25"
+                  >
+                    <span className="text-sm font-semibold text-violet-200">自定义方案</span>
+                    <span className="text-[10px] text-white/45 mt-1">用一段话描述你想要的画面与商品关系</span>
+                  </button>
+                </div>
+              )
             ) : (
               <div className="grid grid-cols-2 items-stretch gap-3 overflow-visible" data-hot-styles-grid>
                 {hotStyles.map((st, idx) => (
                   <div
-                    key={`${st.title}_${idx}`}
+                    key={`${hotStylesRevealEpoch}-${idx}-${st.title}`}
                     data-hot-style-scheme-card
                     role="button"
                     tabIndex={0}
@@ -6339,7 +6474,14 @@ function ImageGenerator({
                       selectedHotStyleIndex === idx
                         ? 'bg-gradient-to-b from-violet-500/[0.2] to-[#1a1528] ring-2 ring-violet-400/35'
                         : 'bg-[#16161c] ring-1 ring-inset ring-white/[0.1] hover:bg-[#1f1f28] hover:ring-white/16'
-                    } ${promptRegenBusy ? 'pointer-events-none brightness-[0.85] saturate-75' : 'cursor-pointer'}`}
+                    } ${promptRegenBusy ? 'pointer-events-none brightness-[0.85] saturate-75' : 'cursor-pointer'}${
+                      hotStylesRevealEpoch > 0 ? ' workbench-hot-style-card-reveal' : ''
+                    }`}
+                    style={
+                      hotStylesRevealEpoch > 0
+                        ? ({ animationDelay: `${idx * 105}ms` } satisfies CSSProperties)
+                        : undefined
+                    }
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold text-white/95 leading-tight line-clamp-1 pr-1">{st.title}</h3>
@@ -6438,7 +6580,11 @@ function ImageGenerator({
                   <Wand2 className="h-4 w-4 shrink-0" strokeWidth={2} />
                 )}
                 {workbenchFullAnalysisBusy
-                  ? '分析中…'
+                  ? oneClickAnalysisPhase === 'product'
+                    ? '分析商品中…'
+                    : oneClickAnalysisPhase === 'styles'
+                      ? '生成爆款风格中…'
+                      : '分析中…'
                   : promptRegenBusy && promptRegenSource === 'oneClick'
                     ? '生成描述中…'
                     : '一键分析商品及爆款风格'}

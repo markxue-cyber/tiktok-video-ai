@@ -498,3 +498,20 @@
   color: rgba(255, 255, 255, 0.92);
 }
 
+/* 一键分析：爆款风格卡片依次渐入 */
+@keyframes workbenchHotStyleCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.workbench-root .workbench-hot-style-card-reveal {
+  opacity: 0;
+  animation: workbenchHotStyleCardIn 0.42s ease-out forwards;
+}
+
