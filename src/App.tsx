@@ -862,7 +862,7 @@ async function prefetchAssetsCacheIfNeeded() {
 }
 
 /** 图片 / 视频工具三级 Tab（侧栏 flyout、URL workspace=、工作台子导航共用） */
-type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress' | 'removeWatermark'
+type ImageToolsTabId = 'removeBg' | 'upscale' | 'translate' | 'compress'
 type VideoToolsTabId = 'generate' | 'upscale' | 'watermark' | 'subtitle'
 
 const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNode }[] = [
@@ -870,7 +870,6 @@ const IMAGE_TOOLS_TAB_ITEMS: { id: ImageToolsTabId; label: string; icon: ReactNo
   { id: 'upscale', label: '高清放大', icon: <Maximize2 className="w-4 h-4 shrink-0" /> },
   { id: 'compress', label: '图片压缩', icon: <Minimize2 className="w-4 h-4 shrink-0" /> },
   { id: 'translate', label: '图片翻译', icon: <Languages className="w-4 h-4 shrink-0" /> },
-  { id: 'removeWatermark', label: '去水印', icon: <Droplets className="w-4 h-4 shrink-0" /> },
 ]
 
 const VIDEO_TOOLS_TAB_ITEMS: { id: VideoToolsTabId; label: string; icon: ReactNode }[] = [
@@ -1290,7 +1289,7 @@ function App() {
         if (imageToolsTab === 'upscale') return '图片工具-高清放大'
         if (imageToolsTab === 'compress') return '图片工具-图片压缩'
         if (imageToolsTab === 'translate') return '图片工具-图片翻译'
-        return '图片工具-去水印'
+        return '图片工具'
       }
     }
     if (mainNav === 'video') {
@@ -1944,7 +1943,6 @@ function App() {
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'upscale' && '图片工具 · 高清放大'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'compress' && '图片工具 · 图片压缩'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'translate' && '图片工具 · 图片翻译'}
-                {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeWatermark' && '图片工具 · 去水印'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' && '视频工具 · 视频生成'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'upscale' && '视频工具 · 画质提升'}
                 {mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'watermark' && '视频工具 · 去水印'}
@@ -2178,7 +2176,6 @@ function ImageToolsWorkbench({
       <div className={tab === 'translate' ? 'block' : 'hidden'} aria-hidden={tab !== 'translate'}>
         <ImageToolWorkbench tool="translate" />
       </div>
-      {tab === 'removeWatermark' ? <WorkbenchComingSoon title="去水印" /> : null}
     </div>
   )
 }
