@@ -2050,9 +2050,10 @@ function App() {
           {mainNav === 'video' && videoSubNav === 'tools' ? (
             <VideoToolsWorkbench tab={videoToolsTab} onTabChange={onWorkbenchVideoTabChange} />
           ) : null}
+          {/* 与 VideoToolsWorkbench 内 Tab→内容 的 space-y-6 对齐，避免 Tab 下划线与面板顶边贴死 */}
           <div
             className={
-              mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' ? '' : 'hidden'
+              mainNav === 'video' && videoSubNav === 'tools' && videoToolsTab === 'generate' ? 'mt-6' : 'hidden'
             }
           >
             <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
