@@ -5817,6 +5817,13 @@ function ImageGenerator({
     promptRegenBusy ||
     isAiBusy
 
+  /** 商品分析正文：生成/流式输出/紧随其后的出图描述生成中不可编辑，避免与 AI 写入冲突 */
+  const productAnalysisNotesLocked =
+    workbenchFullAnalysisBusy ||
+    productAnalysisOnlyBusy ||
+    productAnalysisStreamReveal ||
+    (promptRegenBusy && promptRegenSource === 'product')
+
   if (showModal) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -6354,10 +6361,11 @@ function ImageGenerator({
             <textarea
               ref={productAnalysisWorkbenchTextareaRef}
               value={productAnalysisText}
+              readOnly={productAnalysisNotesLocked}
               onChange={(e) => setProductAnalysisText(e.target.value)}
-              className={`w-full resize-y min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 transition-[box-shadow] duration-300 ${
-                productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''
-              }`}
+              className={`w-full min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 transition-[box-shadow] duration-300 ${
+                productAnalysisNotesLocked ? 'resize-none cursor-not-allowed opacity-[0.92]' : 'resize-y'
+              } ${productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''}`}
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
           </div>
