@@ -57,6 +57,7 @@ export async function generateImageAPI(params: {
   resolution: string
   refImage?: string
   imageCount?: number
+  signal?: AbortSignal
 }): Promise<{ imageUrl: string; size?: string }> {
   const callOnce = async (token: string) => {
     const idem = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`) as string
@@ -68,6 +69,7 @@ export async function generateImageAPI(params: {
         'Idempotency-Key': idem,
         'X-Confirm-Billable': 'true',
       },
+      signal: params.signal,
       body: JSON.stringify({
         prompt: params.prompt,
         negativePrompt: params.negativePrompt,
@@ -112,6 +114,7 @@ export async function generateImageAPI(params: {
       break
     } catch (e: any) {
       lastErr = e
+      if (e?.name === 'AbortError' || params.signal?.aborted) throw e
       if (looksLikeAuthInvalid(e)) {
         const refreshed = await refreshAccessTokenIfPossible()
         if (!refreshed) throw e

@@ -41,6 +41,7 @@
     { "source": "/api/ai/parse-product", "destination": "/api/ai-parse-product" },
     { "source": "/api/ai/video-scripts", "destination": "/api/ai-video-scripts" },
     { "source": "/api/ai/beautify-script", "destination": "/api/ai-beautify-script" },
+    { "source": "/api/ai/prompt-polish", "destination": "/api/ai-prompt-polish" },
     { "source": "/api/ai/image-prompt", "destination": "/api/ai-image-prompt" },
     { "source": "/api/ai/image-workbench", "destination": "/api/ai-image-workbench" },
     { "source": "/api/ai/image-scenes", "destination": "/api/ai-image-scenes" },

@@ -60,6 +60,7 @@ import {
   imageScenePlan,
   imageWorkbenchAnalysis,
   parseProductInfo,
+  polishImageGenPrompt,
   type ProductInfo,
 } from './api/ai'
 import { generateImageAPI } from './api/image'
@@ -608,6 +609,8 @@ function formatImageGenHistoryPromptDisplay(prompt: string): string {
   let body = p.slice(idx + sep.length)
   if (body.startsWith(IMAGE_GEN_HISTORY_PLAN_LABEL_LEGACY)) {
     body = IMAGE_GEN_HISTORY_PLAN_LABEL + body.slice(IMAGE_GEN_HISTORY_PLAN_LABEL_LEGACY.length)
+  } else if (body.startsWith('提示词：')) {
+    /* 图片生成（简版）存档：保留「提示词：」前缀，勿改成爆款风格 */
   } else if (body && !body.startsWith(IMAGE_GEN_HISTORY_PLAN_LABEL)) {
     body = IMAGE_GEN_HISTORY_PLAN_LABEL + body
   }
@@ -623,6 +626,8 @@ function buildHistoryTaskFromSceneBoard(
   resolutionLabel: string,
   productName?: string,
   productAnalysisNotes?: string,
+  /** 图片生成（简版）：历史文案用「提示词」而非「爆款风格」 */
+  simpleHistory?: boolean,
 ): ImageGenHistoryTask {
   const slots = board.slots
   const selected = slots.filter((s) => s.selected)
@@ -644,9 +649,9 @@ function buildHistoryTaskFromSceneBoard(
   })
 
   const basePrompt = board.basePrompt || ''
-  const basePromptStored = basePrompt
-    ? `${IMAGE_GEN_HISTORY_PLAN_LABEL}${basePrompt.slice(0, 2000)}`
-    : ''
+  const planLabel = simpleHistory ? '提示词：' : IMAGE_GEN_HISTORY_PLAN_LABEL
+  const basePromptStored = basePrompt ? `${planLabel}${basePrompt.slice(0, 2000)}` : ''
+  const titlesLead = simpleHistory ? '镜头方案：' : '多场景：'
   const titlesLine = (anySelected ? selected : slots).map((s) => s.title).join('、')
 
   /** 仅当有槽位正在请求出图时为 active；全为 pending 属于「仅预览方案」，不记入生成历史 */
@@ -674,7 +679,7 @@ function buildHistoryTaskFromSceneBoard(
     ts: board.ts,
     refThumb: board.refThumb,
     ...(pn ? { productName: pn } : {}),
-    prompt: `多场景：${titlesLine}\n────────\n${basePromptStored}`,
+    prompt: `${titlesLead}${titlesLine}\n────────\n${basePromptStored}`,
     modelId,
     modelLabel,
     aspect,
@@ -3962,6 +3967,9 @@ function ImageGenerator({
   const [prompt, setPrompt] = useState('')
   /** 图片生成（简版）：主提示词输入，不参与爆款风格链路 */
   const [simpleDirectPrompt, setSimpleDirectPrompt] = useState('')
+  const [simplePromptPolishBusy, setSimplePromptPolishBusy] = useState(false)
+  /** 简版批量出图：切换 Tab / 卸载时中止未完成的 fetch，避免后台继续占并发 */
+  const imageGenSimpleBatchAbortRef = useRef<AbortController | null>(null)
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
@@ -4190,10 +4198,11 @@ function ImageGenerator({
   }, [])
 
   const historyGrouped = useMemo(() => {
-    const list =
-      sceneRunBoard == null ? imageGenHistory : imageGenHistory.filter((t) => t.id !== sceneRunBoard.id)
+    /** 电商套图右侧有「场景看板」时，从列表隐藏同 id 避免与看板重复；简版无看板，须始终显示历史 */
+    const dedupeBoard = sceneRunBoard != null && !isSimpleImageGen
+    const list = dedupeBoard ? imageGenHistory.filter((t) => t.id !== sceneRunBoard!.id) : imageGenHistory
     return groupImageHistoryByDay(list)
-  }, [imageGenHistory, sceneRunBoard])
+  }, [imageGenHistory, sceneRunBoard, isSimpleImageGen])
 
   /** 场景看板 / 生成历史大标题：优先结构化「产品名称」，否则从商品分析笔记解析 */
   const imageWorkbenchCardTitle = useMemo(
@@ -4240,6 +4249,55 @@ function ImageGenerator({
   useEffect(() => {
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
+
+  /** 简版：离开本 Tab 或卸载时中止未完成的出图请求（整页刷新无法中止已到达服务端的任务） */
+  useEffect(() => {
+    if (!isSimpleImageGen) return
+    if (!visible) {
+      imageGenSimpleBatchAbortRef.current?.abort()
+      imageGenSimpleBatchAbortRef.current = null
+    }
+    return () => {
+      imageGenSimpleBatchAbortRef.current?.abort()
+      imageGenSimpleBatchAbortRef.current = null
+    }
+  }, [isSimpleImageGen, visible])
+
+  /** 简版：每张出图完成后再次尝试写入资产库（与槽位内归档互补，保证列表及时刷新） */
+  useEffect(() => {
+    if (!isSimpleImageGen || !visible || !sceneRunBoard) return
+    for (let i = 0; i < sceneRunBoard.slots.length; i++) {
+      const s = sceneRunBoard.slots[i]
+      if (s.status !== 'done' || !s.imageUrl) continue
+      void safeArchiveAsset({
+        source: 'ai_generated',
+        type: 'image',
+        url: s.imageUrl,
+        name: `tikgen-${sceneRunBoard.id}-${i + 1}.png`,
+        metadata: {
+          from: 'image_generator',
+          task_id: sceneRunBoard.id,
+          index: i,
+          sync: 'simple_slot_watch',
+          variant: 'simple',
+        },
+      })
+    }
+  }, [isSimpleImageGen, visible, sceneRunBoard])
+
+  /** 简版：全部槽位结束后收起看板，仅保留生成历史（避免与同 id 记录产生理解歧义） */
+  useEffect(() => {
+    if (!isSimpleImageGen || !sceneRunBoard) return
+    const sel = sceneRunBoard.slots.filter((s) => s.selected)
+    if (!sel.length) return
+    const allTerminal = sel.every((s) => s.status === 'done' || s.status === 'failed')
+    if (!allTerminal) return
+    const id = sceneRunBoard.id
+    const t = window.setTimeout(() => {
+      setSceneRunBoard((b) => (b && b.id === id ? null : b))
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [isSimpleImageGen, sceneRunBoard])
 
   const sceneBoardSlotGenSignature = useMemo(() => {
     if (!sceneRunBoard) return ''
@@ -4390,6 +4448,7 @@ function ImageGenerator({
       resLb,
       productInfo.name?.trim(),
       productAnalysisText,
+      isSimpleImageGen,
     )
     setImageGenHistory((prev) => {
       const i = prev.findIndex((t) => t.id === built.id)
@@ -4428,7 +4487,7 @@ function ImageGenerator({
       setGenErrorText('')
       setGenErrorCode('UNKNOWN')
     }
-  }, [sceneRunBoard, model, size, resolution, imageModelOptions, productInfo.name, productAnalysisText])
+  }, [sceneRunBoard, model, size, resolution, imageModelOptions, productInfo.name, productAnalysisText, isSimpleImageGen])
 
   useEffect(() => {
     const first = refImages[0]?.url || ''
@@ -4472,6 +4531,7 @@ function ImageGenerator({
         resLb,
         productNameSnap,
         productAnalysisText,
+        isSimpleImageGen,
       )
       setImageGenHistory((prev) => {
         const i = prev.findIndex((t) => t.id === built.id)
@@ -5653,8 +5713,10 @@ function ImageGenerator({
     slot: SceneRunSlot,
     refUrl: string | undefined,
     neg: string | undefined,
+    signal?: AbortSignal,
   ): Promise<SceneSlotGenResult> => {
     if (!slot.selected) return { slotIndex, ok: false, error: '未选中' }
+    if (signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
     const mergedPrompt = mergeScenePromptForSlot(basePrompt, slot)
     try {
       const r = await generateImageAPI({
@@ -5665,18 +5727,38 @@ function ImageGenerator({
         resolution,
         refImage: refUrl,
         imageCount: 1,
+        signal,
       })
       await safeArchiveAsset({
         source: 'ai_generated',
         type: 'image',
         url: r.imageUrl,
         name: `image-${boardId}-${slotIndex + 1}.png`,
-        metadata: { from: 'image_generator', model, size, resolution, scene: slot.title },
+        metadata: { from: 'image_generator', model, size, resolution, scene: slot.title, variant: isSimpleImageGen ? 'simple' : 'ecommerce' },
       })
       return { slotIndex, ok: true, imageUrl: r.imageUrl }
     } catch (e: any) {
+      if (e?.name === 'AbortError' || signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: slot.title } })
       return { slotIndex, ok: false, error: e?.message || '失败' }
+    }
+  }
+
+  const handlePolishSimplePrompt = async () => {
+    const raw = simpleDirectPrompt.trim()
+    if (!raw || simplePromptPolishBusy) return
+    setSimplePromptPolishBusy(true)
+    setAiError('')
+    try {
+      const { polished } = await polishImageGenPrompt({
+        prompt: raw,
+        language: productInfo.language || '简体中文',
+      })
+      setSimpleDirectPrompt(String(polished || '').trim() || raw)
+    } catch (e: any) {
+      setAiError(e?.message || '提示词优化失败')
+    } finally {
+      setSimplePromptPolishBusy(false)
     }
   }
 
@@ -5845,6 +5927,14 @@ function ImageGenerator({
     })
     if (!indices.length) return
 
+    let batchSignal: AbortSignal | undefined
+    if (isSimpleImageGen) {
+      imageGenSimpleBatchAbortRef.current?.abort()
+      const ac = new AbortController()
+      imageGenSimpleBatchAbortRef.current = ac
+      batchSignal = ac.signal
+    }
+
     const basePrompt = snap.basePrompt
     const slotSnap = indices.map((i) => ({ i, slot: { ...snap.slots[i] } }))
     const refUrl = refImageDataUrl || undefined
@@ -5868,7 +5958,7 @@ function ImageGenerator({
       await new Promise<void>((r) => setTimeout(r, 0))
       const results = await Promise.all(
         slotSnap.map(({ i, slot }) =>
-          executeSceneSlotGenerationOnce(snap.id, i, basePrompt, slot, refUrl, neg),
+          executeSceneSlotGenerationOnce(snap.id, i, basePrompt, slot, refUrl, neg, batchSignal),
         ),
       )
       applySceneSlotResultsToBoard(snap.id, results)
@@ -6417,20 +6507,56 @@ function ImageGenerator({
 
         {isSimpleImageGen ? (
           <section className="flex flex-col gap-2">
-            <div className="mb-1 flex items-center gap-1.5">
-              <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">提示词</div>
-              <ImageFormTip
-                wide
-                label="说明"
-                text="描述画面内容、风格、构图等；将结合参考图与模型设置生成一组图片。与电商套图一致，后台仍会规划多镜头并批量出图，右侧仅展示生成历史。"
-              />
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">提示词</div>
+                <ImageFormTip
+                  wide
+                  label="说明"
+                  text="描述画面内容、风格、构图等；将结合参考图与模型设置生成一组图片。与电商套图一致，后台仍会规划多镜头并批量出图，右侧仅展示生成历史。"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handlePolishSimplePrompt()}
+                disabled={simplePromptPolishBusy || !simpleDirectPrompt.trim() || sceneBoardPreparing || sceneBatchGenerating}
+                title={!simpleDirectPrompt.trim() ? '请先输入提示词' : '使用 GPT-4o 润色当前提示词'}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                  simplePromptPolishBusy
+                    ? 'cursor-wait bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/35'
+                    : simpleDirectPrompt.trim()
+                      ? 'bg-white/[0.08] text-violet-200 ring-1 ring-violet-400/25 hover:bg-violet-500/15 hover:ring-violet-400/40'
+                      : 'cursor-not-allowed bg-white/[0.04] text-white/35 ring-1 ring-white/[0.08]'
+                }`}
+              >
+                {simplePromptPolishBusy ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                    <span className="tikgen-shimmer-text">优化中…</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-3.5 w-3.5 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+                    优化提示词
+                  </>
+                )}
+              </button>
             </div>
             <textarea
               value={simpleDirectPrompt}
+              readOnly={simplePromptPolishBusy}
               onChange={(e) => setSimpleDirectPrompt(e.target.value)}
-              className="w-full min-h-[168px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 resize-y"
+              className={`w-full min-h-[168px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 resize-y transition-[box-shadow] duration-300 ${
+                simplePromptPolishBusy ? 'cursor-wait opacity-[0.92] workbench-product-analysis-streaming' : ''
+              }`}
               placeholder="例如：产品在阳光下的木质桌面上，清新自然光，浅景深，电商主图风格…"
             />
+            {simplePromptPolishBusy ? (
+              <p className="text-[11px] text-violet-200/85 flex items-center gap-1.5" role="status">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" aria-hidden />
+                GPT-4o 正在润色提示词，请稍候…
+              </p>
+            ) : null}
           </section>
         ) : null}
 
@@ -6775,7 +6901,13 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleSimpleStartGenerate()}
-                disabled={sceneBoardPreparing || !simpleDirectPrompt.trim() || !refImages.length}
+                disabled={
+                  sceneBoardPreparing ||
+                  sceneBatchGenerating ||
+                  simplePromptPolishBusy ||
+                  !simpleDirectPrompt.trim() ||
+                  !refImages.length
+                }
                 title={
                   !refImages.length
                     ? '请先上传参考图'
@@ -6784,12 +6916,14 @@ function ImageGenerator({
                       : '根据提示词规划并立即生成图片'
                 }
                 className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
-                  sceneBoardPreparing || (simpleDirectPrompt.trim() && refImages.length > 0)
+                  sceneBoardPreparing ||
+                  sceneBatchGenerating ||
+                  (simpleDirectPrompt.trim() && refImages.length > 0)
                     ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
                     : 'cursor-not-allowed bg-white/[0.06] text-white/35'
                 }`}
               >
-                {!sceneBoardPreparing && simpleDirectPrompt.trim() && refImages.length > 0 ? (
+                {!sceneBoardPreparing && !sceneBatchGenerating && simpleDirectPrompt.trim() && refImages.length > 0 ? (
                   <span
                     className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent to-white/[0.1] opacity-80"
                     aria-hidden
@@ -6799,6 +6933,11 @@ function ImageGenerator({
                   <>
                     <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
                     <span className="relative">正在规划场景…</span>
+                  </>
+                ) : sceneBatchGenerating ? (
+                  <>
+                    <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
+                    <span className="relative">生成中…</span>
                   </>
                 ) : (
                   <>
@@ -6870,17 +7009,25 @@ function ImageGenerator({
             ) : null}
           </div>
         ) : null}
-        {sceneBoardPreparing ? (
+        {sceneBoardPreparing || (isSimpleImageGen && sceneBatchGenerating) ? (
           <div className="mb-6">
             <GenerationLoadingCard
-              title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
+              title={isSimpleImageGen ? '图片生成中' : LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
               subtitle={
                 isSimpleImageGen
-                  ? '正在根据提示词规划场景，完成后将自动开始出图…'
+                  ? sceneBoardPreparing
+                    ? '正在根据提示词规划场景，完成后将自动开始出图…'
+                    : '正在并行生成图片，结果将实时出现在下方生成历史并同步到资产库…'
                   : '正在规划 6 组场景，完成后可在右侧用「一键生成图片」批量出图'
               }
               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
-              progressText={`准备进度：${Math.max(1, Math.min(99, genProgress))}%`}
+              progressText={
+                sceneBoardPreparing
+                  ? `准备进度：${Math.max(1, Math.min(99, genProgress))}%`
+                  : isSimpleImageGen
+                    ? '出图进行中…'
+                    : `准备进度：${Math.max(1, Math.min(99, genProgress))}%`
+              }
             />
           </div>
         ) : null}

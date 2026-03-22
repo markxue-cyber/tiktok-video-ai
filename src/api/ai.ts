@@ -160,3 +160,33 @@ export async function generateImagePrompt(params: {
   return { categoryHint: data.categoryHint, prompt: data.prompt, negativePrompt: data.negativePrompt, parts: data.parts, _mock: data._mock }
 }
 
+/** 图片生成（简版）· 使用 GPT-4o 润色提示词（计费 LLM 额度） */
+export async function polishImageGenPrompt(params: {
+  prompt: string
+  language?: string
+}): Promise<{ polished: string; _mock?: boolean }> {
+  const token = localStorage.getItem('tikgen.accessToken') || ''
+  if (!token) throw new Error('请先登录再优化提示词')
+  const idem = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`) as string
+  const resp = await fetch('/api/ai/prompt-polish', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'Idempotency-Key': idem,
+      'X-Confirm-Billable': 'true',
+    },
+    body: JSON.stringify({ prompt: params.prompt, language: params.language || '简体中文' }),
+  })
+  const text = await resp.text()
+  const data = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { success: false, error: text }
+    }
+  })()
+  if (!resp.ok || !data?.success) throw new Error(data?.error || `提示词优化失败(${resp.status})`)
+  return { polished: String(data.polished || '').trim(), _mock: data._mock }
+}
+
