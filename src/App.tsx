@@ -4288,8 +4288,15 @@ function ImageGenerator({
   }, [])
 
   const historyGrouped = useMemo(() => {
-    /** 电商套图右侧有「场景看板」时，从列表隐藏同 id 避免与看板重复；简版无看板，须始终显示历史 */
-    const dedupeBoard = sceneRunBoard != null && !isSimpleImageGen
+    /**
+     * 电商套图：仅当当前看板仍有进行中任务时，临时隐藏同 id 历史，避免重复。
+     * 一旦全部完成/失败，历史应立即可见（避免用户误以为记录消失）。
+     * 简版无右侧看板，始终显示历史。
+     */
+    const boardHasInFlight =
+      !!sceneRunBoard &&
+      sceneRunBoard.slots.some((s) => s.selected && (s.status === 'pending' || s.status === 'generating'))
+    const dedupeBoard = !isSimpleImageGen && !!sceneRunBoard && boardHasInFlight
     const list = dedupeBoard ? imageGenHistory.filter((t) => t.id !== sceneRunBoard!.id) : imageGenHistory
     return groupImageHistoryByDay(list)
   }, [imageGenHistory, sceneRunBoard, isSimpleImageGen])
