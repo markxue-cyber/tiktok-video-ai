@@ -87,6 +87,7 @@ export default async function handler(req, res) {
               '3) 画面要“电商可用”：主体清晰、构图干净、光影合理、背景不抢戏。',
               '4) 禁止在画面中生成任何新增文字/水印/Logo（除非商品信息里明确包含且“参考图”本身可见，仍需尽量保守）。',
               '5) 电商默认标准（必须纳入第一次生成，避免质检后重来）：主体占画面 60–80%，对焦锐利，背景干净；如需要场景感，也必须是“轻场景元素”，且虚化/弱化不抢主体。',
+              '6) 「爆款风格 + 6 场景」分层：若用户提供了爆款风格，将其气质拆解进 parts 时，parts.scene 与合并后的 prompt 应作为「DNA」——写可迁移的棚拍/轻场景基因（柔光、渐变、轻虚化），禁止写死「整幅画面只能是黑底/唯一夜景/固定实景墙」；强环境留给后续场景格。',
               '',
               '品类自适配（非常重要）：你必须输出 categoryHint，并基于不同品类的拍法生成 parts。',
               'categoryHint 必须从下列枚举中选择一个最匹配的：',
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
               '',
               'prompt 写作模板（请用 parts 分段写清楚，再在 prompt 中合并为一段）：',
               '- 主体：商品名称 + 关键外观特征（颜色/形态/材质质感，仅限已知）',
-              '- 场景：主图（纯背景/棚拍）或生活场景（二选一，优先主图更通用）',
+              '- 场景：写「棚拍/纯色/轻渐变/轻虚化」等可兼容多场景格的基底，不写死与「商业白底主图」互斥的唯一暗环境',
               '- 构图：居中/三分法、留白、前景/背景层次',
               '- 光影：柔光箱/自然侧光/轮廓光等（选择一个明确方案）',
               '- 镜头：焦段/景别（如：50mm，近景特写）',
@@ -135,7 +136,7 @@ export default async function handler(req, res) {
               `模式：${String(sceneMode || 'clean')}（clean=主图干净；lite=轻场景）`,
               aspectRatio || resolution ? `画幅约束：比例=${aspectRatio || '未指定'}，目标分辨率档位=${resolution || '未指定'}` : '',
               hotSellingStyle?.description || hotSellingStyle?.title
-                ? `用户选择的爆款风格（必须融入画面与光影构图，但不编造商品事实）：${String(hotSellingStyle.title || '').trim()} —— ${String(hotSellingStyle.description || '').trim()}`
+                ? `用户选择的爆款风格（作拍法基因 DNA 融入 parts 与 prompt；气质落在材质与光型，勿写死整图唯一强环境；不编造商品事实）：${String(hotSellingStyle.title || '').trim()} —— ${String(hotSellingStyle.description || '').trim()}`
                 : '',
               productAnalysisNotes
                 ? `商品分析全文（用户可编辑，优先参考其中的场景与人群细节；仍须遵守禁止编造规则）：\n${String(productAnalysisNotes).slice(0, 12000)}`
@@ -143,6 +144,9 @@ export default async function handler(req, res) {
               `商品信息：${JSON.stringify(product)}`,
               [
                 '请生成适用于“电商主图/投放素材”的图片生成提示词。构图必须适配画幅约束：主体清晰占比高、留白合理（便于后期贴标/标题）、背景干净不抢戏。',
+                '',
+                '与「6 场景分张出图」兼容：主提示词 = DNA；每格会再追加增量。若爆款风格含深色/工业风/夜景气质，请用材质高光、对比布光、色温写在商品与局部光上；scene/prompt 均不得规定「整幅只能是黑底/暗场/唯一实景墙」。',
+                '效果最大化：DNA 负责「像同一套片」，留出让 selling_focus/lifestyle/atmosphere 等格发挥的差异空间。',
                 '',
                 '模式细则（必须执行）：',
                 '- clean（主图干净）：scene 选择棚拍/纯色或轻渐变背景；允许极少道具但不可出现杂乱；composition 强调主体占比 70% 左右、居中或三分法。',

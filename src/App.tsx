@@ -317,6 +317,65 @@ const IMAGE_SCENE_BLUEPRINT = [
   { key: 'atmosphere', title: '氛围创意图' },
 ] as const
 
+/**
+ * 单槽出图时追加在提示词末尾：爆款风格（主描述）与「当前场景格」在背景/环境上冲突时，
+ * 明确以本格为最高优先级（避免例如：风格写深色工业风 + 白底主图格 → 生成黑底怪图）。
+ */
+function sceneSlotPromptPrioritySuffix(slotKey: string): string {
+  switch (slotKey) {
+    case 'commercial_white':
+      return [
+        '',
+        '【场景优先级·最高｜商业白底主图】',
+        '本张背景必须为纯白或极浅灰的无缝电商棚拍底（接近 #FFFFFF），柔光箱均匀布光，无生硬暗角条带。',
+        '若上文「爆款风格/出图主描述」含深色全图背景、黑色/夜景、工业水泥墙、重色渐变底等，仅可保留为「商品材质、对比与布光气质」的参考，不得把整张图做成深色底、黑底、或黑场反白边的非标准主图。',
+        '禁止：整体黑底/大面积深灰环境墙作为主背景。',
+      ].join('\n')
+    case 'lifestyle':
+      return [
+        '',
+        '【场景优先级·最高｜场景生活图】',
+        '本张需要可感知的生活/使用环境（背景可虚化）。若上文强调「仅白底/无环境」，以本条生活场景为准，商品主体仍须清晰、适合电商投放。',
+      ].join('\n')
+    case 'atmosphere':
+      return [
+        '',
+        '【场景优先级·最高｜氛围创意图】',
+        '本张允许较强氛围光、冷暖对比或情绪光。若上文写死「极简白底」，仅适用于其它格子；本张以氛围表现为准，商品须仍可识别。',
+      ].join('\n')
+    case 'selling_focus':
+    case 'detail':
+      return [
+        '',
+        '【场景优先级】本张为特写/细节：背景须干净虚化或极简棚拍，以大场景环境描写抢戏为次；主体细节最优先。',
+      ].join('\n')
+    case 'comparison':
+      return [
+        '',
+        '【场景优先级】本张为对比/效果向构图：若上文背景描写与对比布局冲突，以本条对比构图与信息层级为准。',
+      ].join('\n')
+    default:
+      return ''
+  }
+}
+
+/** 主描述（DNA）与场景增量之间的桥接说明，减少模型把两层当互斥指令 */
+const PROMPT_DNA_SCENE_BRIDGE = [
+  '',
+  '【叠提示策略】上文为爆款主描述（DNA：材质、惯用光型、色调气质、主体与清晰度标准）。以下「当前生成场景」为本张增量；背景/环境/景别以本段及文末「场景优先级」为准。DNA 的气质应落实到商品本体的布光与材质上，勿与本格背景合同对打。',
+  '',
+].join('\n')
+
+/** 合并主描述与场景格文案，并追加冲突消解后缀 */
+function mergeScenePromptForSlot(
+  basePrompt: string,
+  slot: Pick<SceneRunSlot, 'key' | 'title' | 'description' | 'imagePrompt'>,
+) {
+  const extra = [slot.imagePrompt, slot.description].filter(Boolean).join('\n')
+  const tail = sceneSlotPromptPrioritySuffix(slot.key)
+  return `${basePrompt.trim()}${PROMPT_DNA_SCENE_BRIDGE}【当前生成场景：${slot.title}】\n${extra}${tail}`.trim()
+}
+
 function imageHistoryDayKey(ts: number) {
   const d = new Date(ts)
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
@@ -5725,11 +5784,6 @@ function ImageGenerator({
     void refreshImageScenesPlanWithPrompt(nextP, slimHot, productForScenes)
   }
 
-  const mergeScenePromptForSlot = (basePrompt: string, slot: Pick<SceneRunSlot, 'title' | 'description' | 'imagePrompt'>) => {
-    const extra = [slot.imagePrompt, slot.description].filter(Boolean).join('\n')
-    return `${basePrompt}\n\n【当前生成场景：${slot.title}】\n${extra}`.trim()
-  }
-
   const applySceneSlotResultsToBoard = (boardId: string, results: SceneSlotGenResult[]) => {
     if (!results.length) return
     setSceneRunBoard((b) => {
@@ -6614,12 +6668,37 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「重新分析」会同时刷新商品分析与 4 套爆款风格。
+                text={`「重新分析」会同时刷新商品分析与 4 套爆款风格（模型按「DNA + 场景增量」策略生成，减少与白底/生活/氛围格冲突）。
 
 【爆款风格 和 6 场景分别管什么】
 · 爆款风格 = 整条素材的「总路线」：气质、叙事、光影基调（会写进当前出图主描述）。
 · 6 场景 = 在同一条路线下，拆成 6 种「镜头分工」：白底主图、卖点特写、生活方式…方便一次出齐投放图。
 两边文案可能都提到背景/光线，属于正常叠加，不是填错。出每一张图时 = 主描述 + 当前这一格的拍法；需要纯白底时请勾选「商业白底主图」等对应格。
+出图时系统会在提示词末尾自动加「场景优先级」说明：例如白底主图格会强制纯白棚拍底，避免爆款风格里写的深色/工业风背景把整张图带偏。
+
+【爆款风格怎么写：少冲突、效果还能叠满】
+· 分工：爆款风格 = 全组「气质与拍法基因（DNA）」；6 场景 = 每一张的「镜头任务」。像不像同一套片 = DNA；这一张是主图还是种草 = 场景格。
+· DNA 里优先写可迁移项：材质做工、光型（柔光/轮廓/冷暖）、色彩气质、情绪词、商业摄影基准（锐利、还原色、少畸变）——白底/特写/生活/氛围都能继承。
+· DNA 里避免「全图唯一环境合同」：忌写死整张只能是黑底/水泥墙/夜景窗外；强环境交给「场景生活图」「氛围创意图」或由 6 场景规划的增量写清。
+· 白底主图要工业/科技感时：用「棚拍级质感、结构高光、边缘利落、明暗落在形体上」写气质，不要写大面积深色底；白底合同交给白底格 + 系统优先级句。
+
+【进阶：分层叠提示，让模型吃满两层】
+· 模型实际读到的大致是：DNA（主描述）+ 当前格的标题与增量文案 + 系统自动「场景优先级」句。思路是 DNA 提供连贯性，每格只追加「本张差异」，不要在两处各写一套矛盾背景。
+· 建议只写在爆款里：品牌级气质、材质词汇、默认光型偏好、整体色调方向、禁止项（不要水印/不要多主体等若你坚持可写进商品分析或负向）。
+· 建议只写在场景格/规划结果里：具体背景（白/虚化的家/夜光）、景别（全景/特写）、构图任务（居中主图 vs 斜线动感）、本张道具强度。
+· 两边都碰「光」时：DNA 定「用什么灯感」（柔光箱+轻轮廓）；格只定「本张怎么用灯」（侧逆光勾边 / 大柔光平铺），避免格再写一套完全相反的灯感除非你想刻意对比。
+
+【按格配合表（DNA 不变，格负责增量）】
+· 商业白底主图：DNA=质感+光型基因；格=纯白无缝底+居中+电商留白；DNA 勿锁暗场全图背景。
+· 卖点聚焦：DNA=材质高光与清晰标准；格=近景微距+浅景深+指哪打哪的结构；勿在 DNA 编造未给出的参数文案。
+· 场景生活：DNA=色调与情绪；格=具体生活场+背景虚化；DNA 勿写「全程无环境」。
+· 对比/效果：DNA=利落清晰；格=对比构图/信息层级；勿编造数据与认证。
+· 产品细节：DNA=做工基因；格=角度/拼接/细节陈列；DNA 勿抢大场景。
+· 氛围创意：DNA=色温气质即可；格=强氛围、允许环境光——与暗调气质相关的「释放口」通常在这格。
+
+【工作流与自检】
+· 顺序：写好 DNA → 免费生成预览看 6 条是否同源 → 必要时编辑单格文案或重规划 → 勾选批量出图。
+· 三问：① 删掉 DNA 里所有「背景/环境」句，气质还剩吗？② 白底格是否只负责底与构图、不被 DNA 暗环境绑架？③ 是否至少有一格（生活/氛围）能接住你想表达的环境与情绪？
 
 点「免费生成预览」规划 6 场景后，在右侧勾选卡片并批量出图；点击卡片任意区域可切换选中。`}
               />
@@ -6713,7 +6792,7 @@ function ImageGenerator({
                   label="操作说明"
                   text="点卡片切换爆款风格；悬停卡片可看完整「出图主描述」；点铅笔编辑。可添加「自定义方案」。
 
-与下方 6 场景的分工：这里定「整套像什么」；6 场景定「这一张在素材里扮演哪种镜头」。若与白底/户外等有冲突，以勾选的场景格为准，或把主描述里过强的背景描写改短。"
+与 6 场景：这里写 DNA（材质、光型、色调、情绪），格子里写「本张背景/景别/构图」。叠提示时避免两处各写一套矛盾环境；细则与按格配合表见顶部「说明」。"
                 />
               </div>
               <button
