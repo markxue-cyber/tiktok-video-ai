@@ -122,6 +122,8 @@ export type TikgenWorkspaceSnapshotV1 = {
   size: string
   resolution: string
   sceneMode: string
+  /** 图片生成（电商套图）：一次批量生成张数，1-6 */
+  imageGenerateCount?: number
   promptGenOutputSettings: { aspect: string; resolution: string } | null
   imageScenes: unknown[]
 }

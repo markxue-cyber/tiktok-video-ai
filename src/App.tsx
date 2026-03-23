@@ -4091,6 +4091,8 @@ function ImageGenerator({
   const [productAnalysisText, setProductAnalysisText] = useState('')
   const [hotStyles, setHotStyles] = useState<ImageWorkbenchStyleRow[]>([])
   const [selectedHotStyleIndex, setSelectedHotStyleIndex] = useState(0)
+  /** 电商套图：一次批量生成图片数量（1-6） */
+  const [imageGenerateCount, setImageGenerateCount] = useState(1)
   const [sceneRunBoard, setSceneRunBoard] = useState<SceneRunBoard | null>(null)
   /** IndexedDB / localStorage 恢复完成前禁止写入，避免用空状态覆盖已保存数据 */
   const [imageGenPersistenceReady, setImageGenPersistenceReady] = useState(false)
@@ -4203,6 +4205,8 @@ function ImageGenerator({
         if (!isSimpleImageGen) {
           if (Array.isArray(wsIdb.hotStyles)) setHotStyles(wsIdb.hotStyles as ImageWorkbenchStyleRow[])
           setSelectedHotStyleIndex(Number(wsIdb.selectedHotStyleIndex) || 0)
+          const c = Number((wsIdb as TikgenWorkspaceSnapshotV1).imageGenerateCount || 1)
+          setImageGenerateCount(Math.min(6, Math.max(1, Number.isFinite(c) ? c : 1)))
         } else {
           setHotStyles([])
           setSelectedHotStyleIndex(0)
@@ -4372,6 +4376,23 @@ function ImageGenerator({
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
 
+  /** 电商套图：生成数量变化时，限制已勾选槽位数量（按槽位顺序保留前 N 个） */
+  useEffect(() => {
+    if (isSimpleImageGen) return
+    setSceneRunBoard((b) => {
+      if (!b) return b
+      const selectedIdx = b.slots
+        .map((s, i) => (s.selected ? i : -1))
+        .filter((i) => i >= 0)
+      if (selectedIdx.length <= imageGenerateCount) return b
+      const keep = new Set(selectedIdx.slice(0, imageGenerateCount))
+      return {
+        ...b,
+        slots: b.slots.map((s, i) => ({ ...s, selected: keep.has(i) })),
+      }
+    })
+  }, [imageGenerateCount, isSimpleImageGen])
+
   /** 简版：离开本 Tab 或卸载时中止未完成的出图请求（整页刷新无法中止已到达服务端的任务） */
   useEffect(() => {
     if (!isSimpleImageGen) return
@@ -4513,6 +4534,7 @@ function ImageGenerator({
       size,
       resolution,
       sceneMode,
+      imageGenerateCount: isSimpleImageGen ? 1 : imageGenerateCount,
       promptGenOutputSettings: promptGenOutputSettings
         ? { aspect: promptGenOutputSettings.aspect, resolution: promptGenOutputSettings.resolution }
         : null,
@@ -4540,6 +4562,7 @@ function ImageGenerator({
     size,
     resolution,
     sceneMode,
+    imageGenerateCount,
     promptGenOutputSettings,
     imageScenes,
   ])
@@ -5844,7 +5867,8 @@ function ImageGenerator({
   ): Promise<SceneSlotGenResult> => {
     if (!slot.selected) return { slotIndex, ok: false, error: '未选中' }
     if (signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
-    const mergedPrompt = mergeScenePromptForSlot(basePrompt, slot)
+    // 简版图片生成：严格使用用户输入提示词，不叠加场景增量约束
+    const mergedPrompt = isSimpleImageGen ? String(basePrompt || '').trim() : mergeScenePromptForSlot(basePrompt, slot)
     try {
       const r = await generateImageAPI({
         prompt: mergedPrompt,
@@ -5919,12 +5943,12 @@ function ImageGenerator({
         ts: Date.now(),
         refThumb,
         basePrompt: prompt.trim(),
-        slots: rows.map((sc) => ({
+        slots: rows.map((sc, idx) => ({
           key: sc.key,
           title: sc.title,
           description: sc.description,
           imagePrompt: sc.imagePrompt,
-          selected: true,
+          selected: idx < imageGenerateCount,
           status: 'pending' as const,
         })),
       })
@@ -5957,24 +5981,19 @@ function ImageGenerator({
     setGenProgress(1)
     const stopProgress = startSmoothGenProgress()
     try {
-      const rows = await runImageScenePlan(base, null, productInfo)
-      if (!rows) {
-        stopProgress()
-        setGenProgress(0)
-        return
-      }
       const taskId = `ig_${Date.now()}_${Math.random().toString(16).slice(2)}`
       const refThumb = refImageDataUrl || refImages[0]?.url || ''
+      const outputCount = Math.min(6, Math.max(1, imageGenerateCount))
       const builtBoard: SceneRunBoard = {
         id: taskId,
         ts: Date.now(),
         refThumb,
         basePrompt: base,
-        slots: rows.map((sc) => ({
-          key: sc.key,
-          title: sc.title,
-          description: sc.description,
-          imagePrompt: sc.imagePrompt,
+        slots: Array.from({ length: outputCount }).map((_, idx) => ({
+          key: `simple_${idx + 1}`,
+          title: `图片 ${idx + 1}`,
+          description: '',
+          imagePrompt: '',
           selected: true,
           status: 'pending' as const,
         })),
@@ -6038,6 +6057,10 @@ function ImageGenerator({
       if (!b || b.id !== boardId) return b
       const cur = b.slots[slotIndex]
       if (cur?.status === 'generating') return b
+      if (!cur?.selected) {
+        const selectedCount = b.slots.filter((s) => s.selected).length
+        if (selectedCount >= imageGenerateCount) return b
+      }
       return {
         ...b,
         slots: b.slots.map((s, i) => (i === slotIndex ? { ...s, selected: !s.selected } : s)),
@@ -6051,7 +6074,7 @@ function ImageGenerator({
     if (!selEntries.length) return
 
     const indices: number[] = []
-    selEntries.forEach(({ s, i }) => {
+    selEntries.slice(0, imageGenerateCount).forEach(({ s, i }) => {
       if (s.status === 'pending' || s.status === 'failed') indices.push(i)
     })
     if (!indices.length) return
@@ -6720,7 +6743,7 @@ function ImageGenerator({
                 <ImageFormTip
                   wide
                   label="说明"
-                  text="描述画面内容、风格、构图等；将结合参考图与模型设置生成一组图片。与电商套图一致，后台仍会规划多镜头并批量出图，右侧仅展示生成历史。"
+                  text="描述你想要的画面内容、风格和构图；生成时将直接使用你输入的提示词，并结合参考图与模型参数出图。"
                 />
               </div>
               <button
@@ -7057,6 +7080,32 @@ function ImageGenerator({
                 ) : null}
               </div>
             )}
+          </div>
+
+          <div className="rounded-xl bg-black/20 px-3 py-2.5 ring-1 ring-inset ring-white/[0.08]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs text-white/70">
+                生成数量
+                <span className="ml-1 text-white/45">（默认 1 张，可选 1-6 张）</span>
+              </div>
+              <div className="relative">
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/40" />
+                <select
+                  value={imageGenerateCount}
+                  onChange={(e) => setImageGenerateCount(Math.min(6, Math.max(1, Number(e.target.value) || 1)))}
+                  className="tikgen-spec-select appearance-none rounded-lg border-0 bg-black/35 py-1.5 pl-2.5 pr-8 text-xs text-white/90 outline-none ring-1 ring-inset ring-white/[0.12] hover:ring-white/18 focus:ring-2 focus:ring-violet-400/35"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n}>
+                      {n} 张
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-white/42">
+              生成时会优先按当前勾选的场景顺序，最多输出 {imageGenerateCount} 张。
+            </p>
           </div>
 
           {outputSpecsMismatch ? (
