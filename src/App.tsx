@@ -2147,7 +2147,7 @@ function App() {
                 className="workbench-topinfo-pill flex items-center h-9 space-x-1.5 px-3 rounded-full cursor-default select-none"
                 title="当前积分"
               >
-                <Zap className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={2.25} />
+                <Zap className="workbench-topinfo-icon-zap w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
                 <span className="font-bold text-base leading-none tabular-nums">{user?.credits}</span>
                 <span className="text-sm leading-none opacity-90">积分</span>
               </div>
@@ -2155,7 +2155,7 @@ function App() {
                 className="workbench-topinfo-pill flex items-center h-9 gap-x-1.5 px-3 rounded-full cursor-default select-none"
                 title="当前套餐与到期时间"
               >
-                <Crown className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={2.25} />
+                <Crown className="workbench-topinfo-icon-crown w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
                 <span className="text-sm leading-none font-medium">{currentPackage?.name}</span>
                 <span className="text-sm leading-none opacity-80 whitespace-nowrap">至 {user?.packageExpiresAt}</span>
               </div>

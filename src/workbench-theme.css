@@ -320,8 +320,25 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.06),
     0 0 0 1px rgba(167, 139, 250, 0.12);
 }
-.workbench-root .workbench-topinfo-pill svg {
-  color: inherit !important;
+/* 积分闪电：电光青 + 轻微外发光（文字/边框仍随胶囊） */
+.workbench-root .workbench-topinfo-pill .workbench-topinfo-icon-zap {
+  color: #5eead4 !important;
+  filter: drop-shadow(0 0 5px rgba(45, 212, 191, 0.55)) drop-shadow(0 0 10px rgba(34, 211, 238, 0.25));
+  transition: color 0.15s ease, filter 0.15s ease;
+}
+.workbench-root .workbench-topinfo-pill:hover .workbench-topinfo-icon-zap {
+  color: #99f6e4 !important;
+  filter: drop-shadow(0 0 7px rgba(45, 212, 191, 0.75)) drop-shadow(0 0 14px rgba(34, 211, 238, 0.35));
+}
+/* 套餐皇冠：琥珀金 + 轻微外发光 */
+.workbench-root .workbench-topinfo-pill .workbench-topinfo-icon-crown {
+  color: #fcd34d !important;
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.55)) drop-shadow(0 0 10px rgba(245, 158, 11, 0.22));
+  transition: color 0.15s ease, filter 0.15s ease;
+}
+.workbench-root .workbench-topinfo-pill:hover .workbench-topinfo-icon-crown {
+  color: #fde68a !important;
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.72)) drop-shadow(0 0 14px rgba(245, 158, 11, 0.32));
 }
 
 .workbench-root .workbench-user-avatar {
