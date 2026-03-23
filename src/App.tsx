@@ -2143,15 +2143,21 @@ function App() {
               <button onClick={() => setShowHelp(true)} className="workbench-topicon-btn p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
                 <Library className="w-5 h-5" />
               </button>
-              <div className="flex items-center h-9 space-x-1.5 bg-gradient-to-r from-pink-50/70 to-purple-50/70 px-3 rounded-full border border-white/15">
-                <Zap className="w-3.5 h-3.5 text-pink-400/80" />
-                <span className="font-bold text-pink-500/90 text-base leading-none">{user?.credits}</span>
-                <span className="text-sm leading-none text-pink-400/90">积分</span>
+              <div
+                className="workbench-topinfo-pill flex items-center h-9 space-x-1.5 px-3 rounded-full cursor-default select-none"
+                title="当前积分"
+              >
+                <Zap className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={2.25} />
+                <span className="font-bold text-base leading-none tabular-nums">{user?.credits}</span>
+                <span className="text-sm leading-none opacity-90">积分</span>
               </div>
-              <div className="flex items-center h-9 space-x-1.5 px-3 bg-amber-50/70 rounded-full border border-white/15">
-                <Crown className="w-3 h-3 text-amber-500/80" />
-                <span className="text-sm leading-none font-medium text-amber-700/90">{currentPackage?.name}</span>
-                <span className="text-sm leading-none text-amber-600/75">至 {user?.packageExpiresAt}</span>
+              <div
+                className="workbench-topinfo-pill flex items-center h-9 gap-x-1.5 px-3 rounded-full cursor-default select-none"
+                title="当前套餐与到期时间"
+              >
+                <Crown className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={2.25} />
+                <span className="text-sm leading-none font-medium">{currentPackage?.name}</span>
+                <span className="text-sm leading-none opacity-80 whitespace-nowrap">至 {user?.packageExpiresAt}</span>
               </div>
               <div ref={userMenuRef} className="relative">
                 <button
