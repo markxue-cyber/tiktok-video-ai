@@ -1,9 +1,25 @@
+/** 商品结构化信息 + 投放定向（电商套图 / 场景规划 / 爆款风格） */
 export type ProductInfo = {
   name: string
   category: string
   sellingPoints: string
   targetAudience: string
+  /** 文案 / 提示词输出语言 */
   language: string
+  /** 目标电商平台 value，见 ECOMMERCE_TARGET_PLATFORMS */
+  targetPlatform: string
+  /** 目标市场 value，见 ECOMMERCE_TARGET_MARKETS */
+  targetMarket: string
+}
+
+export const DEFAULT_PRODUCT_INFO: ProductInfo = {
+  name: '',
+  category: '',
+  sellingPoints: '',
+  targetAudience: '',
+  language: '简体中文',
+  targetPlatform: 'unspecified',
+  targetMarket: 'china',
 }
 
 export async function parseProductInfo(params: { refImage: string; language: string; kind: 'video' | 'image' }): Promise<ProductInfo & { _mock?: boolean }> {
@@ -21,7 +37,18 @@ export async function parseProductInfo(params: { refImage: string; language: str
     }
   })()
   if (!resp.ok || !data?.success) throw new Error(data?.error || `解析失败(${resp.status})`)
-  return data.data
+  const d = data.data as Partial<ProductInfo> | undefined
+  return {
+    ...DEFAULT_PRODUCT_INFO,
+    name: String(d?.name ?? ''),
+    category: String(d?.category ?? ''),
+    sellingPoints: String(d?.sellingPoints ?? ''),
+    targetAudience: String(d?.targetAudience ?? ''),
+    language: String(d?.language ?? DEFAULT_PRODUCT_INFO.language),
+    targetPlatform: String(d?.targetPlatform ?? DEFAULT_PRODUCT_INFO.targetPlatform),
+    targetMarket: String(d?.targetMarket ?? DEFAULT_PRODUCT_INFO.targetMarket),
+    _mock: data._mock,
+  }
 }
 
 export async function generateVideoScripts(params: {
@@ -78,6 +105,9 @@ export async function imageWorkbenchAnalysis(params: {
   refImage: string
   language: string
   mode: 'full' | 'product' | 'styles'
+  /** 与 ProductInfo 一致，供爆款/分析贴合平台与市场 */
+  targetPlatform?: string
+  targetMarket?: string
 }): Promise<{
   productAnalysisText?: string
   product?: ProductInfo
@@ -87,7 +117,13 @@ export async function imageWorkbenchAnalysis(params: {
   const resp = await fetch('/api/ai/image-workbench', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      refImage: params.refImage,
+      language: params.language,
+      mode: params.mode,
+      targetPlatform: params.targetPlatform,
+      targetMarket: params.targetMarket,
+    }),
   })
   const text = await resp.text()
   const data = (() => {

@@ -61,8 +61,14 @@ import {
   imageWorkbenchAnalysis,
   parseProductInfo,
   polishImageGenPrompt,
+  DEFAULT_PRODUCT_INFO,
   type ProductInfo,
 } from './api/ai'
+import {
+  ECOMMERCE_COPY_LANGUAGES,
+  ECOMMERCE_TARGET_MARKETS,
+  ECOMMERCE_TARGET_PLATFORMS,
+} from './config/ecommerceTargeting'
 import { generateImageAPI } from './api/image'
 import { applyImageStyleTags } from './api/imageStyle'
 import { apiLogin, apiMe, apiRefresh, apiRegister, apiResendSignup, apiRecoverPassword, apiUpdatePassword } from './api/auth'
@@ -2809,7 +2815,7 @@ function VideoGenerator({
   const [errorCode, setErrorCode] = useState('UNKNOWN')
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
-  const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
+  const [productInfo, setProductInfo] = useState<ProductInfo>({ ...DEFAULT_PRODUCT_INFO })
   const [scripts, setScripts] = useState<string[]>([])
   const [scriptBatches, setScriptBatches] = useState<string[][]>([])
   const [scriptBatchIdx, setScriptBatchIdx] = useState(0)
@@ -2848,11 +2854,14 @@ function VideoGenerator({
           const pi = w.productInfo as ProductInfo | undefined
           if (pi && typeof pi === 'object') {
             setProductInfo({
+              ...DEFAULT_PRODUCT_INFO,
               name: String(pi.name || ''),
               category: String(pi.category || ''),
               sellingPoints: String(pi.sellingPoints || ''),
               targetAudience: String(pi.targetAudience || ''),
-              language: String(pi.language || '简体中文'),
+              language: String(pi.language || DEFAULT_PRODUCT_INFO.language),
+              targetPlatform: String((pi as ProductInfo).targetPlatform || DEFAULT_PRODUCT_INFO.targetPlatform),
+              targetMarket: String((pi as ProductInfo).targetMarket || DEFAULT_PRODUCT_INFO.targetMarket),
             })
           }
           setScripts(Array.isArray(w.scripts) ? w.scripts.map(String) : [])
@@ -4042,7 +4051,7 @@ function ImageGenerator({
   const [historyLightbox, setHistoryLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
-  const [productInfo, setProductInfo] = useState<ProductInfo>({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
+  const [productInfo, setProductInfo] = useState<ProductInfo>({ ...DEFAULT_PRODUCT_INFO })
   const [optimizedPrompt, setOptimizedPrompt] = useState('')
   const [optimizedNegativePrompt, setOptimizedNegativePrompt] = useState('')
   const [promptParts, setPromptParts] = useState<any>({})
@@ -4179,12 +4188,16 @@ function ImageGenerator({
         setProductAnalysisText(String(wsIdb.productAnalysisText ?? ''))
         const pi = wsIdb.productInfo
         if (pi && typeof pi === 'object') {
+          const p = pi as ProductInfo
           setProductInfo({
-            name: String((pi as { name?: string }).name ?? ''),
-            category: String((pi as { category?: string }).category ?? ''),
-            sellingPoints: String((pi as { sellingPoints?: string }).sellingPoints ?? ''),
-            targetAudience: String((pi as { targetAudience?: string }).targetAudience ?? ''),
-            language: String((pi as { language?: string }).language ?? '简体中文'),
+            ...DEFAULT_PRODUCT_INFO,
+            name: String(p.name ?? ''),
+            category: String(p.category ?? ''),
+            sellingPoints: String(p.sellingPoints ?? ''),
+            targetAudience: String(p.targetAudience ?? ''),
+            language: String(p.language ?? DEFAULT_PRODUCT_INFO.language),
+            targetPlatform: String(p.targetPlatform ?? DEFAULT_PRODUCT_INFO.targetPlatform),
+            targetMarket: String(p.targetMarket ?? DEFAULT_PRODUCT_INFO.targetMarket),
           })
         }
         if (!isSimpleImageGen) {
@@ -4649,7 +4662,7 @@ function ImageGenerator({
     setHotStyles([])
     setSelectedHotStyleIndex(0)
     setProductAnalysisText('')
-    setProductInfo({ name: '', category: '', sellingPoints: '', targetAudience: '', language: '简体中文' })
+    setProductInfo({ ...DEFAULT_PRODUCT_INFO })
     setSceneRunBoard(null)
     setPrompt('')
     setOptimizedPrompt('')
@@ -5042,10 +5055,13 @@ function ImageGenerator({
         refImage: refImageDataUrl,
         language: productInfo.language || '简体中文',
         mode: 'product',
+        targetPlatform: productInfo.targetPlatform,
+        targetMarket: productInfo.targetMarket,
       })
       if (jobId !== aiJobRef.current) return
       gotProductResponse = true
       nextProduct = {
+        ...productInfo,
         name: wProduct.product?.name || '',
         category: wProduct.product?.category || '',
         sellingPoints: wProduct.product?.sellingPoints || '',
@@ -5063,6 +5079,8 @@ function ImageGenerator({
         refImage: refImageDataUrl,
         language: nextProduct.language || '简体中文',
         mode: 'styles',
+        targetPlatform: nextProduct.targetPlatform,
+        targetMarket: nextProduct.targetMarket,
       })
       if (jobId !== aiJobRef.current) return
       styles = sanitizeWorkbenchStylesFromApi(wStyles.styles || [])
@@ -5149,9 +5167,12 @@ function ImageGenerator({
         refImage: refImageDataUrl,
         language: productInfo.language || '简体中文',
         mode: 'product',
+        targetPlatform: productInfo.targetPlatform,
+        targetMarket: productInfo.targetMarket,
       })
       if (jobId !== aiJobRef.current) return
       nextProduct = {
+        ...productInfo,
         name: w.product?.name || '',
         category: w.product?.category || '',
         sellingPoints: w.product?.sellingPoints || '',
@@ -5226,6 +5247,8 @@ function ImageGenerator({
         refImage: refImageDataUrl,
         language: productInfo.language || '简体中文',
         mode: 'styles',
+        targetPlatform: productInfo.targetPlatform,
+        targetMarket: productInfo.targetMarket,
       })
       if (jobId !== aiJobRef.current) return
       styles = sanitizeWorkbenchStylesFromApi(w.styles || [])
@@ -6603,6 +6626,81 @@ function ImageGenerator({
           ) : null}
         </section>
 
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="tikgen-module-title text-xs font-semibold uppercase tracking-wide">投放定向</div>
+            <ImageFormTip
+              wide
+              label="说明"
+              text={`目标平台、目标市场与文案语言会参与：商品分析语境、爆款风格 DNA、6 场景规划与出图主描述生成，使主图习惯、生活场景符号与色调更贴近投放渠道。
+
+修改后建议重新「重新分析」或「免费生成预览」以刷新场景文案；不改变参考图识别结果。`}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <label htmlFor="tikgen-target-platform" className="text-xs font-medium text-white/70">
+                目标平台
+              </label>
+              <div className="relative min-w-0">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-target-platform"
+                  value={productInfo.targetPlatform}
+                  onChange={(e) => setProductInfo({ ...productInfo, targetPlatform: e.target.value })}
+                  className="tikgen-spec-select w-full min-w-0 appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
+                >
+                  {ECOMMERCE_TARGET_PLATFORMS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col gap-1">
+              <label htmlFor="tikgen-target-market" className="text-xs font-medium text-white/70">
+                目标市场
+              </label>
+              <div className="relative min-w-0">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-target-market"
+                  value={productInfo.targetMarket}
+                  onChange={(e) => setProductInfo({ ...productInfo, targetMarket: e.target.value })}
+                  className="tikgen-spec-select w-full min-w-0 appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
+                >
+                  {ECOMMERCE_TARGET_MARKETS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col gap-1">
+              <label htmlFor="tikgen-copy-language" className="text-xs font-medium text-white/70">
+                文案语言
+              </label>
+              <div className="relative min-w-0">
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <select
+                  id="tikgen-copy-language"
+                  value={productInfo.language}
+                  onChange={(e) => setProductInfo({ ...productInfo, language: e.target.value })}
+                  className="tikgen-spec-select w-full min-w-0 appearance-none rounded-lg border-0 bg-black/35 py-2.5 pl-3 pr-9 text-sm text-white/92 outline-none ring-1 ring-inset ring-white/[0.1] transition-shadow hover:ring-white/16 focus:ring-2 focus:ring-violet-400/35"
+                >
+                  {ECOMMERCE_COPY_LANGUAGES.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {aiError ? (
           <div className="rounded-lg border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200/95">{aiError}</div>
         ) : null}
@@ -6670,7 +6768,7 @@ function ImageGenerator({
               <ImageFormTip
                 wide
                 label="说明"
-                text={`「重新分析」会同时刷新商品分析与 4 套爆款风格（模型按「DNA + 场景增量」策略生成，减少与白底/生活/氛围格冲突）。
+                text={`「重新分析」会同时刷新商品分析与 4 套爆款风格（模型按「DNA + 场景增量」策略生成，并结合上方「投放定向」：目标平台、目标市场、文案语言）。
 
 【爆款风格 和 6 场景分别管什么】
 · 爆款风格 = 整条素材的「总路线」：气质、叙事、光影基调（会写进当前出图主描述）。

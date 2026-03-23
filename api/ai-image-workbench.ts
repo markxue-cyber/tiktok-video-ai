@@ -1,6 +1,7 @@
 /**
  * 图片工作台：商品分析 + 爆款风格（GPT-4o 视觉，主参考图为第一张上传图）
  */
+import { buildEcommerceTargetingBlock } from './_ecommerceTargetingPrompt.js'
 type OpenAICompatContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
@@ -183,8 +184,13 @@ export default async function handler(req: any, res: any) {
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const model = process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o'
 
-    const { refImage, language, mode } = req.body || {}
+    const { refImage, language, mode, targetPlatform, targetMarket } = req.body || {}
     const lang = String(language || '简体中文')
+    const targetingBlock = buildEcommerceTargetingBlock({
+      targetPlatform: String(targetPlatform || 'unspecified'),
+      targetMarket: String(targetMarket || 'china'),
+      copyLanguage: lang,
+    })
     const m = String(mode || 'full') as 'full' | 'product' | 'styles'
 
     if (!refImage) return res.status(400).json({ success: false, error: '缺少refImage（请使用第一张主参考图）' })
@@ -232,6 +238,7 @@ export default async function handler(req: any, res: any) {
       '尺寸参数：（图中有标注则写清；没有则写「未标注」）',
       '',
       'product 四字段需与 productAnalysisText 一致；看不清的信息写「未知」，禁止编造功效/认证/参数。',
+      '若用户消息含【投放定向】（目标平台/市场/文案语言）：期望场景与目标人群可适度贴合该市场常见用途与审美，但仍仅依据图中可见信息，禁止编造本地化法规、认证、销量与医疗功效。',
       '禁止输出 Markdown、代码块或解释。',
     ].join('\n')
 
@@ -248,6 +255,7 @@ export default async function handler(req: any, res: any) {
       '- 明确一句：白底主图、虚化生活场、强氛围夜景等由后续「场景规划」分格追加，本段不写死与白底主图冲突的全图背景。',
       '- 结尾可提醒：默认棚拍级干净基底/电商标准即可，勿强制暗色全图底。',
       '四套方案须在 DNA 维度（冷暖、软硬光、色彩倾向、情绪、材质强调点）上有明显差异；禁止编造未在图中出现的参数、功效、认证、续航数字。',
+      '须响应用户消息中的【投放定向】：气质与光型适配目标电商平台主图习惯（如 Amazon 白底清晰、TikTok 动感生活、东南亚明亮暖调等），并与 DNA+6 场景分层兼容，不写死与白底主图互斥的全图暗环境。',
       '不要输出 Markdown 或其它字段。',
     ].join('\n')
 
@@ -261,12 +269,13 @@ export default async function handler(req: any, res: any) {
       'productAnalysisText 格式要求：多行中文，依次包含小节：产品名称 / 产品类目 / 产品卖点 / 目标人群 / 期望场景 / 尺寸参数（规则同单任务）。',
       'styles：恰好 4 个；title 必须恰好 4 个汉字；description 80–160 字，侧重 DNA（材质/光型/色调气质/构图偏好），避免写死整张图唯一强环境。',
       '每个 imagePrompt：180–420 字，为「拍法基因 DNA」主描述，非单张背景合同。开头须「参考图同款商品保持一致」；多写材质与光型气质，少写「整图只能是黑底/夜景墙」；须说明或与下列策略一致：白底/生活/氛围由后续 6 场景分格追加；禁止编造图中没有的信息。',
-      '四套方案在 DNA 维度须互不重复且可和 6 场景叠加而不矛盾。',
+      '四套方案在 DNA 维度须互不重复且可和 6 场景叠加而不矛盾；须落实用户消息中的【投放定向】（平台主图习惯、市场审美、文案语言）。',
       '不要输出 Markdown、代码块或解释。',
     ].join('\n')
 
     const userImage: OpenAICompatContentPart[] = [
       { type: 'text', text: `输出语言：${lang}` },
+      { type: 'text', text: targetingBlock },
       { type: 'text', text: '以下为主参考商品图（若用户有多张图，仅以本张为准）。' },
       { type: 'image_url', image_url: { url: String(refImage) } },
     ]

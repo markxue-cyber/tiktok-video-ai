@@ -1,0 +1,60 @@
+/** 电商套图 · 投放定向（目标平台 / 目标市场 / 文案语言） */
+
+export const ECOMMERCE_TARGET_PLATFORMS: { value: string; label: string }[] = [
+  { value: 'unspecified', label: '通用 / 不限' },
+  { value: 'amazon', label: 'Amazon' },
+  { value: 'ebay', label: 'eBay' },
+  { value: 'shopify', label: 'Shopify 独立站' },
+  { value: 'walmart', label: 'Walmart' },
+  { value: 'etsy', label: 'Etsy' },
+  { value: 'tiktok_shop', label: 'TikTok Shop' },
+  { value: 'shopee', label: 'Shopee' },
+  { value: 'lazada', label: 'Lazada' },
+  { value: 'tokopedia', label: 'Tokopedia' },
+  { value: 'mercado_libre', label: 'Mercado Libre' },
+  { value: 'taobao_tmall', label: '淘宝 / 天猫' },
+  { value: 'jd', label: '京东' },
+  { value: 'pdd', label: '拼多多' },
+  { value: 'douyin_shop', label: '抖音电商' },
+  { value: 'kuaishou_shop', label: '快手电商' },
+  { value: 'xiaohongshu', label: '小红书电商' },
+  { value: 'coupang', label: 'Coupang' },
+  { value: 'rakuten', label: '乐天 / Rakuten' },
+  { value: 'allegro', label: 'Allegro' },
+  { value: 'other_platform', label: '其他平台' },
+]
+
+export const ECOMMERCE_TARGET_MARKETS: { value: string; label: string }[] = [
+  { value: 'china', label: '中国' },
+  { value: 'usa', label: '美国' },
+  { value: 'europe', label: '欧洲' },
+  { value: 'australia', label: '澳大利亚' },
+  { value: 'southeast_asia', label: '东南亚' },
+  { value: 'japan', label: '日本' },
+  { value: 'korea', label: '韩国' },
+  { value: 'middle_east', label: '中东' },
+  { value: 'latin_america', label: '拉丁美洲' },
+  { value: 'other', label: '其他' },
+]
+
+/** 文案 / 提示词输出语言（与画面内可读文字倾向一致时可注明） */
+export const ECOMMERCE_COPY_LANGUAGES: { value: string; label: string }[] = [
+  { value: '简体中文', label: '简体中文' },
+  { value: '繁体中文', label: '繁体中文' },
+  { value: 'English', label: 'English（英语）' },
+  { value: 'Español', label: 'Español（西班牙语）' },
+  { value: 'Português', label: 'Português（葡萄牙语）' },
+  { value: 'Français', label: 'Français（法语）' },
+  { value: 'Deutsch', label: 'Deutsch（德语）' },
+  { value: 'Italiano', label: 'Italiano（意大利语）' },
+  { value: '日本語', label: '日本語' },
+  { value: '한국어', label: '한국어（韩语）' },
+  { value: 'ไทย', label: 'ไทย（泰语）' },
+  { value: 'Tiếng Việt', label: 'Tiếng Việt（越南语）' },
+  { value: 'Bahasa Indonesia', label: 'Bahasa Indonesia（印尼语）' },
+  { value: 'Bahasa Melayu', label: 'Bahasa Melayu（马来语）' },
+  { value: 'العربية', label: 'العربية（阿拉伯语）' },
+  { value: 'Русский', label: 'Русский（俄语）' },
+  { value: 'Türkçe', label: 'Türkçe（土耳其语）' },
+  { value: '其他语言', label: '其他语言' },
+]

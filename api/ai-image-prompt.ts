@@ -1,3 +1,5 @@
+import { buildEcommerceTargetingBlock } from './_ecommerceTargetingPrompt.js'
+
 async function callOpenAICompatJSON<T>({
   apiKey,
   baseUrl,
@@ -133,6 +135,11 @@ export default async function handler(req, res) {
             role: 'user',
             content: [
               `输出语言：${language || product.language || '简体中文'}`,
+              buildEcommerceTargetingBlock({
+                targetPlatform: product?.targetPlatform,
+                targetMarket: product?.targetMarket,
+                copyLanguage: String(language || product?.language || '简体中文'),
+              }),
               `模式：${String(sceneMode || 'clean')}（clean=主图干净；lite=轻场景）`,
               aspectRatio || resolution ? `画幅约束：比例=${aspectRatio || '未指定'}，目标分辨率档位=${resolution || '未指定'}` : '',
               hotSellingStyle?.description || hotSellingStyle?.title
