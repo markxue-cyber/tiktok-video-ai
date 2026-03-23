@@ -1917,6 +1917,7 @@ function App() {
                 collapsed
                 icon={<Layers className="w-5 h-5" />}
                 label="电商套图"
+                badge="推荐"
                 active={mainNav === 'image' && imageSubNav === 'ecommerce'}
                 onClick={() => goImageSubNav('ecommerce')}
               />
@@ -1998,6 +1999,7 @@ function App() {
                   collapsed={false}
                   icon={<Layers className="w-4 h-4" />}
                   label="电商套图"
+                  badge="推荐"
                   active={mainNav === 'image' && imageSubNav === 'ecommerce'}
                   onClick={() => goImageSubNav('ecommerce')}
                 />
@@ -2318,7 +2320,7 @@ function ImageToolsWorkbench({
   )
 }
 
-function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, clickable = true }: any) {
+function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, clickable = true, badge = '' }: any) {
   return (
     <button
       onMouseEnter={onMouseEnter}
@@ -2333,13 +2335,22 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
       }`}
     >
       {icon}
-      {!collapsed && <span className="font-medium">{label}</span>}
+      {!collapsed && (
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="font-medium truncate">{label}</span>
+          {badge ? (
+            <span className="inline-flex items-center rounded-full bg-amber-500/90 px-1.5 py-[1px] text-[10px] font-semibold leading-none text-amber-950">
+              {badge}
+            </span>
+          ) : null}
+        </span>
+      )}
       {collapsed && <span className="workbench-nav-tip">{label}</span>}
     </button>
   )
 }
 
-function NavSecondary({ icon, label, active, onClick, collapsed, className = '' }: any) {
+function NavSecondary({ icon, label, active, onClick, collapsed, className = '', badge = '' }: any) {
   return (
     <button
       onClick={onClick}
@@ -2349,7 +2360,16 @@ function NavSecondary({ icon, label, active, onClick, collapsed, className = '' 
       } ${className}`}
     >
       {icon}
-      {!collapsed && <span>{label}</span>}
+      {!collapsed && (
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="truncate">{label}</span>
+          {badge ? (
+            <span className="inline-flex items-center rounded-full bg-amber-500/90 px-1.5 py-[1px] text-[10px] font-semibold leading-none text-amber-950">
+              {badge}
+            </span>
+          ) : null}
+        </span>
+      )}
     </button>
   )
 }
