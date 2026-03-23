@@ -4062,6 +4062,8 @@ function ImageGenerator({
   const [simplePromptPolishBusy, setSimplePromptPolishBusy] = useState(false)
   /** 简版批量出图：切换 Tab / 卸载时中止未完成的 fetch，避免后台继续占并发 */
   const imageGenSimpleBatchAbortRef = useRef<AbortController | null>(null)
+  /** 记录简版面板是否曾处于可见，用于仅在「可见→不可见」时 abort，避免 effect cleanup 误杀（如 React Strict Mode 重挂载） */
+  const prevSimpleImageGenVisibleRef = useRef<boolean | null>(null)
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
@@ -4396,14 +4398,12 @@ function ImageGenerator({
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
 
-  /** 简版：离开本 Tab 或卸载时中止未完成的出图请求（整页刷新无法中止已到达服务端的任务） */
+  /** 简版：仅在面板从可见变为不可见时中止出图（切走子导航/离开图片模块），不在每次 effect cleanup 中止 */
   useEffect(() => {
     if (!isSimpleImageGen) return
-    if (!visible) {
-      imageGenSimpleBatchAbortRef.current?.abort()
-      imageGenSimpleBatchAbortRef.current = null
-    }
-    return () => {
+    const prev = prevSimpleImageGenVisibleRef.current
+    prevSimpleImageGenVisibleRef.current = visible
+    if (prev === true && visible === false) {
       imageGenSimpleBatchAbortRef.current?.abort()
       imageGenSimpleBatchAbortRef.current = null
     }
@@ -4610,8 +4610,9 @@ function ImageGenerator({
     })
 
     if (built.status === 'failed') {
-      setGenErrorText(built.errorMessage || '生成失败')
-      setGenErrorCode('UNKNOWN')
+      const failLine = built.errorMessage || '生成失败'
+      setGenErrorText(failLine)
+      setGenErrorCode(/\b已取消\b/.test(failLine) ? 'CANCELLED' : 'UNKNOWN')
     } else if (built.status === 'completed' && built.errorMessage) {
       setGenErrorText(built.errorMessage)
       setGenErrorCode('PARTIAL')
@@ -7272,7 +7273,15 @@ function ImageGenerator({
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <span className="break-words">
               <span className="font-medium">上次失败</span> · {genErrorText}
-              <span className="text-red-300/80 ml-1">（{genErrorCode}）</span>
+              <span className="text-red-300/80 ml-1">
+                （
+                {genErrorCode === 'CANCELLED'
+                  ? '已中断'
+                  : genErrorCode === 'PARTIAL'
+                    ? '部分失败'
+                    : genErrorCode}
+                ）
+              </span>
             </span>
             {genErrorCode !== 'QUOTA_EXHAUSTED' ? (
               <button
