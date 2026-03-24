@@ -6935,13 +6935,18 @@ function ImageGenerator({
                   aria-live="polite"
                   aria-busy="true"
                 >
-                  <div
-                    className="h-10 w-10 shrink-0 rounded-full border-2 border-white/[0.18] border-t-white/55 animate-spin"
-                    aria-hidden
-                  />
-                  <div className="space-y-1.5">
-                    <p className="text-sm font-medium text-white/95 tracking-tight">正在分析产品图片…</p>
-                    <p className="text-xs text-white/45">产品卖点生成中…</p>
+                  <div className="w-full max-w-[520px] space-y-3">
+                    <div className="workbench-hs-skeleton-slot workbench-skeleton-shimmer relative overflow-hidden rounded-2xl bg-[#16161c] ring-1 ring-inset ring-white/[0.1] px-4 py-3 min-h-[6.25rem]">
+                      <div className="relative z-[1] h-4 w-20 rounded-md bg-white/[0.08]" />
+                      <div className="relative z-[1] mt-3 space-y-2">
+                        <div className="h-2 w-full rounded bg-white/[0.06]" />
+                        <div className="h-2 rounded bg-white/[0.06] w-[85%]" />
+                        <div className="h-2 rounded bg-white/[0.06] w-[60%]" />
+                      </div>
+                    </div>
+                    <p className="workbench-oneclick-status text-center text-[11px] text-white/42">
+                      正在分析产品图片，生成商品卖点…
+                    </p>
                   </div>
                 </div>
               ) : null}
