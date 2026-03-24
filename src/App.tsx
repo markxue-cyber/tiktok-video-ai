@@ -6217,6 +6217,8 @@ function ImageGenerator({
     productAnalysisOnlyBusy ||
     (promptRegenBusy && promptRegenSource === 'product') ||
     isAiBusy
+  const hotStylesAnalyzing = hotStylesReanalyzeBusy || (workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles')
+  const hotStyleCardsEditable = !hotStylesAnalyzing
   const hotStylesReanalyzeLocked =
     workbenchFullAnalysisBusy ||
     hotStylesReanalyzeBusy ||
@@ -7092,6 +7094,7 @@ function ImageGenerator({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
+                          if (!hotStyleCardsEditable) return
                           setStyleCardEditDraft({
                             title: st.title,
                             description: st.description,
@@ -7099,8 +7102,13 @@ function ImageGenerator({
                           })
                           setStyleCardEditIndex(idx)
                         }}
-                        className="shrink-0 rounded-md bg-black/40 p-1.5 text-violet-200/95 ring-1 ring-inset ring-white/10 transition-colors hover:bg-violet-500/15 hover:ring-violet-400/35"
-                        title="编辑方案"
+                        disabled={!hotStyleCardsEditable}
+                        className={`shrink-0 rounded-md bg-black/40 p-1.5 text-violet-200/95 ring-1 ring-inset ring-white/10 transition-colors ${
+                          hotStyleCardsEditable
+                            ? 'hover:bg-violet-500/15 hover:ring-violet-400/35'
+                            : 'cursor-not-allowed opacity-45'
+                        }`}
+                        title={hotStyleCardsEditable ? '编辑方案' : '爆款风格分析中，暂不可编辑'}
                       >
                         <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
                       </button>
@@ -7982,6 +7990,7 @@ function ImageGenerator({
               <input
                 value={styleCardEditDraft.title}
                 onChange={(e) => setStyleCardEditDraft((d) => ({ ...d, title: e.target.value }))}
+                disabled={!hotStyleCardsEditable}
                 className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm"
               />
             </div>
@@ -7991,6 +8000,7 @@ function ImageGenerator({
                 value={styleCardEditDraft.description}
                 onChange={(e) => setStyleCardEditDraft((d) => ({ ...d, description: e.target.value }))}
                 rows={3}
+                disabled={!hotStyleCardsEditable}
                 className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm resize-none"
               />
             </div>
@@ -8000,6 +8010,7 @@ function ImageGenerator({
                 value={styleCardEditDraft.imagePrompt}
                 onChange={(e) => setStyleCardEditDraft((d) => ({ ...d, imagePrompt: e.target.value }))}
                 rows={8}
+                disabled={!hotStyleCardsEditable}
                 className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/12 text-white text-sm resize-y min-h-[160px]"
               />
             </div>
@@ -8014,7 +8025,9 @@ function ImageGenerator({
             </button>
             <button
               type="button"
+              disabled={!hotStyleCardsEditable}
               onClick={() => {
+                if (!hotStyleCardsEditable) return
                 const idx = styleCardEditIndex
                 if (idx === null) return
                 const title = styleCardEditDraft.title.trim()
@@ -8029,7 +8042,7 @@ function ImageGenerator({
                 }
                 setStyleCardEditIndex(null)
               }}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45"
             >
               保存
             </button>
