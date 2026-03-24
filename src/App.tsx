@@ -6271,7 +6271,10 @@ function ImageGenerator({
     productAnalysisOnlyBusy ||
     (promptRegenBusy && promptRegenSource === 'product') ||
     isAiBusy
-  const hotStylesAnalyzing = hotStylesReanalyzeBusy || (workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles')
+  const hotStylesAnalyzing =
+    hotStylesReanalyzeBusy ||
+    (workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles') ||
+    (promptRegenBusy && promptRegenSource === 'oneClick')
   const hotStyleCardsEditable = !hotStylesAnalyzing
   const hotStylesReanalyzeLocked =
     workbenchFullAnalysisBusy ||
