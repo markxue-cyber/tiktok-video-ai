@@ -103,13 +103,11 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   <img src={asset('onetap-5.png')} alt="结构与工艺视角" loading="lazy" decoding="async" />
                 </div>
                 <div className="lg2-onetap-tile lg2-onetap-tile--wide">
-                  {/* 底栏过扁时 cover 易裁到地面/墙面，见 landing-v2.css object-position */}
                   <img
                     src={asset('onetap-3.png')}
                     alt="对比与陈列构图"
                     loading="eager"
                     decoding="async"
-                    className="lg2-onetap-wide-img"
                   />
                 </div>
               </div>
@@ -270,14 +268,14 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
 
           <article className="lg2-m">
             <div className="lg2-m-grid">
-              <div className="lg2-media lg2-upscale">
+              <div className="lg2-media lg2-upscale lg2-upscale-square">
                 <div className="lg2-upscale-half">
                   <span className="lg2-cap">放大前</span>
-                  <img src={asset('upscale-before.png')} alt="放大前" />
+                  <img src={asset('upscale-before.png')} alt="放大前：1:1 完整展示" />
                 </div>
                 <div className="lg2-upscale-half">
                   <span className="lg2-cap">放大后</span>
-                  <img src={asset('upscale-after.png')} alt="放大后" />
+                  <img src={asset('upscale-after.png')} alt="放大后：1:1 完整展示" />
                 </div>
               </div>
               <div className="lg2-m-info">
@@ -287,6 +285,42 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                 <ul>
                   <li>提升分辨率，边缘与纹理更利落</li>
                   <li>适合主图、放大查看与印刷物料</li>
+                </ul>
+                <button type="button" className="lg2-m-cta" onClick={goStart}>
+                  立即去使用
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <article className="lg2-m">
+            <div className="lg2-m-grid">
+              <div className="lg2-media lg2-translate-stage" aria-label="图片翻译案例：中英文切换">
+                <div className="lg2-translate-viewport">
+                  <img
+                    className="lg2-translate-layer lg2-translate-zh"
+                    src={asset('translate-zh.png')}
+                    alt="中文主图案例"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <img
+                    className="lg2-translate-layer lg2-translate-en"
+                    src={asset('translate-en.png')}
+                    alt="译为英文后的主图"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <span className="lg2-translate-hint">中文 · English 自动轮播</span>
+              </div>
+              <div className="lg2-m-info">
+                <span className="lg2-k">图片翻译</span>
+                <span className="lg2-mini">跨境上架</span>
+                <h3>主图文案一键译成目标市场语言</h3>
+                <ul>
+                  <li>尽量保留版式与视觉结构，减少重做多语言主图</li>
+                  <li>适合多站点、多语种同步上新</li>
                 </ul>
                 <button type="button" className="lg2-m-cta" onClick={goStart}>
                   立即去使用

@@ -181,7 +181,7 @@
 
 /* 玻璃主面板：对齐 .tikgen-panel 语言 */
 .lg2-root .lg2-hero {
-  border: 1px solid var(--lg2-glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.055);
   border-radius: 28px;
   padding: 58px clamp(32px, 4.5vw, 72px);
   min-height: 540px;
@@ -189,8 +189,7 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow:
-    var(--lg2-shadow-deep),
-    0 0 0 1px rgba(124, 58, 237, 0.12),
+    0 28px 72px rgba(3, 6, 18, 0.34),
     var(--lg2-inset-top);
   display: grid;
   align-content: center;
@@ -252,22 +251,19 @@
 .lg2-root .lg2-modules {
   margin-top: 28px;
   display: grid;
-  gap: 20px;
+  gap: 32px;
 }
 
 .lg2-root .lg2-m {
-  border: 1px solid var(--lg2-glass-border);
-  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 28px;
   background: var(--lg2-glass);
-  padding: 28px;
+  padding: clamp(22px, 2.5vw, 32px);
   position: relative;
   overflow: hidden;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  box-shadow:
-    0 18px 48px rgba(3, 6, 18, 0.4),
-    0 0 0 1px rgba(124, 58, 237, 0.08),
-    var(--lg2-inset-top);
+  box-shadow: 0 22px 56px rgba(3, 6, 18, 0.3), var(--lg2-inset-top);
   isolation: isolate;
 }
 
@@ -278,7 +274,7 @@
   right: -10%;
   top: -35%;
   height: 180px;
-  background: radial-gradient(45% 100% at 50% 0%, rgba(167, 139, 250, 0.18), transparent 72%);
+  background: radial-gradient(45% 100% at 50% 0%, rgba(167, 139, 250, 0.1), transparent 72%);
   pointer-events: none;
 }
 
@@ -295,20 +291,18 @@
   grid-template-columns: 1fr 1.55fr;
 }
 
-/* 内嵌画框：略像工作台参考区深色底 + 细描边 */
+/* 案例媒体区：弱化方框，用轻阴影与渐变底承托 1:1 contain */
 .lg2-root .lg2-media {
   min-height: 380px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 22px;
   background:
-    radial-gradient(260px 140px at 22% 18%, rgba(124, 58, 237, 0.22), transparent 60%),
-    radial-gradient(240px 120px at 78% 78%, rgba(34, 211, 238, 0.12), transparent 58%),
-    rgba(0, 0, 0, 0.32);
+    radial-gradient(120% 80% at 30% 20%, rgba(124, 58, 237, 0.1), transparent 55%),
+    radial-gradient(100% 70% at 80% 90%, rgba(34, 211, 238, 0.06), transparent 50%),
+    rgba(4, 6, 16, 0.38);
   position: relative;
   overflow: hidden;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 14px 44px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -355,13 +349,12 @@
   position: relative;
   min-height: 0;
   align-self: stretch;
-  border-radius: 15px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.28);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 10px 32px rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(ellipse at center, rgba(28, 30, 48, 0.55) 0%, rgba(6, 8, 18, 0.92) 100%);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   isolation: isolate;
   opacity: 0;
   transform: translateY(22px) scale(0.97);
@@ -442,21 +435,17 @@
   min-height: 228px;
 }
 
-/* 底栏过扁时 cover 易裁到地面/留白，上移焦点到主体 */
-.lg2-root .lg2-onetap-tile--wide img.lg2-onetap-wide-img {
-  object-position: center 28%;
-}
-
+/* 1:1 素材完整入画：contain + 深色衬底 */
 .lg2-root .lg2-onetap-tile img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   max-width: none;
   z-index: 1;
-  transform: scale(1.02);
+  transform: scale(1);
   transition: transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -484,7 +473,7 @@
 }
 
 .lg2-root .lg2-onetap-tile:hover img {
-  transform: scale(1.08);
+  transform: scale(1.04);
 }
 
 .lg2-root .lg2-onetap-tile--hero:hover img {
@@ -542,16 +531,16 @@
 }
 
 .lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero img {
-  animation: lg2-onetap-ken 14s ease-in-out infinite alternate;
+  animation: lg2-onetap-ken 16s ease-in-out infinite alternate;
 }
 
 @keyframes lg2-onetap-ken {
   from {
-    transform: scale(1.02) translate(0, 0);
+    transform: scale(1) translate(0, 0);
   }
 
   to {
-    transform: scale(1.09) translate(-1.2%, -0.8%);
+    transform: scale(1.03) translate(-0.4%, -0.3%);
   }
 }
 
@@ -567,11 +556,11 @@
   position: relative;
   height: 100%;
   min-height: 392px;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(8, 10, 22, 0.72));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.38), rgba(8, 10, 22, 0.65));
+  box-shadow: none;
   mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
 }
@@ -606,28 +595,30 @@
 .lg2-root .lg2-batch-film-panel {
   position: relative;
   flex: 0 0 auto;
-  width: clamp(210px, 24vw, 300px);
-  height: clamp(300px, 36vw, 380px);
+  width: clamp(200px, 20vw, 292px);
+  aspect-ratio: 1;
+  height: auto;
   margin: 0;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: radial-gradient(ellipse at center, rgba(26, 28, 44, 0.6) 0%, rgba(5, 7, 16, 0.95) 100%);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
 }
 
 .lg2-root .lg2-batch-film-panel img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
-  transform: scale(1.02);
+  transform: scale(1);
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .lg2-root .lg2-batch-film-panel:hover img {
-  transform: scale(1.07);
+  transform: scale(1.035);
 }
 
 .lg2-root .lg2-batch-film-panel figcaption {
@@ -659,24 +650,20 @@
   position: relative;
   height: 100%;
   min-height: 392px;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
   perspective: 1100px;
   transform-style: preserve-3d;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: radial-gradient(120% 80% at 50% 100%, rgba(124, 58, 237, 0.12), transparent 55%),
-    rgba(0, 0, 0, 0.36);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 14px 44px rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: radial-gradient(120% 80% at 50% 100%, rgba(124, 58, 237, 0.1), transparent 55%),
+    rgba(0, 0, 0, 0.34);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.26);
 }
 
 .lg2-root .lg2-scene-slide {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  inset: 10px;
+  object-fit: contain;
   display: block;
   max-width: none;
   z-index: 0;
@@ -770,8 +757,10 @@
   }
 
   .lg2-root .lg2-batch-film-panel {
-    width: 100%;
-    height: 240px;
+    width: min(100%, 300px);
+    margin-inline: auto;
+    aspect-ratio: 1;
+    height: auto;
   }
 
   .lg2-root .lg2-scene-perspective {
@@ -863,24 +852,31 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
-.lg2-root .lg2-media.lg2-upscale {
+/* 高清放大：双 1:1 方格，contain 完整展示 */
+.lg2-root .lg2-media.lg2-upscale.lg2-upscale-square {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  min-height: 380px;
-  padding: 0;
-  background: rgba(0, 0, 0, 0.36);
+  gap: clamp(12px, 2vw, 20px);
+  min-height: 0;
+  padding: clamp(14px, 2vw, 22px);
+  align-items: center;
+  justify-items: center;
+  background: rgba(4, 6, 16, 0.35);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
 
 .lg2-root .lg2-upscale-half {
   position: relative;
-  min-height: 380px;
+  width: 100%;
+  max-width: min(100%, 400px);
+  aspect-ratio: 1;
+  margin: 0 auto;
   overflow: hidden;
-}
-
-.lg2-root .lg2-upscale-half:first-child {
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: radial-gradient(ellipse at center, rgba(30, 32, 48, 0.5) 0%, rgba(6, 8, 18, 0.92) 100%);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
 }
 
 .lg2-root .lg2-upscale-half img {
@@ -888,23 +884,113 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   max-width: none;
 }
 
 .lg2-root .lg2-upscale-half .lg2-cap {
   position: absolute;
-  top: 14px;
-  left: 14px;
+  top: 12px;
+  left: 12px;
   z-index: 2;
   font-size: 11px;
   padding: 4px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(12, 14, 30, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 14, 30, 0.78);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: rgba(235, 242, 255, 0.9);
+}
+
+/* 图片翻译：双图淡入淡出轮播（与场景 3D、套图 Bento 区分） */
+.lg2-root .lg2-media.lg2-translate-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: clamp(16px, 2.5vw, 28px);
+}
+
+.lg2-root .lg2-translate-viewport {
+  position: relative;
+  width: min(100%, 440px);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: radial-gradient(ellipse at center, rgba(28, 30, 48, 0.55) 0%, rgba(6, 8, 18, 0.95) 100%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.26);
+  overflow: hidden;
+}
+
+.lg2-root .lg2-translate-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+.lg2-root .lg2-translate-zh {
+  animation: lg2-translate-zh 10s ease-in-out infinite;
+  z-index: 1;
+}
+
+.lg2-root .lg2-translate-en {
+  animation: lg2-translate-en 10s ease-in-out infinite;
+  z-index: 2;
+}
+
+@keyframes lg2-translate-zh {
+  0%,
+  42% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  48%,
+  96% {
+    opacity: 0;
+    transform: scale(1.015);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes lg2-translate-en {
+  0%,
+  42% {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+
+  48%,
+  96% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+}
+
+.lg2-root .lg2-translate-hint {
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(200, 210, 255, 0.72);
+  text-align: center;
 }
 
 .lg2-root .lg2-cta-row {
@@ -945,7 +1031,8 @@
   .lg2-root .lg2-hero,
   .lg2-root .lg2-m,
   .lg2-root .lg2-media,
-  .lg2-root .lg2-media.lg2-upscale {
+  .lg2-root .lg2-media.lg2-upscale,
+  .lg2-root .lg2-media.lg2-translate-stage {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
@@ -964,6 +1051,16 @@
 
   .lg2-root .lg2-media.lg2-upscale {
     background: rgba(10, 12, 26, 0.92);
+  }
+
+  .lg2-root .lg2-media.lg2-translate-stage {
+    background: rgba(10, 12, 26, 0.92);
+  }
+
+  .lg2-root .lg2-upscale-half .lg2-cap {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(14, 18, 38, 0.94);
   }
 
   .lg2-topbar {
@@ -1014,18 +1111,22 @@
     font-size: 28px;
   }
 
-  .lg2-root .lg2-media.lg2-upscale {
+  .lg2-root .lg2-media.lg2-upscale.lg2-upscale-square {
     grid-template-columns: 1fr;
     min-height: 0;
   }
 
   .lg2-root .lg2-upscale-half {
-    min-height: 240px;
+    max-width: 100%;
   }
 
-  .lg2-root .lg2-upscale-half:first-child {
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  .lg2-root .lg2-media.lg2-translate-stage {
+    min-height: 0;
+  }
+
+  .lg2-root .lg2-translate-viewport {
+    width: 100%;
+    max-width: 360px;
   }
 
   .lg2-root .lg2-media.lg2-onetap-mosaic {
@@ -1069,7 +1170,7 @@
   .lg2-root .lg2-onetap-tile--wide {
     grid-column: 1 / -1;
     grid-row: auto;
-    min-height: 168px;
+    min-height: 200px;
   }
 }
 
@@ -1139,5 +1240,30 @@
     height: auto;
     padding: 10px;
     overflow: hidden;
+  }
+
+  .lg2-root .lg2-translate-zh,
+  .lg2-root .lg2-translate-en {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .lg2-root .lg2-translate-viewport {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    aspect-ratio: auto;
+    max-width: none;
+    width: 100%;
+    padding: 10px;
+  }
+
+  .lg2-root .lg2-translate-layer {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1;
   }
 }
