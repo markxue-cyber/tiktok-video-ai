@@ -1,27 +1,41 @@
 import crypto from 'crypto'
-import { getSupabaseAdmin, requireUser } from './_supabase.js'
+import { baseUrl, parseJson, serviceHeaders } from './_admin.js'
+import { requireBearerUser } from './_authBearer.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
 }
 
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
   try {
-    const { user } = await requireUser(req)
+    const user = await requireBearerUser(req)
     const { planId, payType } = req.body || {}
     const pid = String(planId || '').trim()
     if (!pid) return res.status(400).json({ success: false, error: '无效的 planId' })
 
-    const admin = getSupabaseAdmin()
-    const { data: cfg, error: cfgErr } = await admin
-      .from('package_configs')
-      .select('*')
-      .eq('plan_id', pid)
-      .is('deleted_at', null)
-      .single()
-    if (cfgErr || !cfg) return res.status(400).json({ success: false, error: '套餐不存在或已下线' })
+    const rest = `${baseUrl()}/rest/v1`
+    const headers = {
+      ...serviceHeaders(),
+      'Content-Type': 'application/json',
+    }
+
+    const cfgResp = await fetch(
+      `${rest}/package_configs?plan_id=eq.${encodeURIComponent(pid)}&deleted_at=is.null&select=*`,
+      { method: 'GET', headers: serviceHeaders() },
+    )
+    const cfgRows = await parseJson(cfgResp)
+    if (!cfgResp.ok) {
+      return res.status(400).json({
+        success: false,
+        error: cfgRows?.message || cfgRows?.hint || '读取套餐配置失败',
+        raw: cfgRows,
+      })
+    }
+    const cfg = Array.isArray(cfgRows) ? cfgRows[0] : cfgRows
+    if (!cfg) return res.status(400).json({ success: false, error: '套餐不存在或已下线' })
     if (cfg.enabled === false) return res.status(400).json({ success: false, error: '套餐当前不可购买' })
+
     const plan = {
       amountCents: Number(cfg.price_cents || 0),
       name: String(cfg.name || pid),
@@ -32,16 +46,20 @@ export default async function handler(req, res) {
     const aid = process.env.XORPAY_AID
     const secret = process.env.XORPAY_APP_SECRET
     const notifyUrl = process.env.XORPAY_NOTIFY_URL
-    if (!aid || !secret || !notifyUrl) return res.status(500).json({ success: false, error: 'XorPay 未配置（缺少 XORPAY_AID/XORPAY_APP_SECRET/XORPAY_NOTIFY_URL）' })
+    if (!aid || !secret || !notifyUrl) {
+      return res.status(500).json({
+        success: false,
+        error: 'XorPay 未配置（缺少 XORPAY_AID / XORPAY_APP_SECRET / XORPAY_NOTIFY_URL）',
+      })
+    }
 
-    // XorPay docs: sign = md5(name + pay_type + price + order_id + notify_url + app_secret)
     const orderId = `ord_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`
     const name = `TikGen AI ${plan.name}（${plan.days}天）`
-    const type = String(payType || 'native') // native/jsapi/mini etc.
+    const type = String(payType || 'native')
     const price = (plan.amountCents / 100).toFixed(2)
     const sign = md5(`${name}${type}${price}${orderId}${notifyUrl}${secret}`)
 
-    await admin.from('orders').insert({
+    const insertBody = {
       user_id: user.id,
       provider: 'xorpay',
       provider_order_id: orderId,
@@ -50,9 +68,25 @@ export default async function handler(req, res) {
       status: 'created',
       plan_id: pid,
       raw: { createdFrom: 'create-order', payType: type },
-    })
+    }
 
-    // Create order URL (documented by XorPay): https://xorpay.com/api/pay/{aid}
+    const insResp = await fetch(`${rest}/orders`, {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'return=minimal' },
+      body: JSON.stringify(insertBody),
+    })
+    if (!insResp.ok) {
+      const err = await parseJson(insResp)
+      return res.status(500).json({
+        success: false,
+        error:
+          err?.message ||
+          err?.hint ||
+          '创建本地订单失败（请确认 Supabase 已创建 orders 表且服务密钥有效）',
+        raw: err,
+      })
+    }
+
     const url = `https://xorpay.com/api/pay/${encodeURIComponent(aid)}`
     const payload = new URLSearchParams()
     payload.set('name', name)
@@ -73,16 +107,35 @@ export default async function handler(req, res) {
       }
     })()
 
-    if (!resp.ok) return res.status(200).json({ success: false, error: `XorPay下单失败(${resp.status})`, raw: data })
+    if (!resp.ok) {
+      return res.status(200).json({ success: false, error: `XorPay下单失败(${resp.status})`, raw: data })
+    }
 
-    // Common fields seen in XorPay integrations: pay_url / qrcode / url
     const payUrl = data?.pay_url || data?.url || data?.data?.pay_url || ''
     const qrcode = data?.qrcode || data?.data?.qrcode || ''
 
-    await admin.from('orders').update({ raw: data }).eq('provider', 'xorpay').eq('provider_order_id', orderId)
+    const patchResp = await fetch(
+      `${rest}/orders?provider=eq.xorpay&provider_order_id=eq.${encodeURIComponent(orderId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...headers, Prefer: 'return=minimal' },
+        body: JSON.stringify({ raw: data }),
+      },
+    )
+    if (!patchResp.ok) {
+      const pe = await parseJson(patchResp)
+      return res.status(200).json({
+        success: true,
+        orderId,
+        payUrl,
+        qrcode,
+        raw: data,
+        warn: pe?.message || '已下单但更新订单详情失败',
+      })
+    }
+
     return res.status(200).json({ success: true, orderId, payUrl, qrcode, raw: data })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }
 }
-

@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { getSupabaseAdmin } from './_supabase.js'
+import { baseUrl, parseJson, serviceHeaders } from './_admin.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
@@ -16,8 +16,7 @@ function safeJson(body: any) {
 
 const PLAN_DAYS: Record<string, number> = { trial: 7, basic: 30, pro: 30, enterprise: 30 }
 
-export default async function handler(req, res) {
-  // XorPay usually posts form or json; accept both
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).send('Method not allowed')
 
   try {
@@ -29,8 +28,6 @@ export default async function handler(req, res) {
     const orderId = String(data?.order_id || data?.orderId || '')
     const status = String(data?.status || data?.pay_status || data?.trade_status || '').toLowerCase()
 
-    // Verify sign: docs are inconsistent across pages; we validate using a conservative set of candidates.
-    // Common patterns seen: md5(order_id + app_secret) OR md5(order_id + status + app_secret)
     const candidates = [
       md5(`${orderId}${secret}`),
       md5(`${orderId}${status}${secret}`),
@@ -39,49 +36,74 @@ export default async function handler(req, res) {
     if (!orderId) return res.status(400).send('missing order_id')
     if (sign && !candidates.includes(sign)) return res.status(400).send('bad sign')
 
-    const admin = getSupabaseAdmin()
-    const { data: order } = await admin.from('orders').select('*').eq('provider', 'xorpay').eq('provider_order_id', orderId).maybeSingle()
-    if (!order) return res.status(200).send('ok') // don't leak
+    const rest = `${baseUrl()}/rest/v1`
+    const h = serviceHeaders()
+    const jsonHeaders = { ...h, 'Content-Type': 'application/json' }
 
-    // idempotent: if already paid, no-op
+    const ordResp = await fetch(
+      `${rest}/orders?provider=eq.xorpay&provider_order_id=eq.${encodeURIComponent(orderId)}&select=*`,
+      { method: 'GET', headers: h },
+    )
+    const ordRows = await parseJson(ordResp)
+    const order = Array.isArray(ordRows) ? ordRows[0] : ordRows
+    if (!order) return res.status(200).send('ok')
+
     if (order.status === 'paid') return res.status(200).send('ok')
 
-    // Determine paid
-    const paid = status === 'paid' || status === 'success' || status === '1' || status === 'yes' || String(data?.paid || '') === 'true'
+    const paid =
+      status === 'paid' ||
+      status === 'success' ||
+      status === '1' ||
+      status === 'yes' ||
+      String(data?.paid || '') === 'true'
     if (!paid) {
-      await admin.from('orders').update({ status: 'failed', raw: data }).eq('id', order.id)
+      await fetch(`${rest}/orders?id=eq.${encodeURIComponent(order.id)}`, {
+        method: 'PATCH',
+        headers: { ...jsonHeaders, Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'failed', raw: data }),
+      })
       return res.status(200).send('ok')
     }
 
     const planId = String(order.plan_id)
-    await admin.from('orders').update({ status: 'paid', paid_at: new Date().toISOString(), raw: data }).eq('id', order.id)
+    await fetch(`${rest}/orders?id=eq.${encodeURIComponent(order.id)}`, {
+      method: 'PATCH',
+      headers: { ...jsonHeaders, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'paid', paid_at: new Date().toISOString(), raw: data }),
+    })
 
-    // Fulfill subscription: extend from max(now, current_end)
     const days = PLAN_DAYS[planId] || 30
-    const { data: sub } = await admin.from('subscriptions').select('*').eq('user_id', order.user_id).maybeSingle()
+    const subResp = await fetch(
+      `${rest}/subscriptions?user_id=eq.${encodeURIComponent(order.user_id)}&select=*`,
+      { method: 'GET', headers: h },
+    )
+    const subRows = await parseJson(subResp)
+    const sub = Array.isArray(subRows) ? subRows[0] : subRows
     const now = new Date()
     const base = sub?.current_period_end ? new Date(sub.current_period_end) : now
     const start = base.getTime() > now.getTime() ? base : now
     const end = new Date(start.getTime() + days * 24 * 3600 * 1000)
 
-    await admin
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: order.user_id,
-          plan_id: planId,
-          status: 'active',
-          current_period_start: start.toISOString(),
-          current_period_end: end.toISOString(),
-          auto_renew: true,
-        },
-        { onConflict: 'user_id' },
-      )
+    const subBody = {
+      user_id: order.user_id,
+      plan_id: planId,
+      status: 'active',
+      current_period_start: start.toISOString(),
+      current_period_end: end.toISOString(),
+      auto_renew: true,
+    }
+
+    await fetch(`${rest}/subscriptions?on_conflict=user_id`, {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders,
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(subBody),
+    })
 
     return res.status(200).send('ok')
   } catch {
-    // Always return ok to avoid repeated retries storms; errors are visible in Supabase raw fields/logs.
     return res.status(200).send('ok')
   }
 }
-

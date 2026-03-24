@@ -6212,6 +6212,10 @@ function ImageGenerator({
     promptRegenBusy ||
     isAiBusy
 
+  /** 电商套图 · 商品分析：接口解析中（独立「AI 生成」或一键分析的商品阶段） */
+  const showProductAnalysisParsingOverlay =
+    productAnalysisOnlyBusy || (workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'product')
+
   /** 商品分析正文：生成/流式输出/紧随其后的出图描述生成中不可编辑，避免与 AI 写入冲突 */
   const productAnalysisNotesLocked =
     workbenchFullAnalysisBusy ||
@@ -6915,14 +6919,7 @@ function ImageGenerator({
                     : 'AI 生成'}
               </button>
             </div>
-            {workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'product' ? (
-              <p
-                className="workbench-oneclick-status text-[11px] text-violet-200/80 mb-1.5"
-                role="status"
-              >
-                正在分析参考图中的商品信息…
-              </p>
-            ) : workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles' ? (
+            {workbenchFullAnalysisBusy && oneClickAnalysisPhase === 'styles' ? (
               <p
                 className="workbench-oneclick-status text-[11px] text-violet-200/80 mb-1.5"
                 role="status"
@@ -6930,16 +6927,37 @@ function ImageGenerator({
                 商品分析已就绪，正在生成 4 套爆款风格…
               </p>
             ) : null}
-            <textarea
+            <div className="relative min-h-[140px]">
+              {showProductAnalysisParsingOverlay ? (
+                <div
+                  className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-5 rounded-xl border border-dashed border-white/[0.16] bg-[#16161c]/95 px-6 py-10 text-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]"
+                  role="status"
+                  aria-live="polite"
+                  aria-busy="true"
+                >
+                  <div
+                    className="h-10 w-10 shrink-0 rounded-full border-2 border-white/[0.18] border-t-white/55 animate-spin"
+                    aria-hidden
+                  />
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium text-white/95 tracking-tight">正在分析产品图片…</p>
+                    <p className="text-xs text-white/45">产品卖点生成中…</p>
+                  </div>
+                </div>
+              ) : null}
+              <textarea
               ref={productAnalysisWorkbenchTextareaRef}
               value={productAnalysisText}
               readOnly={productAnalysisNotesLocked}
               onChange={(e) => setProductAnalysisText(e.target.value)}
-              className={`w-full min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 transition-[box-shadow] duration-300 ${
+              className={`w-full min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 transition-[opacity,box-shadow] duration-300 ${
                 productAnalysisNotesLocked ? 'resize-none cursor-not-allowed opacity-[0.92]' : 'resize-y'
-              } ${productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''}`}
+              } ${productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''} ${
+                showProductAnalysisParsingOverlay ? 'pointer-events-none opacity-[0.06]' : ''
+              }`}
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
+            </div>
           </div>
 
           <div className="overflow-visible">
