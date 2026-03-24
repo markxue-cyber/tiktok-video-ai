@@ -6,6 +6,57 @@ function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
 }
 
+/** XorPay 文档中的 status → 中文说明（fee_error = 商户余额不足，非你网站代码 bug） */
+function xorpayFailureUserMessage(status: string, data: Record<string, unknown>): string {
+  const s = String(status || '').toLowerCase()
+  const info = data?.info
+  const detail =
+    typeof info === 'string'
+      ? info
+      : info && typeof info === 'object' && info !== null
+        ? String((info as any).msg || (info as any).message || '').trim()
+        : ''
+
+  const byCode: Record<string, string> = {
+    fee_error:
+      '【XorPay 商户余额不足】你在 XorPay 平台的可用余额不够出单/扣手续费（体验版余额为 0 时最常见）。请登录 xorpay.com → 使用「账户充值」充值后再发起支付。这与网站代码无关，充值后即可恢复。',
+    sign_error:
+      '【签名错误】请核对 Vercel 里 XORPAY_APP_SECRET 与 XorPay 后台「应用配置」的 app secret 是否完全一致（复制时不要多空格），改后需 Redeploy。',
+    aid_not_exist: '【aid 无效】请核对 XORPAY_AID 与 XorPay 后台「应用配置」里的 aid 是否一致。',
+    pay_type_error: '【支付方式不支持】请使用微信扫码(native) 或 支付宝(alipay)。',
+    missing_argument: '【参数不全】请确认 XORPAY_NOTIFY_URL 为公网 HTTPS，且订单参数完整。',
+    no_contract: '【通道未签约】请在 XorPay 后台按指引完成微信/支付宝收款签约。',
+    no_alipay_contract: '【支付宝未签约】请按 XorPay 或支付宝邮件完成支付宝收款签约。',
+    app_off: '【XorPay 账号异常】账号可能被冻结，请联系 XorPay 客服。',
+    order_payed: '该商户订单号已支付过，请关闭弹窗后重新点击「立即开通」生成新订单。',
+    order_expire: '订单已过期，请关闭后重新下单。',
+    order_exist: '订单号冲突，请关闭后重新下单。',
+  }
+
+  const head = byCode[s] || `XorPay 下单失败（错误码：${status || 'unknown'}）。请对照 xorpay.com 开发文档或联系 XorPay 客服。`
+  return detail ? `${head}\n详情：${detail}` : head
+}
+
+async function markXorpayOrderFailed(
+  rest: string,
+  jsonHeaders: Record<string, string>,
+  orderId: string,
+  raw: Record<string, unknown>,
+) {
+  try {
+    await fetch(
+      `${rest}/orders?provider=eq.xorpay&provider_order_id=eq.${encodeURIComponent(orderId)}`,
+      {
+        method: 'PATCH',
+        headers: jsonHeaders,
+        body: JSON.stringify({ status: 'failed', raw }),
+      },
+    )
+  } catch {
+    // ignore
+  }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
   try {
@@ -19,6 +70,7 @@ export default async function handler(req: any, res: any) {
       ...serviceHeaders(),
       'Content-Type': 'application/json',
     }
+    const jsonHeaders = { ...headers, Prefer: 'return=minimal' as const }
 
     const cfgResp = await fetch(
       `${rest}/package_configs?plan_id=eq.${encodeURIComponent(pid)}&deleted_at=is.null&select=*`,
@@ -101,28 +153,29 @@ export default async function handler(req: any, res: any) {
     const text = await resp.text()
     const data = (() => {
       try {
-        return JSON.parse(text)
+        return JSON.parse(text) as Record<string, unknown>
       } catch {
-        return { _raw: text }
+        return { _raw: text } as Record<string, unknown>
       }
     })()
 
     if (!resp.ok) {
-      return res.status(200).json({ success: false, error: `XorPay下单失败(${resp.status})`, raw: data })
-    }
-
-    const st = String(data?.status || '').toLowerCase()
-    if (st && st !== 'ok') {
-      const info = data?.info
-      const hint =
-        typeof info === 'string'
-          ? info
-          : info && typeof info === 'object'
-            ? String((info as any).msg || (info as any).message || JSON.stringify(info))
-            : ''
+      await markXorpayOrderFailed(rest, jsonHeaders, orderId, { ...data, httpStatus: resp.status })
       return res.status(200).json({
         success: false,
-        error: hint ? `XorPay：${hint}` : `XorPay 下单未成功（${data.status}）`,
+        error: `XorPay 接口 HTTP ${resp.status}，请稍后重试或联系 XorPay。`,
+        raw: data,
+      })
+    }
+
+    const st = String(data?.status ?? '').trim().toLowerCase()
+    if (st !== 'ok') {
+      await markXorpayOrderFailed(rest, jsonHeaders, orderId, data)
+      const msg = xorpayFailureUserMessage(st || 'unknown', data)
+      return res.status(200).json({
+        success: false,
+        error: msg,
+        code: st || 'unknown',
         raw: data,
       })
     }
@@ -131,12 +184,12 @@ export default async function handler(req: any, res: any) {
     const infoObj = info && typeof info === 'object' && !Array.isArray(info) ? (info as Record<string, unknown>) : null
     const infoQr = infoObj?.qr != null ? String(infoObj.qr).trim() : ''
 
-    const payUrl = String(data?.pay_url || data?.url || data?.data?.pay_url || infoQr || '').trim()
+    const payUrl = String(data?.pay_url || data?.url || (data?.data as any)?.pay_url || infoQr || '').trim()
     const qrPayload = String(
       data?.qrcode ||
-        data?.data?.qrcode ||
+        (data?.data as any)?.qrcode ||
         data?.code_url ||
-        data?.data?.code_url ||
+        (data?.data as any)?.code_url ||
         (infoObj?.code_url != null ? String(infoObj.code_url) : '') ||
         infoQr ||
         payUrl ||
@@ -147,7 +200,7 @@ export default async function handler(req: any, res: any) {
       `${rest}/orders?provider=eq.xorpay&provider_order_id=eq.${encodeURIComponent(orderId)}`,
       {
         method: 'PATCH',
-        headers: { ...headers, Prefer: 'return=minimal' },
+        headers: jsonHeaders,
         body: JSON.stringify({ raw: data }),
       },
     )

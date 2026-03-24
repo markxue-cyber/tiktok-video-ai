@@ -9874,7 +9874,9 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
           </div>
         )})}
       </div>
-      {!!payError && <div className="mt-6 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{payError}</div>}
+      {!!payError && (
+        <div className="mt-6 p-3 rounded-xl bg-red-50 text-red-600 text-sm whitespace-pre-wrap break-words leading-relaxed">{payError}</div>
+      )}
     </div>
   )
 }
