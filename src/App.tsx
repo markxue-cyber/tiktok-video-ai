@@ -51,6 +51,7 @@ import {
   Trash2,
   LayoutGrid,
   Layers,
+  Menu,
 } from 'lucide-react'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
@@ -1126,6 +1127,7 @@ function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [showAnnouncements, setShowAnnouncements] = useState(false)
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [annBusy, setAnnBusy] = useState(false)
@@ -1547,6 +1549,10 @@ function App() {
     }
   }, [showUserMenu])
 
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [mainNav, imageSubNav, imageToolsTab, videoSubNav])
+
   if (page === 'landing')
     return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -1882,7 +1888,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex workbench-root">
-      <aside className={`${navCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl fixed h-full z-30 transition-all relative overflow-visible`}>
+      <aside
+        className={`${navCollapsed ? 'md:w-20' : 'md:w-64'} w-64 bg-white shadow-xl fixed h-full z-30 transition-all relative overflow-visible ${
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
         <div className="p-4 border-b">
           <div className={`flex items-center ${navCollapsed ? 'justify-center' : 'justify-between'}`}>
             {!navCollapsed ? (
@@ -1897,7 +1907,7 @@ function App() {
         </div>
         <button
           onClick={() => setNavCollapsed((v) => !v)}
-          className={`absolute top-5 ${navCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-3'} w-7 h-7 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/80`}
+          className={`absolute top-5 ${navCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-3'} w-7 h-7 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 hidden md:flex items-center justify-center text-white/80`}
           title={navCollapsed ? '展开导航' : '收起导航'}
           aria-label={navCollapsed ? '展开导航' : '收起导航'}
         >
@@ -2079,11 +2089,28 @@ function App() {
           )}
         </nav>
       </aside>
-      <main className={`flex-1 ${navCollapsed ? 'ml-20' : 'ml-64'} transition-all`}>
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          aria-label="关闭导航"
+          className="fixed inset-0 z-20 bg-black/45 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      ) : null}
+      <main className={`flex-1 ml-0 ${navCollapsed ? 'md:ml-20' : 'md:ml-64'} transition-all`}>
         <header className="bg-white shadow-sm sticky top-0 z-20">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-bold">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+            <div className="flex min-w-0 items-center space-x-2 sm:space-x-4">
+              <button
+                type="button"
+                className="workbench-topicon-btn p-2 rounded-lg md:hidden"
+                title="打开导航"
+                aria-label="打开导航"
+                onClick={() => setMobileNavOpen(true)}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <h1 className="text-base sm:text-xl font-bold truncate">
                 {mainNav === 'image' && imageSubNav === 'imageGen' && '图片生成'}
                 {mainNav === 'image' && imageSubNav === 'ecommerce' && '电商套图'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
@@ -2100,7 +2127,7 @@ function App() {
                 {mainNav === 'developer' && isDevAdmin && '开发者后台'}
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               <div ref={announcementsRef} className="relative">
                 <button
                   onClick={() => {
@@ -2144,7 +2171,7 @@ function App() {
                 <Library className="w-5 h-5" />
               </button>
               <div
-                className="workbench-topinfo-pill flex items-center h-9 space-x-1.5 px-3 rounded-full cursor-default select-none"
+                className="workbench-topinfo-pill hidden md:flex items-center h-9 space-x-1.5 px-3 rounded-full cursor-default select-none"
                 title="当前积分"
               >
                 <Zap className="workbench-topinfo-icon-zap w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
@@ -2152,7 +2179,7 @@ function App() {
                 <span className="text-sm leading-none opacity-90">积分</span>
               </div>
               <div
-                className="workbench-topinfo-pill flex items-center h-9 gap-x-1.5 px-3 rounded-full cursor-default select-none"
+                className="workbench-topinfo-pill hidden md:flex items-center h-9 gap-x-1.5 px-3 rounded-full cursor-default select-none"
                 title="当前套餐与到期时间"
               >
                 <Crown className="workbench-topinfo-icon-crown w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
@@ -2167,7 +2194,7 @@ function App() {
                   <div className="workbench-user-avatar w-8 h-8 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full flex items-center justify-center">
                     <User className="w-4 h-4 text-white" />
                   </div>
-                  <span className="text-sm font-medium workbench-user-name">{user?.name}</span>
+                  <span className="hidden sm:inline text-sm font-medium workbench-user-name">{user?.name}</span>
                 </button>
                 {showUserMenu && (
                   <div className="workbench-user-menu-pop absolute right-0 mt-2 w-36 bg-white border rounded-lg shadow-lg z-30 p-1">
