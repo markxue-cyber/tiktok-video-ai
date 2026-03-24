@@ -6412,7 +6412,7 @@ function ImageGenerator({
 
   return (
     <>
-    <div className="grid lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-2 gap-6 min-w-[1120px]">
       <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
         <div className="flex flex-col gap-6">
         <section>
