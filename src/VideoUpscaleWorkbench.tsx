@@ -17,6 +17,7 @@ import {
   tryLocalStorageSetJson,
   type VideoUpscaleWorkspaceV1,
 } from './tikgenImageGenPersistence'
+import { buildDownloadProxyUrl } from './utils/downloadProxy'
 
 const VIDEO_UPSCALE_LS = 'tikgen.videoUpscale.history.v1'
 const VIDEO_UPSCALE_MAX = 100
@@ -766,9 +767,8 @@ export function VideoUpscaleWorkbench() {
             <div className="text-sm font-medium text-white/90 mb-2">本次结果</div>
             <video src={resultUrl} className="w-full rounded-xl bg-black" controls playsInline />
             <a
-              href={resultUrl}
+              href={buildDownloadProxyUrl(resultUrl, 'video-upscaled.mp4')}
               download
-              target="_blank"
               rel="noreferrer"
               className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-gradient-to-r from-pink-500 to-purple-500 text-white"
             >
@@ -872,9 +872,8 @@ export function VideoUpscaleWorkbench() {
                       {task.status === 'completed' && task.outputUrl ? (
                         <div className="flex flex-wrap gap-2">
                           <a
-                            href={task.outputUrl}
+                            href={buildDownloadProxyUrl(task.outputUrl, `video-upscaled-${task.id}.mp4`)}
                             download
-                            target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08]"
                           >

@@ -27,6 +27,7 @@ import {
   TIKGEN_IG_IDB,
   tryLocalStorageSetJson,
 } from './tikgenImageGenPersistence'
+import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
 
 const MAX_IMAGES = 5
 const HISTORY_MAX = 80
@@ -1103,12 +1104,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   const downloadAll = (task: ImageToolHistoryTask) => {
     const ext = extForTask(task)
     task.outputUrls.forEach((url, idx) => {
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${rt.downloadBase}-${task.id}-${idx + 1}.${ext}`
-      a.rel = 'noreferrer'
-      a.target = '_blank'
-      a.click()
+      triggerProxyDownload(url, `${rt.downloadBase}-${task.id}-${idx + 1}.${ext}`)
     })
   }
 
@@ -1724,9 +1720,8 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
                                   draggable={false}
                                 />
                                 <a
-                                  href={url}
+                                  href={buildDownloadProxyUrl(url, `${rt.downloadBase}-${task.id}-${idx + 1}.${ext}`)}
                                   download={`${rt.downloadBase}-${task.id}-${idx + 1}.${ext}`}
-                                  target="_blank"
                                   rel="noreferrer"
                                   className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
                                   title="下载"
@@ -1782,9 +1777,8 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
             onClick={(e) => e.stopPropagation()}
           />
           <a
-            href={lightbox.url}
+            href={buildDownloadProxyUrl(lightbox.url, lightbox.downloadName || 'image.png')}
             download={lightbox.downloadName || 'image.png'}
-            target="_blank"
             rel="noreferrer"
             className="absolute bottom-6 left-1/2 -translate-x-1/2 inline-flex items-center gap-2 rounded-xl bg-white/15 px-4 py-2 text-sm text-white hover:bg-white/25"
             onClick={(e) => e.stopPropagation()}

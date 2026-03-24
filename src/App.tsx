@@ -120,6 +120,7 @@ import {
 import './workbench-theme.css'
 import { ImageToolWorkbench } from './ImageToolWorkbench'
 import { RemoveBackgroundWorkbench } from './RemoveBackgroundWorkbench'
+import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -3962,7 +3963,7 @@ function VideoGenerator({
                 预览
               </button>
               <a
-                href={generatedVideo}
+                href={buildDownloadProxyUrl(generatedVideo, 'video.mp4')}
                 download
                 className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center"
               >
@@ -6197,13 +6198,7 @@ function ImageGenerator({
   const downloadUrlsStaggered = (items: { url: string; name: string }[]) => {
     items.forEach((item, i) => {
       window.setTimeout(() => {
-        const a = document.createElement('a')
-        a.href = item.url
-        a.download = item.name
-        a.rel = 'noreferrer'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
+        triggerProxyDownload(item.url, item.name)
       }, i * 450)
     })
   }
@@ -7622,9 +7617,8 @@ function ImageGenerator({
                             </button>
                           </div>
                           <a
-                            href={slot.imageUrl}
+                            href={buildDownloadProxyUrl(slot.imageUrl || '', `tikgen-${sceneRunBoard.id}-${sidx + 1}.png`)}
                             download={`tikgen-${sceneRunBoard.id}-${sidx + 1}.png`}
-                            target="_blank"
                             rel="noreferrer"
                             className="pointer-events-none absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-1.5 text-white opacity-0 transition-opacity group-hover/sc:pointer-events-auto group-hover/sc:opacity-100 hover:bg-black/85"
                             title="下载"
@@ -7868,9 +7862,8 @@ function ImageGenerator({
                                           }
                                         />
                                         <a
-                                          href={urlClean}
+                                          href={buildDownloadProxyUrl(urlClean, `tikgen-${task.id}-${idx + 1}.png`)}
                                           download={`tikgen-${task.id}-${idx + 1}.png`}
-                                          target="_blank"
                                           rel="noreferrer"
                                           className="absolute right-2 top-2 z-[3] rounded-full border border-white/20 bg-black/70 p-2 text-white opacity-0 transition-opacity pointer-events-none hover:bg-black/85 group-hover/out:pointer-events-auto group-hover/out:opacity-100"
                                           title="下载"
@@ -8200,9 +8193,8 @@ function ImageGenerator({
         >
           <div className="flex items-center justify-end gap-2">
             <a
-              href={historyLightbox.url}
+              href={buildDownloadProxyUrl(historyLightbox.url, historyLightbox.downloadName || 'tikgen-image.png')}
               download={historyLightbox.downloadName || 'tikgen-image.png'}
-              target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium hover:opacity-95"
             >
@@ -8532,7 +8524,7 @@ function Assets() {
         <div className="mt-1 text-[11px] text-gray-400">{new Date(a.created_at).toLocaleString()}</div>
         <div className="mt-2 flex gap-2">
           <button onClick={() => setPreviewAsset(a)} className="text-xs px-2 py-1 rounded border">预览</button>
-          <a href={a.url} download className="text-xs px-2 py-1 rounded border">下载</a>
+          <a href={buildDownloadProxyUrl(a.url, a.name || 'asset-file')} download className="text-xs px-2 py-1 rounded border">下载</a>
           <button disabled={busyId === a.id} onClick={() => handleRename(a)} className="text-xs px-2 py-1 rounded border disabled:opacity-50">重命名</button>
           <button disabled={busyId === a.id} onClick={() => handleDelete(a)} className="text-xs px-2 py-1 rounded border text-red-600 border-red-200 disabled:opacity-50">删除</button>
         </div>
@@ -8810,7 +8802,7 @@ function TaskCenter() {
                     {t.output_url ? (
                       <>
                         <a href={t.output_url} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-sm">预览</a>
-                        <a href={t.output_url} download className="px-3 py-2 rounded-lg border text-sm">下载</a>
+                        <a href={buildDownloadProxyUrl(t.output_url, `task-${t.id || 'output'}.mp4`)} download className="px-3 py-2 rounded-lg border text-sm">下载</a>
                       </>
                     ) : (
                       <span className="text-xs text-gray-400">暂无结果</span>
