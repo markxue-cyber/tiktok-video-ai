@@ -6211,6 +6211,17 @@ function ImageGenerator({
     hotStylesReanalyzeBusy ||
     promptRegenBusy ||
     isAiBusy
+  const oneClickReanalyzeLocked = workbenchOpsLocked
+  const productAiOnlyLocked =
+    workbenchFullAnalysisBusy ||
+    productAnalysisOnlyBusy ||
+    (promptRegenBusy && promptRegenSource === 'product') ||
+    isAiBusy
+  const hotStylesReanalyzeLocked =
+    workbenchFullAnalysisBusy ||
+    hotStylesReanalyzeBusy ||
+    (promptRegenBusy && promptRegenSource === 'styles') ||
+    isAiBusy
 
   /** 电商套图 · 商品分析：接口解析中（独立「AI 生成」或一键分析的商品阶段） */
   const showProductAnalysisParsingOverlay =
@@ -6870,10 +6881,10 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleOneClickFill()}
-                disabled={workbenchOpsLocked}
+                disabled={oneClickReanalyzeLocked}
                 title={refImages.length ? '重新分析商品与爆款风格' : '需先上传参考图'}
                 className={`flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  workbenchOpsLocked
+                  oneClickReanalyzeLocked
                     ? 'cursor-not-allowed border border-white/10 bg-white/[0.06] text-white/40 opacity-45'
                     : refImages.length
                       ? 'border border-transparent bg-purple-50 text-purple-700 hover:bg-purple-100'
@@ -6904,7 +6915,7 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleProductAnalysisAiOnly()}
-                disabled={workbenchOpsLocked}
+                disabled={productAiOnlyLocked}
                 className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
               >
                 {productAnalysisOnlyBusy || (promptRegenBusy && promptRegenSource === 'product') ? (
@@ -6929,25 +6940,9 @@ function ImageGenerator({
             ) : null}
             <div className="relative min-h-[140px]">
               {showProductAnalysisParsingOverlay ? (
-                <div
-                  className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-5 rounded-xl border border-dashed border-white/[0.16] bg-[#16161c]/95 px-6 py-10 text-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]"
-                  role="status"
-                  aria-live="polite"
-                  aria-busy="true"
-                >
-                  <div className="w-full max-w-[520px] space-y-3">
-                    <div className="workbench-hs-skeleton-slot workbench-skeleton-shimmer relative overflow-hidden rounded-2xl bg-[#16161c] ring-1 ring-inset ring-white/[0.1] px-4 py-3 min-h-[6.25rem]">
-                      <div className="relative z-[1] h-4 w-20 rounded-md bg-white/[0.08]" />
-                      <div className="relative z-[1] mt-3 space-y-2">
-                        <div className="h-2 w-full rounded bg-white/[0.06]" />
-                        <div className="h-2 rounded bg-white/[0.06] w-[85%]" />
-                        <div className="h-2 rounded bg-white/[0.06] w-[60%]" />
-                      </div>
-                    </div>
-                    <p className="workbench-oneclick-status text-center text-[11px] text-white/42">
-                      正在分析产品图片，生成商品卖点…
-                    </p>
-                  </div>
+                <div className="mb-2 inline-flex items-center gap-1.5 rounded-md bg-white/[0.04] px-2 py-1 text-[11px] text-white/55">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-300 animate-pulse" />
+                  <span>商品分析中…</span>
                 </div>
               ) : null}
               <textarea
@@ -6957,9 +6952,7 @@ function ImageGenerator({
               onChange={(e) => setProductAnalysisText(e.target.value)}
               className={`w-full min-h-[140px] rounded-xl bg-black/25 px-3 py-2.5 text-sm leading-relaxed text-white/88 placeholder:text-white/35 ring-1 ring-inset ring-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 transition-[opacity,box-shadow] duration-300 ${
                 productAnalysisNotesLocked ? 'resize-none cursor-not-allowed opacity-[0.92]' : 'resize-y'
-              } ${productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''} ${
-                showProductAnalysisParsingOverlay ? 'pointer-events-none opacity-[0.06]' : ''
-              }`}
+              } ${productAnalysisStreamReveal ? 'workbench-product-analysis-streaming' : ''}`}
               placeholder="产品名称、类目、卖点、目标人群、期望场景、尺寸参数等（可由 AI 生成后自行修改）"
             />
             </div>
@@ -6980,7 +6973,7 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleHotStylesReanalyze()}
-                disabled={workbenchOpsLocked}
+                disabled={hotStylesReanalyzeLocked}
                 className="px-2.5 py-1 rounded-full text-xs flex items-center gap-1 shrink-0 bg-white/[0.08] text-violet-200 border border-violet-400/25 hover:bg-white/[0.12] disabled:opacity-45"
               >
                 {hotStylesReanalyzeBusy || (promptRegenBusy && promptRegenSource === 'styles') ? (
