@@ -103,7 +103,14 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   <img src={asset('onetap-5.png')} alt="结构与工艺视角" loading="lazy" decoding="async" />
                 </div>
                 <div className="lg2-onetap-tile lg2-onetap-tile--wide">
-                  <img src={asset('onetap-3.png')} alt="对比与陈列构图" loading="lazy" decoding="async" />
+                  {/* 底栏过扁时 cover 易裁到地面/墙面，见 landing-v2.css object-position */}
+                  <img
+                    src={asset('onetap-3.png')}
+                    alt="对比与陈列构图"
+                    loading="eager"
+                    decoding="async"
+                    className="lg2-onetap-wide-img"
+                  />
                 </div>
               </div>
               <div className="lg2-m-info">
@@ -135,17 +142,96 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   立即去使用
                 </button>
               </div>
-              <div className="lg2-media">
-                <img className="lg2-main-img" src={asset('module-batch.png')} alt="批量生图案例" />
+              <div className="lg2-media lg2-batch-film" aria-label="批量生图案例：并行产出胶片滚动">
+                <div className="lg2-batch-film-inner">
+                  <div className="lg2-batch-film-track">
+                    <div className="lg2-batch-film-chunk">
+                      <figure className="lg2-batch-film-panel">
+                        <img src={asset('batch-case-1.png')} alt="批量产出：白底主图" loading="lazy" decoding="async" />
+                        <figcaption>并行 01</figcaption>
+                      </figure>
+                      <figure className="lg2-batch-film-panel">
+                        <img src={asset('batch-case-2.png')} alt="批量产出：外景氛围" loading="lazy" decoding="async" />
+                        <figcaption>并行 02</figcaption>
+                      </figure>
+                      <figure className="lg2-batch-film-panel">
+                        <img src={asset('batch-case-3.png')} alt="批量产出：花园场景" loading="lazy" decoding="async" />
+                        <figcaption>并行 03</figcaption>
+                      </figure>
+                    </div>
+                    <div className="lg2-batch-film-chunk" aria-hidden={true}>
+                      <figure className="lg2-batch-film-panel">
+                        <img src={asset('batch-case-1.png')} alt="" loading="lazy" decoding="async" />
+                        <figcaption>并行 01</figcaption>
+                      </figure>
+                      <figure className="lg2-batch-film-panel">
+                        <img src={asset('batch-case-2.png')} alt="" loading="lazy" decoding="async" />
+                        <figcaption>并行 02</figcaption>
+                      </figure>
+                      <figure className="lg2-batch-film-panel">
+                        <img src={asset('batch-case-3.png')} alt="" loading="lazy" decoding="async" />
+                        <figcaption>并行 03</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </article>
 
           <article className="lg2-m">
             <div className="lg2-m-grid">
-              <div className="lg2-media">
-                <img className="lg2-main-img" src={asset('module-bg-main.png')} alt="商品换背景案例" />
-                <img className="lg2-thumb-img" src={asset('module-bg-thumb.png')} alt="原图参考" />
+              <div className="lg2-media lg2-scene-stage" aria-label="优质场景案例：立体翻页轮播">
+                <div className="lg2-scene-perspective">
+                  <img
+                    className="lg2-scene-slide"
+                    src={asset('scene-case-1.png')}
+                    alt="场景案例：礼盒与陈列"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <img
+                    className="lg2-scene-slide"
+                    style={{ animationDelay: '-3s' }}
+                    src={asset('scene-case-2.png')}
+                    alt="场景案例：白底产品"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <img
+                    className="lg2-scene-slide"
+                    style={{ animationDelay: '-6s' }}
+                    src={asset('scene-case-3.png')}
+                    alt="场景案例：桌面氛围"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <img
+                    className="lg2-scene-slide"
+                    style={{ animationDelay: '-9s' }}
+                    src={asset('scene-case-4.png')}
+                    alt="场景案例：叠杯特写"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <img
+                    className="lg2-scene-slide"
+                    style={{ animationDelay: '-12s' }}
+                    src={asset('scene-case-5.png')}
+                    alt="场景案例：釉感细节"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <img
+                    className="lg2-scene-slide"
+                    style={{ animationDelay: '-15s' }}
+                    src={asset('scene-case-6.png')}
+                    alt="场景案例：生活使用感"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <span className="lg2-scene-chip">多场景一键延展</span>
               </div>
               <div className="lg2-m-info">
                 <span className="lg2-k">商品换背景</span>

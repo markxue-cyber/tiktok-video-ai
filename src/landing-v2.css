@@ -11,6 +11,8 @@
   --lg2-glass-border: rgba(255, 255, 255, 0.12);
   --lg2-shadow-deep: 0 20px 56px rgba(3, 6, 18, 0.48);
   --lg2-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  /* 加宽内容区：大屏尽量铺满宽度 */
+  --lg2-page-max: min(1920px, calc(100vw - 10px));
 
   margin: 0;
   min-height: 100vh;
@@ -83,9 +85,9 @@
 .lg2-topbar-inner {
   position: relative;
   z-index: 1;
-  max-width: 1160px;
+  max-width: var(--lg2-page-max);
   margin: 0 auto;
-  padding: 14px 24px;
+  padding: 14px clamp(10px, 1.4vw, 22px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -169,19 +171,19 @@
 .lg2-root .lg2-wrap {
   position: relative;
   z-index: 1;
-  max-width: 1160px;
+  max-width: var(--lg2-page-max);
   width: 100%;
   margin-left: auto;
   margin-right: auto;
   box-sizing: border-box;
-  padding: 90px 24px 80px;
+  padding: 90px clamp(10px, 1.4vw, 22px) 80px;
 }
 
 /* 玻璃主面板：对齐 .tikgen-panel 语言 */
 .lg2-root .lg2-hero {
   border: 1px solid var(--lg2-glass-border);
   border-radius: 28px;
-  padding: 58px 56px;
+  padding: 58px clamp(32px, 4.5vw, 72px);
   min-height: 540px;
   background: var(--lg2-glass);
   backdrop-filter: blur(16px);
@@ -228,7 +230,7 @@
   font-size: 62px;
   line-height: 1.04;
   letter-spacing: -0.025em;
-  max-width: 860px;
+  max-width: min(1120px, 100%);
   color: rgba(242, 244, 255, 0.96);
 }
 
@@ -241,7 +243,7 @@
 }
 
 .lg2-root .lg2-sub {
-  max-width: 760px;
+  max-width: min(960px, 100%);
   color: var(--lg2-sub);
   font-size: 17px;
   line-height: 1.85;
@@ -284,13 +286,13 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 1.38fr 0.62fr;
-  gap: 24px;
+  grid-template-columns: 1.55fr 1fr;
+  gap: clamp(20px, 2.4vw, 36px);
   align-items: center;
 }
 
 .lg2-root .lg2-m-grid.lg2-flip {
-  grid-template-columns: 0.62fr 1.38fr;
+  grid-template-columns: 1fr 1.55fr;
 }
 
 /* 内嵌画框：略像工作台参考区深色底 + 细描边 */
@@ -337,19 +339,22 @@
   max-width: none;
 }
 
-/* 一键套图：六图 Bento 拼接 + 入场 / 悬停动效 */
+/* 一键套图：六图 Bento 拼接 + 入场 / 悬停动效
+ * 行高必须用 minmax(像素, fr)：子项内图片 position:absolute 不参与撑高，纯 1fr 在 auto 高度网格里会把底行压没 */
 .lg2-root .lg2-media.lg2-onetap-mosaic {
   display: grid;
   grid-template-columns: 2.12fr 1fr 1fr;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.78fr);
+  grid-template-rows: minmax(196px, 1.05fr) minmax(196px, 1.05fr) minmax(228px, 1.05fr);
   gap: 11px;
   padding: 14px;
-  min-height: 440px;
+  min-height: 580px;
+  align-content: stretch;
 }
 
 .lg2-root .lg2-onetap-tile {
   position: relative;
   min-height: 0;
+  align-self: stretch;
   border-radius: 15px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -434,7 +439,12 @@
 .lg2-root .lg2-onetap-tile--wide {
   grid-column: 1 / -1;
   grid-row: 3;
-  min-height: 108px;
+  min-height: 228px;
+}
+
+/* 底栏过扁时 cover 易裁到地面/留白，上移焦点到主体 */
+.lg2-root .lg2-onetap-tile--wide img.lg2-onetap-wide-img {
+  object-position: center 28%;
 }
 
 .lg2-root .lg2-onetap-tile img {
@@ -445,6 +455,7 @@
   object-fit: cover;
   display: block;
   max-width: none;
+  z-index: 1;
   transform: scale(1.02);
   transition: transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -469,7 +480,6 @@
 }
 
 .lg2-root .lg2-onetap-tile:hover::after {
-  opacity: 1;
   animation: lg2-onetap-shine 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
@@ -482,12 +492,22 @@
 }
 
 @keyframes lg2-onetap-shine {
-  from {
+  0% {
     transform: translateX(-130%) skewX(-12deg);
+    opacity: 0;
   }
 
-  to {
+  12% {
+    opacity: 1;
+  }
+
+  88% {
+    opacity: 1;
+  }
+
+  100% {
     transform: translateX(130%) skewX(-12deg);
+    opacity: 0;
   }
 }
 
@@ -532,6 +552,234 @@
 
   to {
     transform: scale(1.09) translate(-1.2%, -0.8%);
+  }
+}
+
+/* 批量生图：无限胶片横移（与一键套图 Bento、换背景 3D 翻页区分） */
+.lg2-root .lg2-media.lg2-batch-film {
+  display: block;
+  padding: 14px;
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.lg2-root .lg2-batch-film-inner {
+  position: relative;
+  height: 100%;
+  min-height: 392px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(8, 10, 22, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
+}
+
+.lg2-root .lg2-batch-film-inner:hover .lg2-batch-film-track {
+  animation-play-state: paused;
+}
+
+.lg2-root .lg2-batch-film-track {
+  display: flex;
+  width: max-content;
+  gap: 14px;
+  padding: 16px 14px;
+  animation: lg2-batch-film-move 32s linear infinite;
+}
+
+.lg2-root .lg2-batch-film-chunk {
+  display: flex;
+  gap: 14px;
+}
+
+@keyframes lg2-batch-film-move {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.lg2-root .lg2-batch-film-panel {
+  position: relative;
+  flex: 0 0 auto;
+  width: clamp(210px, 24vw, 300px);
+  height: clamp(300px, 36vw, 380px);
+  margin: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.lg2-root .lg2-batch-film-panel img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scale(1.02);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lg2-root .lg2-batch-film-panel:hover img {
+  transform: scale(1.07);
+}
+
+.lg2-root .lg2-batch-film-panel figcaption {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: rgba(245, 243, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(8, 10, 24, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* 商品换背景：透视翻页式轮播（六图循环） */
+.lg2-root .lg2-media.lg2-scene-stage {
+  position: relative;
+  min-height: 420px;
+  padding: 14px;
+}
+
+.lg2-root .lg2-scene-perspective {
+  position: relative;
+  height: 100%;
+  min-height: 392px;
+  border-radius: 16px;
+  overflow: hidden;
+  perspective: 1100px;
+  transform-style: preserve-3d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: radial-gradient(120% 80% at 50% 100%, rgba(124, 58, 237, 0.12), transparent 55%),
+    rgba(0, 0, 0, 0.36);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 14px 44px rgba(0, 0, 0, 0.38);
+}
+
+.lg2-root .lg2-scene-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  max-width: none;
+  z-index: 0;
+  opacity: 0;
+  transform: perspective(1000px) rotateY(-26deg) scale(0.92) translateZ(-50px);
+  filter: blur(4px);
+  animation: lg2-scene-flip-cycle 18s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes lg2-scene-flip-cycle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: perspective(1000px) rotateY(-28deg) scale(0.9) translateZ(-70px);
+    filter: blur(5px);
+    z-index: 0;
+  }
+
+  4% {
+    opacity: 0;
+  }
+
+  7% {
+    opacity: 1;
+    transform: perspective(1000px) rotateY(0deg) scale(1) translateZ(0);
+    filter: blur(0);
+    z-index: 3;
+  }
+
+  14% {
+    opacity: 1;
+    transform: perspective(1000px) rotateY(0deg) scale(1) translateZ(0);
+    filter: blur(0);
+    z-index: 3;
+  }
+
+  18% {
+    opacity: 0;
+    transform: perspective(1000px) rotateY(22deg) scale(0.93) translateZ(-45px);
+    filter: blur(4px);
+    z-index: 0;
+  }
+}
+
+.lg2-root .lg2-scene-chip {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 5;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: rgba(230, 225, 255, 0.96);
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(8, 10, 24, 0.52);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+@media (max-width: 960px) {
+  .lg2-root .lg2-media.lg2-batch-film {
+    min-height: 0;
+  }
+
+  .lg2-root .lg2-batch-film-inner {
+    min-height: 0;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .lg2-root .lg2-batch-film-chunk[aria-hidden='true'] {
+    display: none;
+  }
+
+  .lg2-root .lg2-batch-film-track {
+    flex-direction: column;
+    width: 100% !important;
+    animation: none !important;
+    transform: none !important;
+    padding: 12px;
+  }
+
+  .lg2-root .lg2-batch-film-chunk {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .lg2-root .lg2-batch-film-panel {
+    width: 100%;
+    height: 240px;
+  }
+
+  .lg2-root .lg2-scene-perspective {
+    min-height: 300px;
+  }
+
+  .lg2-root .lg2-media.lg2-scene-stage {
+    min-height: 328px;
   }
 }
 
@@ -729,6 +977,18 @@
     -webkit-backdrop-filter: none !important;
     background: rgba(14, 18, 38, 0.94);
   }
+
+  .lg2-root .lg2-batch-film-panel figcaption {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(14, 18, 38, 0.94);
+  }
+
+  .lg2-root .lg2-scene-chip {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(14, 18, 38, 0.94);
+  }
 }
 
 @media (max-width: 960px) {
@@ -809,7 +1069,7 @@
   .lg2-root .lg2-onetap-tile--wide {
     grid-column: 1 / -1;
     grid-row: auto;
-    min-height: 140px;
+    min-height: 168px;
   }
 }
 
@@ -837,5 +1097,47 @@
 
   .lg2-root .lg2-onetap-tile::after {
     display: none;
+  }
+
+  .lg2-root .lg2-batch-film-chunk[aria-hidden='true'] {
+    display: none;
+  }
+
+  .lg2-root .lg2-batch-film-track {
+    animation: none !important;
+    transform: none !important;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .lg2-root .lg2-batch-film-chunk {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .lg2-root .lg2-scene-slide {
+    animation: none !important;
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+    z-index: auto !important;
+  }
+
+  .lg2-root .lg2-scene-perspective {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    perspective: none;
+    transform: none;
+    min-height: 0;
+    height: auto;
+    padding: 10px;
+    overflow: hidden;
   }
 }
