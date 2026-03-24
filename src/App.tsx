@@ -2164,15 +2164,15 @@ function App() {
                   <span className="font-bold text-base leading-none tabular-nums">{user?.credits}</span>
                   <span className="text-sm leading-none opacity-90">积分</span>
                 </div>
-                <div className="workbench-credits-pop pointer-events-none absolute right-0 top-[calc(100%+10px)] z-50 w-[360px] rounded-2xl border border-white/12 bg-[#0f111a]/98 p-4 opacity-0 shadow-[0_20px_50px_rgba(0,0,0,0.45)] transition-all duration-150 group-hover/credits:pointer-events-auto group-hover/credits:opacity-100 group-hover/credits:translate-y-0 translate-y-1">
+                <div className="workbench-credits-pop pointer-events-none absolute right-0 top-[calc(100%+10px)] z-50 w-[360px] rounded-2xl border border-white/18 bg-[#121522] p-4 opacity-0 shadow-[0_22px_56px_rgba(0,0,0,0.52)] transition-all duration-150 group-hover/credits:pointer-events-auto group-hover/credits:opacity-100 group-hover/credits:translate-y-0 translate-y-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-[30px] leading-none text-white/96 font-semibold tracking-tight">{currentPackage?.name || '试用版'}</div>
-                      <div className="mt-1 text-[16px] text-white/50">将在 {user?.packageExpiresAt || '--'} 到期并暂停</div>
+                      <div className="text-[19px] leading-tight text-white/95 font-semibold tracking-normal">{currentPackage?.name || '试用版'}</div>
+                      <div className="mt-1 text-[13px] leading-tight text-white/60">将在 {user?.packageExpiresAt || '--'} 到期并暂停</div>
                     </div>
-                    <Zap className="workbench-topinfo-icon-zap mt-1 h-5 w-5 shrink-0" strokeWidth={2.25} />
+                    <Zap className="workbench-topinfo-icon-zap mt-0.5 h-4.5 w-4.5 shrink-0" strokeWidth={2.25} />
                   </div>
-                  <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-white/[0.08] ring-1 ring-inset ring-white/[0.06]">
+                  <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-white/[0.09] ring-1 ring-inset ring-white/[0.08]">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-white/92 to-amber-500/80 transition-all"
                       style={{ width: `${Math.min(100, Math.max(0, Math.round((creditsSummary.hasFiniteQuota ? creditsSummary.ratio : 1) * 100)))}%` }}
@@ -2180,27 +2180,24 @@ function App() {
                   </div>
                   {creditsSummary.hasFiniteQuota ? (
                     <div className="mt-3 flex items-center justify-between text-white/90">
-                      <span className="text-3xl leading-none tabular-nums tracking-tight">
+                      <span className="text-[16px] leading-none tabular-nums tracking-normal font-medium">
                         {creditsSummary.used}/{creditsSummary.total} 积分
                       </span>
-                      <span className="text-base leading-none tabular-nums text-white/70">剩余 {creditsSummary.remaining} 积分</span>
+                      <span className="text-[14px] leading-none tabular-nums text-white/72">剩余 {creditsSummary.remaining} 积分</span>
                     </div>
                   ) : (
                     <div className="mt-3 flex items-center justify-between text-white/90">
-                      <span className="text-base leading-none">当前套餐为不限量</span>
-                      <span className="text-base leading-none tabular-nums text-white/70">剩余 {creditsSummary.remaining} 积分</span>
+                      <span className="text-[14px] leading-none">当前套餐为不限量</span>
+                      <span className="text-[14px] leading-none tabular-nums text-white/72">剩余 {creditsSummary.remaining} 积分</span>
                     </div>
                   )}
-                  <div className="mt-4 rounded-xl bg-amber-500/20 px-3 py-2 text-[15px] text-amber-300">
-                    积分余量不足，建议续费以避免中断。
-                  </div>
                   <button
                     type="button"
                     onClick={gotoBenefits}
-                    className="mt-4 w-full rounded-xl border border-white/10 bg-white/[0.08] py-2.5 text-base leading-none text-white/95 transition-colors hover:bg-white/[0.14]"
+                    className="mt-4 w-full rounded-xl border border-white/14 bg-white/[0.06] py-2.5 text-[14px] leading-none text-white/90 transition-colors hover:bg-white/[0.10] hover:border-white/22"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <Crown className="h-4 w-4" />
+                      <Crown className="h-3.5 w-3.5" />
                       升级/续费
                     </span>
                   </button>
