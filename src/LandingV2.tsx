@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Video } from 'lucide-react'
 import './landing-v2.css'
 
@@ -9,8 +10,33 @@ export type LandingV2Props = {
 export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
   const base = import.meta.env.BASE_URL || '/'
   const asset = (name: string) => `${base}landing-preview/assets/${name}`
+  const onetapMosaicRef = useRef<HTMLDivElement>(null)
 
   const goStart = () => onRegister()
+
+  useEffect(() => {
+    const root = onetapMosaicRef.current
+    if (!root) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion) {
+      root.classList.add('lg2-onetap--visible')
+      return
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            root.classList.add('lg2-onetap--visible')
+            io.disconnect()
+            break
+          }
+        }
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -6% 0px' },
+    )
+    io.observe(root)
+    return () => io.disconnect()
+  }, [])
 
   return (
     <div className="lg2-root">
@@ -55,8 +81,30 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
         <section className="lg2-modules" aria-label="产品功能">
           <article className="lg2-m">
             <div className="lg2-m-grid">
-              <div className="lg2-media">
-                <img className="lg2-main-img" src={asset('module-onetap.png')} alt="一键套图案例" />
+              <div
+                ref={onetapMosaicRef}
+                className="lg2-media lg2-onetap-mosaic"
+                aria-label="一键套图案例：六张延展图拼接展示"
+              >
+                <div className="lg2-onetap-tile lg2-onetap-tile--hero">
+                  <img src={asset('onetap-1.png')} alt="主场景：生活氛围图" loading="lazy" decoding="async" />
+                  <span className="lg2-onetap-badge">1 张延展 · 多场景</span>
+                </div>
+                <div className="lg2-onetap-tile lg2-onetap-tile--a">
+                  <img src={asset('onetap-6.png')} alt="白底主图风格" loading="lazy" decoding="async" />
+                </div>
+                <div className="lg2-onetap-tile lg2-onetap-tile--b">
+                  <img src={asset('onetap-2.png')} alt="室内场景图" loading="lazy" decoding="async" />
+                </div>
+                <div className="lg2-onetap-tile lg2-onetap-tile--c">
+                  <img src={asset('onetap-4.png')} alt="材质与细节特写" loading="lazy" decoding="async" />
+                </div>
+                <div className="lg2-onetap-tile lg2-onetap-tile--d">
+                  <img src={asset('onetap-5.png')} alt="结构与工艺视角" loading="lazy" decoding="async" />
+                </div>
+                <div className="lg2-onetap-tile lg2-onetap-tile--wide">
+                  <img src={asset('onetap-3.png')} alt="对比与陈列构图" loading="lazy" decoding="async" />
+                </div>
               </div>
               <div className="lg2-m-info">
                 <span className="lg2-k">一键套图</span>

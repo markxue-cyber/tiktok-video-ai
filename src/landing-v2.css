@@ -337,6 +337,204 @@
   max-width: none;
 }
 
+/* 一键套图：六图 Bento 拼接 + 入场 / 悬停动效 */
+.lg2-root .lg2-media.lg2-onetap-mosaic {
+  display: grid;
+  grid-template-columns: 2.12fr 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.78fr);
+  gap: 11px;
+  padding: 14px;
+  min-height: 440px;
+}
+
+.lg2-root .lg2-onetap-tile {
+  position: relative;
+  min-height: 0;
+  border-radius: 15px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 10px 32px rgba(0, 0, 0, 0.38);
+  isolation: isolate;
+  opacity: 0;
+  transform: translateY(22px) scale(0.97);
+  filter: blur(4px);
+  will-change: transform, opacity, filter;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile {
+  animation: lg2-onetap-tile-in 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero {
+  animation-delay: 0.04s;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--a {
+  animation-delay: 0.12s;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--b {
+  animation-delay: 0.2s;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--c {
+  animation-delay: 0.28s;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--d {
+  animation-delay: 0.36s;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--wide {
+  animation-delay: 0.44s;
+}
+
+@keyframes lg2-onetap-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.97);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.lg2-root .lg2-onetap-tile--hero {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.lg2-root .lg2-onetap-tile--a {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.lg2-root .lg2-onetap-tile--b {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.lg2-root .lg2-onetap-tile--c {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.lg2-root .lg2-onetap-tile--d {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.lg2-root .lg2-onetap-tile--wide {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-height: 108px;
+}
+
+.lg2-root .lg2-onetap-tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  max-width: none;
+  transform: scale(1.02);
+  transition: transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lg2-root .lg2-onetap-tile::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.14) 48%,
+    rgba(255, 255, 255, 0.06) 52%,
+    transparent 62%
+  );
+  transform: translateX(-130%) skewX(-12deg);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: screen;
+  transition: opacity 0.35s ease;
+}
+
+.lg2-root .lg2-onetap-tile:hover::after {
+  opacity: 1;
+  animation: lg2-onetap-shine 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lg2-root .lg2-onetap-tile:hover img {
+  transform: scale(1.08);
+}
+
+.lg2-root .lg2-onetap-tile--hero:hover img {
+  animation: none;
+}
+
+@keyframes lg2-onetap-shine {
+  from {
+    transform: translateX(-130%) skewX(-12deg);
+  }
+
+  to {
+    transform: translateX(130%) skewX(-12deg);
+  }
+}
+
+.lg2-root .lg2-onetap-tile--hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(90% 70% at 20% 0%, rgba(167, 139, 250, 0.12), transparent 55%);
+  opacity: 0.85;
+}
+
+.lg2-root .lg2-onetap-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 11px;
+  border-radius: 999px;
+  color: rgba(245, 243, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(8, 10, 24, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero img {
+  animation: lg2-onetap-ken 14s ease-in-out infinite alternate;
+}
+
+@keyframes lg2-onetap-ken {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+
+  to {
+    transform: scale(1.09) translate(-1.2%, -0.8%);
+  }
+}
+
 .lg2-root .lg2-m-info .lg2-k {
   display: inline-flex;
   border-radius: 999px;
@@ -525,6 +723,12 @@
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
+
+  .lg2-root .lg2-onetap-badge {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(14, 18, 38, 0.94);
+  }
 }
 
 @media (max-width: 960px) {
@@ -563,6 +767,50 @@
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
+
+  .lg2-root .lg2-media.lg2-onetap-mosaic {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: none;
+    min-height: 0;
+    gap: 9px;
+    padding: 11px;
+  }
+
+  .lg2-root .lg2-onetap-tile--hero {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: 220px;
+  }
+
+  .lg2-root .lg2-onetap-tile--a {
+    grid-column: 1;
+    grid-row: auto;
+    min-height: 120px;
+  }
+
+  .lg2-root .lg2-onetap-tile--b {
+    grid-column: 2;
+    grid-row: auto;
+    min-height: 120px;
+  }
+
+  .lg2-root .lg2-onetap-tile--c {
+    grid-column: 1;
+    grid-row: auto;
+    min-height: 120px;
+  }
+
+  .lg2-root .lg2-onetap-tile--d {
+    grid-column: 2;
+    grid-row: auto;
+    min-height: 120px;
+  }
+
+  .lg2-root .lg2-onetap-tile--wide {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: 140px;
+  }
 }
 
 /* 用户偏好减少动效 */
@@ -574,5 +822,20 @@
 
   .lg2-root .lg2-btn-main {
     background-position: 0% 50%;
+  }
+
+  .lg2-root .lg2-onetap-mosaic .lg2-onetap-tile {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    animation: none !important;
+  }
+
+  .lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero img {
+    animation: none !important;
+  }
+
+  .lg2-root .lg2-onetap-tile::after {
+    display: none;
   }
 }
