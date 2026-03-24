@@ -7,6 +7,8 @@
 
   margin: 0;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
   font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: var(--lg2-text);
   background:
@@ -105,17 +107,22 @@
   filter: brightness(1.05);
 }
 
+/* 与 public/landing-preview/v2-minimal-luxury.html 的 .wrap 一致：max-width 1160 + 左右 24 */
 .lg2-root .lg2-wrap {
   max-width: 1160px;
-  margin: 0 auto;
-  padding: 96px 24px 80px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  /* 顶栏约 56px + 与静态页 main 顶部留白 34px 对齐 */
+  padding: 90px 24px 80px;
 }
 
 .lg2-root .lg2-hero {
   border: 1px solid var(--lg2-line);
   border-radius: 28px;
   padding: 58px 56px;
-  min-height: 520px;
+  min-height: 540px;
   background: linear-gradient(165deg, rgba(13, 19, 38, 0.98), rgba(10, 15, 30, 0.98));
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
   display: grid;
@@ -135,7 +142,7 @@
 
 .lg2-root .lg2-hero h1 {
   margin: 20px 0 18px;
-  font-size: clamp(2rem, 5vw, 3.75rem);
+  font-size: 62px;
   line-height: 1.04;
   letter-spacing: -0.025em;
   max-width: 860px;
@@ -210,24 +217,29 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
+/* 与静态 V2 的 .media img.main 一致；用绝对定位避免 Tailwind preflight 的 img { height:auto } 撑破布局 */
 .lg2-root .lg2-media img.lg2-main-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  min-height: 380px;
   object-fit: cover;
   display: block;
+  max-width: none;
 }
 
 .lg2-root .lg2-media img.lg2-thumb-img {
   position: absolute;
   left: 14px;
   top: 14px;
+  z-index: 2;
   width: 96px;
   height: 96px;
   border-radius: 16px;
   object-fit: cover;
   border: 1px solid rgba(255, 255, 255, 0.35);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+  max-width: none;
 }
 
 .lg2-root .lg2-m-info .lg2-k {
@@ -265,7 +277,7 @@
 
 .lg2-root .lg2-m-info h3 {
   margin: 12px 0 10px;
-  font-size: clamp(1.5rem, 3vw, 2.35rem);
+  font-size: 38px;
   line-height: 1.12;
   letter-spacing: -0.02em;
 }
@@ -330,6 +342,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  max-width: none;
 }
 
 .lg2-root .lg2-upscale-half .lg2-cap {
@@ -369,6 +382,10 @@
 }
 
 @media (max-width: 960px) {
+  .lg2-root .lg2-hero h1 {
+    font-size: 44px;
+  }
+
   .lg2-root .lg2-hero {
     padding: 34px 24px;
     min-height: 0;
@@ -383,8 +400,8 @@
     min-height: 280px;
   }
 
-  .lg2-root .lg2-media img.lg2-main-img {
-    min-height: 280px;
+  .lg2-root .lg2-m-info h3 {
+    font-size: 28px;
   }
 
   .lg2-root .lg2-media.lg2-upscale {
