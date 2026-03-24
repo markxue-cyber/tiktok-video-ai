@@ -1373,6 +1373,18 @@ function App() {
   }
 
   const currentPackage = useMemo(() => packageCatalog.find((p) => p.plan_id === user?.package) || DEFAULT_PACKAGES.find((p) => p.plan_id === user?.package), [packageCatalog, user?.package])
+  const creditsSummary = useMemo(() => {
+    const remaining = Math.max(0, Number(user?.credits || 0))
+    const quotaRaw = Number(currentPackage?.daily_quota || 0)
+    const hasFiniteQuota = Number.isFinite(quotaRaw) && quotaRaw > 0 && quotaRaw < 900000
+    const total = hasFiniteQuota ? quotaRaw : 0
+    const used = hasFiniteQuota ? Math.min(total, Math.max(0, total - remaining)) : 0
+    const ratio = hasFiniteQuota && total > 0 ? used / total : 0
+    return { remaining, hasFiniteQuota, total, used, ratio }
+  }, [currentPackage?.daily_quota, user?.credits])
+  const gotoBenefits = useCallback(() => {
+    setMainNav('benefits')
+  }, [])
   const isDevAdmin = useMemo(() => {
     const email = String(user?.email || '').toLowerCase()
     return ['haoxue2027@gmail.com'].includes(email)
@@ -2143,22 +2155,67 @@ function App() {
               <button onClick={() => setShowHelp(true)} className="workbench-topicon-btn p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" title="帮助中心">
                 <Library className="w-5 h-5" />
               </button>
-              <div
-                className="workbench-topinfo-pill flex items-center h-9 space-x-1.5 px-3 rounded-full cursor-default select-none"
-                title="当前积分"
-              >
-                <Zap className="workbench-topinfo-icon-zap w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
-                <span className="font-bold text-base leading-none tabular-nums">{user?.credits}</span>
-                <span className="text-sm leading-none opacity-90">积分</span>
+              <div className="relative group/credits">
+                <div
+                  className="workbench-topinfo-pill flex items-center h-9 space-x-1.5 px-3 rounded-full cursor-default select-none"
+                  title="当前积分"
+                >
+                  <Zap className="workbench-topinfo-icon-zap w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
+                  <span className="font-bold text-base leading-none tabular-nums">{user?.credits}</span>
+                  <span className="text-sm leading-none opacity-90">积分</span>
+                </div>
+                <div className="workbench-credits-pop pointer-events-none absolute right-0 top-[calc(100%+10px)] z-50 w-[360px] rounded-2xl border border-white/12 bg-[#0f111a]/98 p-4 opacity-0 shadow-[0_20px_50px_rgba(0,0,0,0.45)] transition-all duration-150 group-hover/credits:pointer-events-auto group-hover/credits:opacity-100 group-hover/credits:translate-y-0 translate-y-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[30px] leading-none text-white/96 font-semibold tracking-tight">{currentPackage?.name || '试用版'}</div>
+                      <div className="mt-1 text-[16px] text-white/50">将在 {user?.packageExpiresAt || '--'} 到期并暂停</div>
+                    </div>
+                    <Zap className="workbench-topinfo-icon-zap mt-1 h-5 w-5 shrink-0" strokeWidth={2.25} />
+                  </div>
+                  <div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-white/[0.08] ring-1 ring-inset ring-white/[0.06]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-white/92 to-amber-500/80 transition-all"
+                      style={{ width: `${Math.min(100, Math.max(0, Math.round((creditsSummary.hasFiniteQuota ? creditsSummary.ratio : 1) * 100)))}%` }}
+                    />
+                  </div>
+                  {creditsSummary.hasFiniteQuota ? (
+                    <div className="mt-3 flex items-center justify-between text-white/90">
+                      <span className="text-3xl leading-none tabular-nums tracking-tight">
+                        {creditsSummary.used}/{creditsSummary.total} 积分
+                      </span>
+                      <span className="text-base leading-none tabular-nums text-white/70">剩余 {creditsSummary.remaining} 积分</span>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex items-center justify-between text-white/90">
+                      <span className="text-base leading-none">当前套餐为不限量</span>
+                      <span className="text-base leading-none tabular-nums text-white/70">剩余 {creditsSummary.remaining} 积分</span>
+                    </div>
+                  )}
+                  <div className="mt-4 rounded-xl bg-amber-500/20 px-3 py-2 text-[15px] text-amber-300">
+                    积分余量不足，建议续费以避免中断。
+                  </div>
+                  <button
+                    type="button"
+                    onClick={gotoBenefits}
+                    className="mt-4 w-full rounded-xl border border-white/10 bg-white/[0.08] py-2.5 text-base leading-none text-white/95 transition-colors hover:bg-white/[0.14]"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Crown className="h-4 w-4" />
+                      升级/续费
+                    </span>
+                  </button>
+                </div>
               </div>
-              <div
-                className="workbench-topinfo-pill flex items-center h-9 gap-x-1.5 px-3 rounded-full cursor-default select-none"
-                title="当前套餐与到期时间"
+              <button
+                type="button"
+                onClick={gotoBenefits}
+                className="workbench-topinfo-pill flex items-center h-9 gap-x-1.5 px-3 rounded-full select-none cursor-pointer"
+                title="查看个人权益"
               >
                 <Crown className="workbench-topinfo-icon-crown w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
                 <span className="text-sm leading-none font-medium">{currentPackage?.name}</span>
                 <span className="text-sm leading-none opacity-80 whitespace-nowrap">至 {user?.packageExpiresAt}</span>
-              </div>
+              </button>
               <div ref={userMenuRef} className="relative">
                 <button
                   onClick={() => setShowUserMenu((v) => !v)}
