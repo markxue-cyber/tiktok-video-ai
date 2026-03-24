@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Landing Preview V2 · 极简高端版</title>
+    <style>
+      :root {
+        --bg: #060913;
+        --panel: #0d1326;
+        --line: rgba(255, 255, 255, 0.12);
+        --text: rgba(245, 248, 255, 0.96);
+        --sub: rgba(212, 221, 246, 0.72);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(900px 420px at 15% 0%, rgba(111, 84, 255, 0.22), transparent 58%),
+          radial-gradient(900px 520px at 90% 2%, rgba(40, 161, 255, 0.16), transparent 60%),
+          linear-gradient(180deg, #0a0f22, var(--bg));
+      }
+      .wrap { max-width: 1160px; margin: 0 auto; padding: 34px 24px 80px; }
+      .note { font-size: 12px; color: rgba(226, 234, 255, 0.58); margin-bottom: 18px; }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        padding: 58px 56px;
+        min-height: 540px;
+        background: linear-gradient(165deg, rgba(13, 19, 38, 0.98), rgba(10, 15, 30, 0.98));
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
+        display: grid;
+        align-content: center;
+      }
+      .tag {
+        display: inline-flex;
+        width: fit-content;
+        border-radius: 999px;
+        border: 1px solid rgba(173, 157, 255, 0.4);
+        background: rgba(114, 88, 255, 0.14);
+        color: #d8ccff;
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+      h1 {
+        margin: 20px 0 18px;
+        font-size: 62px;
+        line-height: 1.04;
+        letter-spacing: -0.025em;
+        max-width: 860px;
+      }
+      .g {
+        background: linear-gradient(90deg, #bb96ff, #7363ff, #27a9ff);
+        color: transparent;
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+      .sub {
+        max-width: 760px;
+        color: var(--sub);
+        font-size: 17px;
+        line-height: 1.85;
+      }
+      .modules {
+        margin-top: 28px;
+        display: grid;
+        gap: 20px;
+      }
+      .m {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(160deg, rgba(14, 20, 40, 0.94), rgba(10, 15, 30, 0.94));
+        padding: 28px;
+        position: relative;
+        overflow: hidden;
+        box-shadow:
+          0 18px 44px rgba(0, 0, 0, 0.34),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+      }
+      .m::before {
+        content: "";
+        position: absolute;
+        left: -10%;
+        right: -10%;
+        top: -30%;
+        height: 160px;
+        background: radial-gradient(40% 100% at 50% 0%, rgba(138, 125, 255, 0.2), transparent 70%);
+        pointer-events: none;
+      }
+      .m-grid {
+        display: grid;
+        grid-template-columns: 1.38fr 0.62fr;
+        gap: 24px;
+        align-items: center;
+      }
+      .m-grid.flip {
+        grid-template-columns: 0.62fr 1.38fr;
+      }
+      .media {
+        min-height: 380px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 18px;
+        background:
+          radial-gradient(220px 120px at 24% 22%, rgba(120, 95, 255, 0.34), transparent 62%),
+          radial-gradient(220px 120px at 76% 72%, rgba(38, 167, 255, 0.26), transparent 58%),
+          linear-gradient(165deg, #151f43, #0e1633);
+        position: relative;
+        overflow: hidden;
+        box-shadow:
+          0 18px 44px rgba(0, 0, 0, 0.34),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+      }
+      .media img.main {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .media img.thumb {
+        position: absolute;
+        left: 14px;
+        top: 14px;
+        width: 96px;
+        height: 96px;
+        border-radius: 16px;
+        object-fit: cover;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+      }
+      .m-info .k {
+        display: inline-flex;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.04);
+        padding: 4px 9px;
+        font-size: 11px;
+        color: rgba(232, 239, 255, 0.76);
+      }
+      .m-info .mini {
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(140, 166, 255, 0.32);
+        background: rgba(67, 104, 255, 0.12);
+        color: rgba(214, 228, 255, 0.88);
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.02em;
+      }
+      .m-info .mini::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, #89bcff, #6d87ff);
+        box-shadow: 0 0 8px rgba(121, 156, 255, 0.7);
+      }
+      .m-info h3 {
+        margin: 12px 0 10px;
+        font-size: 38px;
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+      .m-info ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--sub);
+        font-size: 14px;
+        line-height: 1.72;
+      }
+      .m-info li { margin: 4px 0; }
+      .m-cta {
+        margin-top: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(90deg, #7a62ff, #4f84ff);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 10px 24px rgba(86, 116, 255, 0.34);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+      }
+      .m-cta:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.04);
+        box-shadow: 0 14px 30px rgba(86, 116, 255, 0.42);
+      }
+      /* 高清放大：左右真实对比图（素材见 ./assets/upscale-before.png · upscale-after.png） */
+      .media.upscale {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        min-height: 380px;
+        padding: 0;
+        background: linear-gradient(165deg, #121a38, #0c1228);
+      }
+      .upscale-half {
+        position: relative;
+        min-height: 380px;
+        overflow: hidden;
+      }
+      .upscale-half:first-child {
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .upscale-half img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .upscale-half .cap {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 2;
+        font-size: 11px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(8, 12, 26, 0.55);
+        color: rgba(235, 242, 255, 0.85);
+      }
+      .cta {
+        margin-top: 28px;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 14px;
+        padding: 12px 18px;
+      }
+      .btn-main {
+        color: #fff;
+        background: linear-gradient(90deg, #7b63ff, #5b7dff, #2ca8ff);
+        box-shadow: 0 12px 30px rgba(87, 113, 255, 0.35);
+      }
+      .btn-sub {
+        color: rgba(236, 243, 255, 0.9);
+        border: 1px solid rgba(255,255,255,.22);
+        background: rgba(255,255,255,.03);
+      }
+      @media (max-width: 960px) {
+        h1 { font-size: 44px; }
+        .hero { padding: 34px 24px; min-height: 0; }
+        .m-grid,
+        .m-grid.flip { grid-template-columns: 1fr; }
+        .m-info h3 { font-size: 28px; }
+        .media { min-height: 280px; }
+        .media.upscale { grid-template-columns: 1fr; min-height: 0; }
+        .upscale-half { min-height: 240px; }
+        .upscale-half:first-child { border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="note">静态预览 · 与线上登录前页同源素材路径（./assets/）</div>
+      <section class="hero">
+        <span class="tag">电商AI增长引擎</span>
+        <h1>
+          用一张商品图<br />
+          <span class="g">生成整套高转化内容资产</span>
+        </h1>
+        <p class="sub">
+          面向跨境与品牌团队，把图像生产从“逐张手工”升级为“风格一致、批量产出、可复用”的自动化流水线。
+          从商品套图、批量生图到商品视频，一次输入，持续放大流量效率。
+        </p>
+        <div class="cta">
+          <a class="btn btn-main" href="#">立即免费体验</a>
+          <a class="btn btn-sub" href="./index.html">V1</a>
+          <a class="btn btn-sub" href="./v3-conversion.html">V3</a>
+        </div>
+      </section>
+
+      <section class="modules">
+        <article class="m">
+          <div class="m-grid">
+            <div class="media">
+              <img class="main" src="./assets/module-onetap.png" alt="一键套图案例" />
+            </div>
+            <div class="m-info">
+              <span class="k">一键套图</span>
+              <span class="mini">电商套图</span>
+              <h3>一图扩展全套上架素材</h3>
+              <ul>
+                <li>A+、卖点、场景、特写一键生成</li>
+                <li>风格统一，直接可投放</li>
+              </ul>
+              <a class="m-cta" href="#">立即去使用</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="m">
+          <div class="m-grid flip">
+            <div class="m-info">
+              <span class="k">批量生图</span>
+              <span class="mini">爆单常备</span>
+              <h3>需求爆发也能稳定交付</h3>
+              <ul>
+                <li>批量任务统一生产，效率更高</li>
+                <li>单图成本更低，团队更轻松</li>
+              </ul>
+              <a class="m-cta" href="#">立即去使用</a>
+            </div>
+            <div class="media">
+              <img class="main" src="./assets/module-batch.png" alt="批量生图案例" />
+            </div>
+          </div>
+        </article>
+
+        <article class="m">
+          <div class="m-grid">
+            <div class="media">
+              <img class="main" src="./assets/module-bg-main.png" alt="商品换背景案例" />
+              <img class="thumb" src="./assets/module-bg-thumb.png" alt="原图参考" />
+            </div>
+            <div class="m-info">
+              <span class="k">商品换背景</span>
+              <span class="mini">场景升级</span>
+              <h3>优质场景图，快速生成</h3>
+              <ul>
+                <li>简单底图即可，AI 搭配逼真场景</li>
+                <li>减少场地与时间限制，凸显质感</li>
+              </ul>
+              <a class="m-cta" href="#">立即去使用</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="m">
+          <div class="m-grid flip">
+            <div class="m-info">
+              <span class="k">商品视频</span>
+              <span class="mini">动态展示</span>
+              <h3>让商品动起来，抢占视频流量</h3>
+              <ul>
+                <li>仅需一张图，快速生成动态视频</li>
+                <li>适配平台主推视频位，提升点击</li>
+              </ul>
+              <a class="m-cta" href="#">立即去使用</a>
+            </div>
+            <div class="media">
+              <img class="main" src="./assets/module-video.png" alt="商品视频案例" />
+            </div>
+          </div>
+        </article>
+
+        <article class="m">
+          <div class="m-grid">
+            <div class="media upscale">
+              <div class="upscale-half">
+                <span class="cap">放大前</span>
+                <img src="./assets/upscale-before.png" alt="放大前" />
+              </div>
+              <div class="upscale-half">
+                <span class="cap">放大后</span>
+                <img src="./assets/upscale-after.png" alt="放大后" />
+              </div>
+            </div>
+            <div class="m-info">
+              <span class="k">高清放大</span>
+              <span class="mini">细节还原</span>
+              <h3>放大后仍清晰，细节可投放</h3>
+              <ul>
+                <li>提升分辨率，边缘与纹理更利落</li>
+                <li>适合主图、放大查看与印刷物料</li>
+              </ul>
+              <a class="m-cta" href="#">立即去使用</a>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

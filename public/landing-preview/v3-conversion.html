@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Landing Preview V3 · 商业转化版</title>
+    <style>
+      :root {
+        --bg: #070a16;
+        --panel: #111939;
+        --line: rgba(255, 255, 255, 0.12);
+        --text: rgba(244, 247, 255, 0.96);
+        --sub: rgba(208, 218, 245, 0.74);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1000px 450px at 6% 0%, rgba(113, 92, 255, 0.24), transparent 55%),
+          radial-gradient(980px 520px at 95% 4%, rgba(30, 169, 255, 0.2), transparent 58%),
+          linear-gradient(180deg, #0a0f22, var(--bg));
+      }
+      .wrap { max-width: 1220px; margin: 0 auto; padding: 28px 24px 76px; }
+      .note { font-size: 12px; color: rgba(225, 233, 255, 0.56); margin-bottom: 14px; }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(158deg, rgba(17, 25, 57, 0.98), rgba(12, 18, 40, 0.98));
+        box-shadow: 0 24px 68px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+      }
+      .grid { display: grid; grid-template-columns: 1.1fr .9fr; }
+      .copy { padding: 38px 34px; }
+      .tag {
+        font-size: 12px; color: #dfd3ff; display: inline-flex;
+        border-radius: 999px; padding: 6px 11px;
+        border: 1px solid rgba(183, 165, 255, 0.42);
+        background: rgba(118, 91, 255, 0.15);
+      }
+      h1 { margin: 16px 0 12px; font-size: 48px; line-height: 1.08; letter-spacing: -.02em; }
+      .g {
+        background: linear-gradient(90deg, #bd97ff, #7264ff, #2ca8ff);
+        color: transparent; -webkit-background-clip: text; background-clip: text;
+      }
+      .sub { color: var(--sub); font-size: 16px; line-height: 1.72; max-width: 660px; }
+      .cta {
+        margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+      }
+      .btn {
+        text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px;
+        padding: 12px 18px;
+      }
+      .btn-main {
+        color: #fff;
+        background: linear-gradient(90deg, #7e63ff, #5d7cff, #29a8ff);
+        box-shadow: 0 12px 30px rgba(93, 116, 255, 0.4);
+      }
+      .btn-sub {
+        color: rgba(238, 244, 255, 0.9);
+        border: 1px solid rgba(255,255,255,.2);
+        background: rgba(255,255,255,.03);
+      }
+      .proof {
+        border-left: 1px solid var(--line);
+        padding: 26px 22px;
+        background: rgba(10, 16, 34, 0.78);
+      }
+      .kpi-grid {
+        display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+      }
+      .k {
+        border: 1px solid rgba(255,255,255,.14);
+        border-radius: 14px;
+        background: rgba(255,255,255,.03);
+        padding: 12px;
+      }
+      .k .n { font-size: 26px; font-weight: 800; line-height: 1; margin-top: 8px; }
+      .k .t { font-size: 12px; color: rgba(220,229,255,.72); }
+      .bar {
+        margin-top: 12px;
+        border: 1px solid rgba(255,255,255,.14);
+        border-radius: 14px;
+        padding: 10px;
+        background: rgba(255,255,255,.03);
+      }
+      .bar .row {
+        margin-top: 8px; height: 10px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.09);
+      }
+      .bar .fill {
+        height: 100%;
+        background: linear-gradient(90deg, #8d71ff, #3e9bff);
+      }
+      .sec {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(13, 20, 42, 0.92);
+        padding: 18px;
+      }
+      .sec h2 { margin: 0; font-size: 26px; }
+      .sec p { margin: 8px 0 0; color: var(--sub); font-size: 14px; }
+      .cards {
+        margin-top: 12px;
+        display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px;
+      }
+      .card {
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 14px;
+        background: rgba(255,255,255,.02);
+        padding: 12px;
+      }
+      .card b { font-size: 16px; display: block; }
+      .card span { margin-top: 6px; display: block; font-size: 12px; color: var(--sub); line-height: 1.56; }
+      .cases {
+        margin-top: 12px;
+        display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px;
+      }
+      .case {
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .case .h {
+        display: flex; justify-content: space-between; font-size: 11px; color: rgba(227,236,255,.72);
+        padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.12);
+      }
+      .case .b {
+        display: grid; grid-template-columns: 1fr 1fr; min-height: 120px;
+      }
+      .bf { background: linear-gradient(150deg, #383444, #181622); position: relative; }
+      .af {
+        background:
+          radial-gradient(160px 100px at 26% 24%, rgba(127, 103, 255, 0.52), transparent 64%),
+          radial-gradient(160px 100px at 74% 72%, rgba(31, 166, 255, 0.44), transparent 58%),
+          linear-gradient(160deg, #111a3e, #0c1228);
+        position: relative;
+      }
+      .shape {
+        position: absolute; left: 20%; right: 20%; top: 24%; bottom: 18%;
+        border: 1px solid rgba(255,255,255,.22);
+        border-radius: 10px;
+        background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.03));
+      }
+      @media (max-width: 1040px) {
+        .grid { grid-template-columns: 1fr; }
+        .proof { border-left: 0; border-top: 1px solid var(--line); }
+        .cards { grid-template-columns: repeat(2, minmax(0,1fr)); }
+        .cases { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 760px) {
+        .wrap { padding: 18px 12px 50px; }
+        h1 { font-size: 34px; }
+        .cards { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="note">静态预览 · V3 商业转化版（仅评审，不影响线上）</div>
+
+      <section class="hero">
+        <div class="grid">
+          <div class="copy">
+            <span class="tag">电商AI增长引擎</span>
+            <h1>用一张商品图<br /><span class="g">生成整套高转化内容资产</span></h1>
+            <p class="sub">
+              面向跨境与品牌团队，把图像生产从“逐张手工”升级为“风格一致、批量产出、可复用”的自动化流水线。
+              从商品套图、批量生图到商品视频，一次输入，持续放大流量效率。
+            </p>
+            <div class="cta">
+              <a class="btn btn-main" href="#">立即免费试用（70张）</a>
+              <a class="btn btn-sub" href="#">预约产品演示</a>
+              <a class="btn btn-sub" href="./index.html">返回 V1</a>
+            </div>
+          </div>
+          <aside class="proof">
+            <div class="kpi-grid">
+              <div class="k"><div class="t">上架速度</div><div class="n">10x</div></div>
+              <div class="k"><div class="t">素材成本</div><div class="n">-68%</div></div>
+              <div class="k"><div class="t">点击率</div><div class="n">+37%</div></div>
+              <div class="k"><div class="t">团队人效</div><div class="n">+2.4x</div></div>
+            </div>
+            <div class="bar">
+              <div class="t">投放素材准备时间</div>
+              <div class="row"><div class="fill" style="width: 82%"></div></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>核心模块</h2>
+        <p>商品套图、批量生图、商品图、商品视频：聚焦“更快上架 + 更高转化”。</p>
+        <div class="cards">
+          <div class="card"><b>商品套图</b><span>一图扩展电商全链路素材，风格一致。</span></div>
+          <div class="card"><b>批量生图</b><span>任务打包生产，爆单时也稳定交付。</span></div>
+          <div class="card"><b>商品图</b><span>场景、卖点、细节强化，减少拍摄成本。</span></div>
+          <div class="card"><b>商品视频</b><span>单图做动态展示，放大点击与停留。</span></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>真实感对比展示</h2>
+        <p>支持替换为你的真实案例图，直连销售结果讲故事。</p>
+        <div class="cases">
+          <article class="case">
+            <div class="h"><span>箱包类目</span><span>CTR +31%</span></div>
+            <div class="b"><div class="bf"><div class="shape"></div></div><div class="af"><div class="shape"></div></div></div>
+          </article>
+          <article class="case">
+            <div class="h"><span>家居类目</span><span>转化 +19%</span></div>
+            <div class="b"><div class="bf"><div class="shape"></div></div><div class="af"><div class="shape"></div></div></div>
+          </article>
+          <article class="case">
+            <div class="h"><span>服装类目</span><span>制作时长 -72%</span></div>
+            <div class="b"><div class="bf"><div class="shape"></div></div><div class="af"><div class="shape"></div></div></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

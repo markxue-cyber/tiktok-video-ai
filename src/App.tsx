@@ -120,6 +120,7 @@ import {
 import './workbench-theme.css'
 import { ImageToolWorkbench } from './ImageToolWorkbench'
 import { RemoveBackgroundWorkbench } from './RemoveBackgroundWorkbench'
+import { LandingV2 } from './LandingV2'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -1562,87 +1563,17 @@ function App() {
 
   if (page === 'landing')
     return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3"><div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center"><Video className="w-5 h-5 text-white" /></div><span className="text-xl font-bold text-white">TikGen AI</span></div>
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => {
-                setAuthMode('login')
-                setPage('auth')
-              }}
-              className="px-4 py-2 text-white/80 hover:text-white"
-            >
-              登录
-            </button>
-            <button
-              onClick={() => {
-                setAuthMode('register')
-                setPage('auth')
-              }}
-              className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg font-medium"
-            >
-              注册
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="pt-32 pb-20 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl font-bold text-white mb-8">AI驱动的内容创作<br/><span className="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">释放无限创意</span></h1>
-          <p className="text-xl text-white/70 mb-12">集成OpenAI Sora、Google Veo、字节Seedance等顶尖AI模型</p>
-          <div className="flex items-center justify-center gap-4">
-            <button
-              onClick={() => {
-                setAuthMode('login')
-                setPage('auth')
-              }}
-              className="px-8 py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl font-bold text-lg"
-            >
-              立即开始创作
-            </button>
-            <button className="px-8 py-4 bg-white/10 text-white rounded-xl font-bold text-lg border border-white/20 hover:bg-white/15">
-              观看演示
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="py-20 px-6 bg-black/30">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-white text-center mb-16">核心功能</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-pink-500 to-purple-500 rounded-xl flex items-center justify-center mb-6"><Video className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">AI视频生成</h3><p className="text-white/60">输入文案自动生成视频</p></div>
-            <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center mb-6"><Image className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">电商套图</h3><p className="text-white/60">参考图与商品分析，多场景主图与投放素材一键出图</p></div>
-            <div className="bg-white/5 rounded-2xl p-8 border border-white/10"><div className="w-14 h-14 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center mb-6"><Sparkles className="w-7 h-7 text-white" /></div><h3 className="text-xl font-bold text-white mb-4">智能提示词</h3><p className="text-white/60">GPT-4o 自动解析商品并生成脚本/提示词</p></div>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6 mt-10">
-            <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center gap-3 text-white">
-                <ShieldCheck className="w-5 h-5 text-emerald-300" />
-                <span className="font-semibold">企业级稳定</span>
-        </div>
-              <p className="text-white/60 mt-2 text-sm">任务式生成 + 进度轮询，支持异步产出。</p>
-            </div>
-            <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center gap-3 text-white">
-                <WandSparkles className="w-5 h-5 text-pink-300" />
-                <span className="font-semibold">一键工作流</span>
-              </div>
-              <p className="text-white/60 mt-2 text-sm">参考图 → 商品解析 → 脚本 → 提示词 → 生成。</p>
-            </div>
-            <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-              <div className="flex items-center gap-3 text-white">
-                <Library className="w-5 h-5 text-indigo-300" />
-                <span className="font-semibold">资产沉淀</span>
-              </div>
-              <p className="text-white/60 mt-2 text-sm">本地上传与AI生成素材自动归档到资产库。</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+      <LandingV2
+        onLogin={() => {
+          setAuthMode('login')
+          setPage('auth')
+        }}
+        onRegister={() => {
+          setAuthMode('register')
+          setPage('auth')
+        }}
+      />
+    )
 
   if (page === 'auth')
     return (
