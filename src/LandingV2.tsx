@@ -84,31 +84,26 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
               <div
                 ref={onetapMosaicRef}
                 className="lg2-media lg2-onetap-mosaic"
-                aria-label="一键套图案例：六张延展图拼接展示"
+                aria-label="一键套图案例：六张延展图，上三下三"
               >
-                <div className="lg2-onetap-tile lg2-onetap-tile--hero">
+                <div className="lg2-onetap-cell lg2-onetap-cell--lead">
                   <img src={asset('onetap-1.png')} alt="主场景：生活氛围图" loading="lazy" decoding="async" />
                   <span className="lg2-onetap-badge">1 张延展 · 多场景</span>
                 </div>
-                <div className="lg2-onetap-tile lg2-onetap-tile--a">
-                  <img src={asset('onetap-6.png')} alt="白底主图风格" loading="lazy" decoding="async" />
-                </div>
-                <div className="lg2-onetap-tile lg2-onetap-tile--b">
+                <div className="lg2-onetap-cell">
                   <img src={asset('onetap-2.png')} alt="室内场景图" loading="lazy" decoding="async" />
                 </div>
-                <div className="lg2-onetap-tile lg2-onetap-tile--c">
+                <div className="lg2-onetap-cell">
+                  <img src={asset('onetap-3.png')} alt="对比与陈列构图" loading="lazy" decoding="async" />
+                </div>
+                <div className="lg2-onetap-cell">
                   <img src={asset('onetap-4.png')} alt="材质与细节特写" loading="lazy" decoding="async" />
                 </div>
-                <div className="lg2-onetap-tile lg2-onetap-tile--d">
+                <div className="lg2-onetap-cell">
                   <img src={asset('onetap-5.png')} alt="结构与工艺视角" loading="lazy" decoding="async" />
                 </div>
-                <div className="lg2-onetap-tile lg2-onetap-tile--wide">
-                  <img
-                    src={asset('onetap-3.png')}
-                    alt="对比与陈列构图"
-                    loading="eager"
-                    decoding="async"
-                  />
+                <div className="lg2-onetap-cell">
+                  <img src={asset('onetap-6.png')} alt="白底主图风格" loading="lazy" decoding="async" />
                 </div>
               </div>
               <div className="lg2-m-info">
@@ -179,8 +174,8 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
 
           <article className="lg2-m">
             <div className="lg2-m-grid">
-              <div className="lg2-media lg2-scene-stage" aria-label="优质场景案例：立体翻页轮播">
-                <div className="lg2-scene-perspective">
+              <div className="lg2-media lg2-scene-stage" aria-label="优质场景案例：淡入轮播，完整展示">
+                <div className="lg2-scene-viewport">
                   <img
                     className="lg2-scene-slide"
                     src={asset('scene-case-1.png')}
@@ -190,7 +185,7 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   />
                   <img
                     className="lg2-scene-slide"
-                    style={{ animationDelay: '-3s' }}
+                    style={{ animationDelay: '-4s' }}
                     src={asset('scene-case-2.png')}
                     alt="场景案例：白底产品"
                     loading="lazy"
@@ -198,7 +193,7 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   />
                   <img
                     className="lg2-scene-slide"
-                    style={{ animationDelay: '-6s' }}
+                    style={{ animationDelay: '-8s' }}
                     src={asset('scene-case-3.png')}
                     alt="场景案例：桌面氛围"
                     loading="lazy"
@@ -206,7 +201,7 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   />
                   <img
                     className="lg2-scene-slide"
-                    style={{ animationDelay: '-9s' }}
+                    style={{ animationDelay: '-12s' }}
                     src={asset('scene-case-4.png')}
                     alt="场景案例：叠杯特写"
                     loading="lazy"
@@ -214,7 +209,7 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   />
                   <img
                     className="lg2-scene-slide"
-                    style={{ animationDelay: '-12s' }}
+                    style={{ animationDelay: '-16s' }}
                     src={asset('scene-case-5.png')}
                     alt="场景案例：釉感细节"
                     loading="lazy"
@@ -222,7 +217,7 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   />
                   <img
                     className="lg2-scene-slide"
-                    style={{ animationDelay: '-15s' }}
+                    style={{ animationDelay: '-20s' }}
                     src={asset('scene-case-6.png')}
                     alt="场景案例：生活使用感"
                     loading="lazy"
@@ -260,8 +255,17 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   立即去使用
                 </button>
               </div>
-              <div className="lg2-media">
-                <img className="lg2-main-img" src={asset('module-video.png')} alt="商品视频案例" />
+              <div className="lg2-media lg2-video-case">
+                <video
+                  className="lg2-demo-video"
+                  src={asset('product-video-demo.mp4')}
+                  playsInline
+                  muted
+                  loop
+                  controls
+                  preload="metadata"
+                  aria-label="商品视频案例演示"
+                />
               </div>
             </div>
           </article>
@@ -295,24 +299,20 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
 
           <article className="lg2-m">
             <div className="lg2-m-grid">
-              <div className="lg2-media lg2-translate-stage" aria-label="图片翻译案例：中英文切换">
-                <div className="lg2-translate-viewport">
-                  <img
-                    className="lg2-translate-layer lg2-translate-zh"
-                    src={asset('translate-zh.png')}
-                    alt="中文主图案例"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <img
-                    className="lg2-translate-layer lg2-translate-en"
-                    src={asset('translate-en.png')}
-                    alt="译为英文后的主图"
-                    loading="lazy"
-                    decoding="async"
-                  />
+              <div className="lg2-media lg2-translate-stage" aria-label="图片翻译案例：中英文对比">
+                <div className="lg2-translate-compare">
+                  <figure className="lg2-translate-col">
+                    <img src={asset('translate-zh.png')} alt="中文主图案例" loading="lazy" decoding="async" />
+                    <figcaption>中文原稿</figcaption>
+                  </figure>
+                  <span className="lg2-translate-vs" aria-hidden>
+                    ⇄
+                  </span>
+                  <figure className="lg2-translate-col">
+                    <img src={asset('translate-en.png')} alt="译为英文后的主图" loading="lazy" decoding="async" />
+                    <figcaption>English</figcaption>
+                  </figure>
                 </div>
-                <span className="lg2-translate-hint">中文 · English 自动轮播</span>
               </div>
               <div className="lg2-m-info">
                 <span className="lg2-k">图片翻译</span>

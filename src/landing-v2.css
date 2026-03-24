@@ -333,22 +333,20 @@
   max-width: none;
 }
 
-/* 一键套图：六图 Bento 拼接 + 入场 / 悬停动效
- * 行高必须用 minmax(像素, fr)：子项内图片 position:absolute 不参与撑高，纯 1fr 在 auto 高度网格里会把底行压没 */
+/* 一键套图：上三下三规整网格 + 入场错列 + 悬停浮起与扫光 */
 .lg2-root .lg2-media.lg2-onetap-mosaic {
   display: grid;
-  grid-template-columns: 2.12fr 1fr 1fr;
-  grid-template-rows: minmax(196px, 1.05fr) minmax(196px, 1.05fr) minmax(228px, 1.05fr);
-  gap: 11px;
-  padding: 14px;
-  min-height: 580px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(168px, 22vw));
+  gap: 12px;
+  padding: 16px;
+  min-height: 0;
   align-content: stretch;
 }
 
-.lg2-root .lg2-onetap-tile {
+.lg2-root .lg2-onetap-cell {
   position: relative;
   min-height: 0;
-  align-self: stretch;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -357,44 +355,46 @@
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   isolation: isolate;
   opacity: 0;
-  transform: translateY(22px) scale(0.97);
-  filter: blur(4px);
-  will-change: transform, opacity, filter;
+  transform: translateY(18px) scale(0.98);
+  filter: blur(3px);
+  transition:
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.5s ease;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile {
-  animation: lg2-onetap-tile-in 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell {
+  animation: lg2-onetap-cell-in 0.88s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero {
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:nth-child(1) {
   animation-delay: 0.04s;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--a {
-  animation-delay: 0.12s;
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:nth-child(2) {
+  animation-delay: 0.1s;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--b {
-  animation-delay: 0.2s;
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:nth-child(3) {
+  animation-delay: 0.16s;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--c {
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:nth-child(4) {
+  animation-delay: 0.22s;
+}
+
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:nth-child(5) {
   animation-delay: 0.28s;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--d {
-  animation-delay: 0.36s;
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:nth-child(6) {
+  animation-delay: 0.34s;
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--wide {
-  animation-delay: 0.44s;
-}
-
-@keyframes lg2-onetap-tile-in {
+@keyframes lg2-onetap-cell-in {
   from {
     opacity: 0;
-    transform: translateY(22px) scale(0.97);
-    filter: blur(4px);
+    transform: translateY(18px) scale(0.98);
+    filter: blur(3px);
   }
 
   to {
@@ -404,60 +404,15 @@
   }
 }
 
-.lg2-root .lg2-onetap-tile--hero {
-  grid-column: 1;
-  grid-row: 1 / span 2;
-}
-
-.lg2-root .lg2-onetap-tile--a {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.lg2-root .lg2-onetap-tile--b {
-  grid-column: 3;
-  grid-row: 1;
-}
-
-.lg2-root .lg2-onetap-tile--c {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.lg2-root .lg2-onetap-tile--d {
-  grid-column: 3;
-  grid-row: 2;
-}
-
-.lg2-root .lg2-onetap-tile--wide {
-  grid-column: 1 / -1;
-  grid-row: 3;
-  min-height: 228px;
-}
-
-/* 1:1 素材完整入画：contain + 深色衬底 */
-.lg2-root .lg2-onetap-tile img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  max-width: none;
-  z-index: 1;
-  transform: scale(1);
-  transition: transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.lg2-root .lg2-onetap-tile::after {
+.lg2-root .lg2-onetap-cell::after {
   content: '';
   position: absolute;
   inset: -1px;
   background: linear-gradient(
     115deg,
     transparent 38%,
-    rgba(255, 255, 255, 0.14) 48%,
-    rgba(255, 255, 255, 0.06) 52%,
+    rgba(255, 255, 255, 0.12) 48%,
+    rgba(255, 255, 255, 0.05) 52%,
     transparent 62%
   );
   transform: translateX(-130%) skewX(-12deg);
@@ -465,19 +420,21 @@
   pointer-events: none;
   z-index: 2;
   mix-blend-mode: screen;
-  transition: opacity 0.35s ease;
 }
 
-.lg2-root .lg2-onetap-tile:hover::after {
-  animation: lg2-onetap-shine 0.95s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.lg2-root .lg2-onetap-cell:hover {
+  transform: translateY(-5px);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(167, 139, 250, 0.15);
 }
 
-.lg2-root .lg2-onetap-tile:hover img {
-  transform: scale(1.04);
+.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-cell:hover {
+  transform: translateY(-5px);
 }
 
-.lg2-root .lg2-onetap-tile--hero:hover img {
-  animation: none;
+.lg2-root .lg2-onetap-cell:hover::after {
+  animation: lg2-onetap-shine 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes lg2-onetap-shine {
@@ -500,20 +457,27 @@
   }
 }
 
-.lg2-root .lg2-onetap-tile--hero::before {
-  content: '';
+/* 1:1 完整入画 */
+.lg2-root .lg2-onetap-cell img {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  max-width: none;
   z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(90% 70% at 20% 0%, rgba(167, 139, 250, 0.12), transparent 55%);
-  opacity: 0.85;
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lg2-root .lg2-onetap-cell:hover img {
+  transform: scale(1.035);
 }
 
 .lg2-root .lg2-onetap-badge {
   position: absolute;
-  left: 12px;
-  bottom: 12px;
+  left: 10px;
+  bottom: 10px;
   z-index: 3;
   font-size: 11px;
   font-weight: 600;
@@ -530,32 +494,21 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero img {
-  animation: lg2-onetap-ken 16s ease-in-out infinite alternate;
-}
-
-@keyframes lg2-onetap-ken {
-  from {
-    transform: scale(1) translate(0, 0);
-  }
-
-  to {
-    transform: scale(1.03) translate(-0.4%, -0.3%);
-  }
-}
-
 /* 批量生图：无限胶片横移（与一键套图 Bento、换背景 3D 翻页区分） */
 .lg2-root .lg2-media.lg2-batch-film {
   display: block;
   padding: 14px;
-  min-height: 420px;
+  min-height: clamp(420px, 48vw, 540px);
   overflow: hidden;
 }
 
 .lg2-root .lg2-batch-film-inner {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(400px, 46vw, 520px);
   height: 100%;
-  min-height: 392px;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -571,9 +524,10 @@
 
 .lg2-root .lg2-batch-film-track {
   display: flex;
+  align-items: center;
   width: max-content;
-  gap: 14px;
-  padding: 16px 14px;
+  gap: 16px;
+  padding: 20px 16px;
   animation: lg2-batch-film-move 32s linear infinite;
 }
 
@@ -595,7 +549,7 @@
 .lg2-root .lg2-batch-film-panel {
   position: relative;
   flex: 0 0 auto;
-  width: clamp(200px, 20vw, 292px);
+  width: clamp(248px, 28vw, 368px);
   aspect-ratio: 1;
   height: auto;
   margin: 0;
@@ -639,73 +593,57 @@
   -webkit-backdrop-filter: blur(8px);
 }
 
-/* 商品换背景：透视翻页式轮播（六图循环） */
+/* 商品换背景：纯淡入淡出轮播，1:1 视口 + contain，保证整图可见 */
 .lg2-root .lg2-media.lg2-scene-stage {
   position: relative;
-  min-height: 420px;
-  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(400px, 44vw, 520px);
+  padding: 16px;
 }
 
-.lg2-root .lg2-scene-perspective {
+.lg2-root .lg2-scene-viewport {
   position: relative;
-  height: 100%;
-  min-height: 392px;
+  width: min(100%, 480px);
+  aspect-ratio: 1;
+  margin-inline: auto;
   border-radius: 18px;
   overflow: hidden;
-  perspective: 1100px;
-  transform-style: preserve-3d;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: radial-gradient(120% 80% at 50% 100%, rgba(124, 58, 237, 0.1), transparent 55%),
-    rgba(0, 0, 0, 0.34);
+  background:
+    radial-gradient(ellipse at center, rgba(28, 30, 48, 0.5) 0%, rgba(6, 8, 18, 0.96) 100%);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.26);
 }
 
 .lg2-root .lg2-scene-slide {
   position: absolute;
-  inset: 10px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   display: block;
   max-width: none;
-  z-index: 0;
   opacity: 0;
-  transform: perspective(1000px) rotateY(-26deg) scale(0.92) translateZ(-50px);
-  filter: blur(4px);
-  animation: lg2-scene-flip-cycle 18s cubic-bezier(0.45, 0, 0.25, 1) infinite;
-  will-change: transform, opacity, filter;
+  z-index: 0;
+  animation: lg2-scene-fade-only 24s ease-in-out infinite;
+  will-change: opacity;
 }
 
-@keyframes lg2-scene-flip-cycle {
-  0%,
-  100% {
-    opacity: 0;
-    transform: perspective(1000px) rotateY(-28deg) scale(0.9) translateZ(-70px);
-    filter: blur(5px);
-    z-index: 0;
-  }
-
-  4% {
+@keyframes lg2-scene-fade-only {
+  0% {
     opacity: 0;
   }
 
-  7% {
-    opacity: 1;
-    transform: perspective(1000px) rotateY(0deg) scale(1) translateZ(0);
-    filter: blur(0);
-    z-index: 3;
-  }
-
+  2%,
   14% {
     opacity: 1;
-    transform: perspective(1000px) rotateY(0deg) scale(1) translateZ(0);
-    filter: blur(0);
-    z-index: 3;
   }
 
-  18% {
+  16%,
+  100% {
     opacity: 0;
-    transform: perspective(1000px) rotateY(22deg) scale(0.93) translateZ(-45px);
-    filter: blur(4px);
-    z-index: 0;
   }
 }
 
@@ -763,12 +701,24 @@
     height: auto;
   }
 
-  .lg2-root .lg2-scene-perspective {
-    min-height: 300px;
+  .lg2-root .lg2-scene-viewport {
+    width: 100%;
+    max-width: 400px;
+    min-height: 0;
   }
 
   .lg2-root .lg2-media.lg2-scene-stage {
-    min-height: 328px;
+    min-height: 0;
+  }
+
+  .lg2-root .lg2-translate-compare {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+  }
+
+  .lg2-root .lg2-translate-vs {
+    padding: 6px 0;
+    transform: rotate(90deg);
   }
 }
 
@@ -904,93 +854,94 @@
   color: rgba(235, 242, 255, 0.9);
 }
 
-/* 图片翻译：双图淡入淡出轮播（与场景 3D、套图 Bento 区分） */
-.lg2-root .lg2-media.lg2-translate-stage {
+/* 商品视频：案例 MP4，contain 避免裁切 */
+.lg2-root .lg2-media.lg2-video-case {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
-  padding: clamp(16px, 2.5vw, 28px);
+  min-height: 360px;
+  padding: clamp(12px, 2vw, 24px);
 }
 
-.lg2-root .lg2-translate-viewport {
-  position: relative;
-  width: min(100%, 440px);
-  aspect-ratio: 1;
-  margin-inline: auto;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: radial-gradient(ellipse at center, rgba(28, 30, 48, 0.55) 0%, rgba(6, 8, 18, 0.95) 100%);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.26);
-  overflow: hidden;
-}
-
-.lg2-root .lg2-translate-layer {
-  position: absolute;
-  inset: 0;
+.lg2-root .lg2-demo-video {
   width: 100%;
-  height: 100%;
+  max-width: min(100%, 560px);
+  max-height: min(70vh, 520px);
+  height: auto;
+  border-radius: 16px;
+  object-fit: contain;
+  background: #000;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+/* 图片翻译：左右并排对比，双图同时可见 */
+.lg2-root .lg2-media.lg2-translate-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+  padding: clamp(14px, 2vw, 24px);
+}
+
+.lg2-root .lg2-translate-compare {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: clamp(10px, 2vw, 20px);
+  align-items: stretch;
+  width: 100%;
+  max-width: min(920px, 100%);
+  margin-inline: auto;
+}
+
+.lg2-root .lg2-translate-col {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: radial-gradient(ellipse at center, rgba(26, 28, 44, 0.5) 0%, rgba(5, 7, 16, 0.92) 100%);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.45s ease;
+}
+
+.lg2-root .lg2-translate-col:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+}
+
+.lg2-root .lg2-translate-col img {
+  width: 100%;
+  aspect-ratio: 1;
   object-fit: contain;
   display: block;
-  pointer-events: none;
+  background: rgba(0, 0, 0, 0.2);
 }
 
-.lg2-root .lg2-translate-zh {
-  animation: lg2-translate-zh 10s ease-in-out infinite;
-  z-index: 1;
-}
-
-.lg2-root .lg2-translate-en {
-  animation: lg2-translate-en 10s ease-in-out infinite;
-  z-index: 2;
-}
-
-@keyframes lg2-translate-zh {
-  0%,
-  42% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  48%,
-  96% {
-    opacity: 0;
-    transform: scale(1.015);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes lg2-translate-en {
-  0%,
-  42% {
-    opacity: 0;
-    transform: scale(0.99);
-  }
-
-  48%,
-  96% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    transform: scale(0.99);
-  }
-}
-
-.lg2-root .lg2-translate-hint {
-  margin-top: 14px;
+.lg2-root .lg2-translate-col figcaption {
+  margin: 0;
+  padding: 8px 10px 12px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  color: rgba(200, 210, 255, 0.72);
+  letter-spacing: 0.06em;
   text-align: center;
+  color: rgba(200, 210, 255, 0.82);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.lg2-root .lg2-translate-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgba(167, 139, 250, 0.75);
+  text-shadow: 0 0 24px rgba(124, 58, 237, 0.35);
+  padding: 0 4px;
 }
 
 .lg2-root .lg2-cta-row {
@@ -1124,53 +1075,16 @@
     min-height: 0;
   }
 
-  .lg2-root .lg2-translate-viewport {
-    width: 100%;
-    max-width: 360px;
-  }
-
   .lg2-root .lg2-media.lg2-onetap-mosaic {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: none;
-    min-height: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(140px, 28vw));
     gap: 9px;
     padding: 11px;
+    min-height: 0;
   }
 
-  .lg2-root .lg2-onetap-tile--hero {
-    grid-column: 1 / -1;
-    grid-row: auto;
-    min-height: 220px;
-  }
-
-  .lg2-root .lg2-onetap-tile--a {
-    grid-column: 1;
-    grid-row: auto;
-    min-height: 120px;
-  }
-
-  .lg2-root .lg2-onetap-tile--b {
-    grid-column: 2;
-    grid-row: auto;
-    min-height: 120px;
-  }
-
-  .lg2-root .lg2-onetap-tile--c {
-    grid-column: 1;
-    grid-row: auto;
-    min-height: 120px;
-  }
-
-  .lg2-root .lg2-onetap-tile--d {
-    grid-column: 2;
-    grid-row: auto;
-    min-height: 120px;
-  }
-
-  .lg2-root .lg2-onetap-tile--wide {
-    grid-column: 1 / -1;
-    grid-row: auto;
-    min-height: 200px;
+  .lg2-root .lg2-media.lg2-video-case {
+    min-height: 260px;
   }
 }
 
@@ -1185,18 +1099,14 @@
     background-position: 0% 50%;
   }
 
-  .lg2-root .lg2-onetap-mosaic .lg2-onetap-tile {
+  .lg2-root .lg2-onetap-mosaic .lg2-onetap-cell {
     opacity: 1;
     transform: none;
     filter: none;
     animation: none !important;
   }
 
-  .lg2-root .lg2-onetap-mosaic.lg2-onetap--visible .lg2-onetap-tile--hero img {
-    animation: none !important;
-  }
-
-  .lg2-root .lg2-onetap-tile::after {
+  .lg2-root .lg2-onetap-cell::after {
     display: none;
   }
 
@@ -1230,40 +1140,16 @@
     z-index: auto !important;
   }
 
-  .lg2-root .lg2-scene-perspective {
+  .lg2-root .lg2-scene-viewport {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
-    perspective: none;
-    transform: none;
+    aspect-ratio: auto;
+    width: 100%;
+    max-width: none;
     min-height: 0;
     height: auto;
     padding: 10px;
-    overflow: hidden;
-  }
-
-  .lg2-root .lg2-translate-zh,
-  .lg2-root .lg2-translate-en {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-
-  .lg2-root .lg2-translate-viewport {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    aspect-ratio: auto;
-    max-width: none;
-    width: 100%;
-    padding: 10px;
-  }
-
-  .lg2-root .lg2-translate-layer {
-    position: relative !important;
-    inset: auto !important;
-    width: 100% !important;
-    height: auto !important;
-    aspect-ratio: 1;
+    overflow: visible;
   }
 }
