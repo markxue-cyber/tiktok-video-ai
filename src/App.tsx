@@ -9668,6 +9668,15 @@ function AdminMonitoringPanel() {
   )
 }
 
+/** XorPay：支付宝为 info.qr 链接、微信常为 code_url；多为支付串而非图片 URL，需生成可扫的二维码图 */
+function xorpayQrImageSrc(qrPayload: string | undefined): string | null {
+  const s = String(qrPayload || '').trim()
+  if (!s) return null
+  if (s.startsWith('data:image/')) return s
+  if (/^https?:\/\//i.test(s) && /\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(s)) return s
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(s)}`
+}
+
 function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser: () => Promise<void>; packages: PackageConfigItem[] }) {
   const [busyPlan, setBusyPlan] = useState('')
   const [payError, setPayError] = useState('')
@@ -9764,12 +9773,18 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
             <button onClick={() => setPayInfo(null)} className="px-3 py-1.5 rounded-lg border text-sm">关闭</button>
           </div>
           <div className="mt-5 grid md:grid-cols-2 gap-6 items-center">
-            <div className="flex items-center justify-center">
-              {payInfo.qrcode ? (
-                <img src={payInfo.qrcode} alt="支付二维码" className="w-56 h-56 rounded-xl border bg-white" />
-              ) : (
-                <div className="w-56 h-56 rounded-xl border bg-gray-50 flex items-center justify-center text-gray-400">二维码生成中...</div>
-              )}
+            <div className="flex flex-col items-center justify-center gap-2">
+              {(() => {
+                const src = xorpayQrImageSrc(payInfo.qrcode || payInfo.payUrl)
+                return src ? (
+                  <img src={src} alt="支付二维码" className="w-56 h-56 rounded-xl border bg-white object-contain" />
+                ) : (
+                  <div className="w-56 h-56 rounded-xl border bg-gray-50 flex flex-col items-center justify-center gap-2 px-3 text-center text-gray-400 text-sm">
+                    <span>未拿到支付串</span>
+                    <span className="text-xs text-gray-400">请用下方「打开支付页面」或重试下单</span>
+                  </div>
+                )
+              })()}
             </div>
             <div>
               <div className="text-sm text-gray-600">

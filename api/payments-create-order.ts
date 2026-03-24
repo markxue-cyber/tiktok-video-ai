@@ -111,8 +111,37 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ success: false, error: `XorPay下单失败(${resp.status})`, raw: data })
     }
 
-    const payUrl = data?.pay_url || data?.url || data?.data?.pay_url || ''
-    const qrcode = data?.qrcode || data?.data?.qrcode || ''
+    const st = String(data?.status || '').toLowerCase()
+    if (st && st !== 'ok') {
+      const info = data?.info
+      const hint =
+        typeof info === 'string'
+          ? info
+          : info && typeof info === 'object'
+            ? String((info as any).msg || (info as any).message || JSON.stringify(info))
+            : ''
+      return res.status(200).json({
+        success: false,
+        error: hint ? `XorPay：${hint}` : `XorPay 下单未成功（${data.status}）`,
+        raw: data,
+      })
+    }
+
+    const info = data?.info
+    const infoObj = info && typeof info === 'object' && !Array.isArray(info) ? (info as Record<string, unknown>) : null
+    const infoQr = infoObj?.qr != null ? String(infoObj.qr).trim() : ''
+
+    const payUrl = String(data?.pay_url || data?.url || data?.data?.pay_url || infoQr || '').trim()
+    const qrPayload = String(
+      data?.qrcode ||
+        data?.data?.qrcode ||
+        data?.code_url ||
+        data?.data?.code_url ||
+        (infoObj?.code_url != null ? String(infoObj.code_url) : '') ||
+        infoQr ||
+        payUrl ||
+        '',
+    ).trim()
 
     const patchResp = await fetch(
       `${rest}/orders?provider=eq.xorpay&provider_order_id=eq.${encodeURIComponent(orderId)}`,
@@ -127,14 +156,20 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({
         success: true,
         orderId,
-        payUrl,
-        qrcode,
+        payUrl: payUrl || qrPayload,
+        qrcode: qrPayload,
         raw: data,
         warn: pe?.message || '已下单但更新订单详情失败',
       })
     }
 
-    return res.status(200).json({ success: true, orderId, payUrl, qrcode, raw: data })
+    return res.status(200).json({
+      success: true,
+      orderId,
+      payUrl: payUrl || qrPayload,
+      qrcode: qrPayload,
+      raw: data,
+    })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }
