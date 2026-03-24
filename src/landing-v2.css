@@ -1,20 +1,64 @@
-/* 登录前落地页 V2：作用域限制在 .lg2-root，避免污染工作台 */
+/*
+ * 登录前落地页：与登录后 workbench「深幕布 + 玻璃面板」同系，首屏略加强光感与设计层次。
+ * 仅作用于 .lg2-root，不污染工作台。
+ */
+
 .lg2-root {
-  --lg2-bg: #060913;
   --lg2-line: rgba(255, 255, 255, 0.12);
-  --lg2-text: rgba(245, 248, 255, 0.96);
-  --lg2-sub: rgba(212, 221, 246, 0.72);
+  --lg2-text: rgba(255, 255, 255, 0.92);
+  --lg2-sub: rgba(205, 213, 255, 0.72);
+  --lg2-glass: linear-gradient(165deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.022));
+  --lg2-glass-border: rgba(255, 255, 255, 0.12);
+  --lg2-shadow-deep: 0 20px 56px rgba(3, 6, 18, 0.48);
+  --lg2-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 
   margin: 0;
   min-height: 100vh;
   width: 100%;
   overflow-x: clip;
+  position: relative;
+  isolation: isolate;
   font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: var(--lg2-text);
+  /* 与 .workbench-root 幕布渐变同构， landing 略提亮光斑 */
   background:
-    radial-gradient(900px 420px at 15% 0%, rgba(111, 84, 255, 0.22), transparent 58%),
-    radial-gradient(900px 520px at 90% 2%, rgba(40, 161, 255, 0.16), transparent 60%),
-    linear-gradient(180deg, #0a0f22, var(--lg2-bg));
+    radial-gradient(900px 500px at 20% 10%, rgba(124, 58, 237, 0.4), transparent 55%),
+    radial-gradient(800px 420px at 82% 14%, rgba(236, 72, 153, 0.3), transparent 54%),
+    radial-gradient(820px 520px at 50% 92%, rgba(59, 130, 246, 0.26), transparent 50%),
+    linear-gradient(180deg, #0b1026, #050610);
+}
+
+/* 四周边缘收暗，强化「幕布」纵深 */
+.lg2-root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(ellipse 85% 75% at 50% 42%, transparent 30%, rgba(5, 6, 16, 0.62) 100%);
+}
+
+/* 极轻呼吸感高光（仅装饰） */
+.lg2-root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background: radial-gradient(600px 380px at 50% -10%, rgba(167, 139, 250, 0.2), transparent 65%);
+  animation: lg2-ambient 14s ease-in-out infinite alternate;
+}
+
+@keyframes lg2-ambient {
+  from {
+    opacity: 0.22;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.4;
+    transform: scale(1.03);
+  }
 }
 
 .lg2-root *,
@@ -29,13 +73,16 @@
   left: 0;
   right: 0;
   z-index: 100;
+  background: rgba(255, 255, 255, 0.035);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(6, 9, 19, 0.82);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
 }
 
 .lg2-topbar-inner {
+  position: relative;
+  z-index: 1;
   max-width: 1160px;
   margin: 0 auto;
   padding: 14px 24px;
@@ -55,17 +102,20 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #ec4899, #a855f7);
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.95), rgba(124, 58, 237, 0.95));
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
+  box-shadow:
+    0 8px 28px rgba(124, 58, 237, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .lg2-brand-name {
   font-size: 1.15rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(237, 230, 255, 0.96);
   letter-spacing: -0.02em;
 }
 
@@ -76,68 +126,101 @@
 }
 
 .lg2-btn-ghost {
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 14px;
   font-weight: 500;
   padding: 8px 14px;
   border-radius: 10px;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .lg2-btn-ghost:hover {
-  color: #fff;
+  color: rgba(255, 255, 255, 0.96);
   background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .lg2-btn-primary {
-  border: 0;
-  background: linear-gradient(90deg, #7b63ff, #5b7dff, #2ca8ff);
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: linear-gradient(92deg, rgba(124, 58, 237, 0.95), rgba(59, 130, 246, 0.88));
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   padding: 9px 18px;
   border-radius: 10px;
   cursor: pointer;
-  box-shadow: 0 8px 22px rgba(87, 113, 255, 0.35);
+  box-shadow:
+    0 10px 28px rgba(88, 64, 220, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: filter 0.15s ease, transform 0.15s ease;
 }
 
 .lg2-btn-primary:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
-/* 与 public/landing-preview/v2-minimal-luxury.html 的 .wrap 一致：max-width 1160 + 左右 24 */
 .lg2-root .lg2-wrap {
+  position: relative;
+  z-index: 1;
   max-width: 1160px;
   width: 100%;
   margin-left: auto;
   margin-right: auto;
   box-sizing: border-box;
-  /* 顶栏约 56px + 与静态页 main 顶部留白 34px 对齐 */
   padding: 90px 24px 80px;
 }
 
+/* 玻璃主面板：对齐 .tikgen-panel 语言 */
 .lg2-root .lg2-hero {
-  border: 1px solid var(--lg2-line);
+  border: 1px solid var(--lg2-glass-border);
   border-radius: 28px;
   padding: 58px 56px;
   min-height: 540px;
-  background: linear-gradient(165deg, rgba(13, 19, 38, 0.98), rgba(10, 15, 30, 0.98));
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
+  background: var(--lg2-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    var(--lg2-shadow-deep),
+    0 0 0 1px rgba(124, 58, 237, 0.12),
+    var(--lg2-inset-top);
   display: grid;
   align-content: center;
+  isolation: isolate;
+  position: relative;
+  overflow: hidden;
+}
+
+.lg2-root .lg2-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(125deg, rgba(167, 139, 250, 0.08) 0%, transparent 42%, rgba(34, 211, 238, 0.06) 100%);
+  opacity: 0.9;
+}
+
+.lg2-root .lg2-hero > * {
+  position: relative;
+  z-index: 1;
 }
 
 .lg2-root .lg2-tag {
   display: inline-flex;
   width: fit-content;
   border-radius: 999px;
-  border: 1px solid rgba(173, 157, 255, 0.4);
-  background: rgba(114, 88, 255, 0.14);
-  color: #d8ccff;
+  border: 1px solid rgba(167, 139, 250, 0.38);
+  background: rgba(124, 58, 237, 0.18);
+  color: rgba(216, 200, 255, 0.95);
   padding: 6px 12px;
   font-size: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .lg2-root .lg2-hero h1 {
@@ -146,13 +229,15 @@
   line-height: 1.04;
   letter-spacing: -0.025em;
   max-width: 860px;
+  color: rgba(242, 244, 255, 0.96);
 }
 
 .lg2-root .lg2-g {
-  background: linear-gradient(90deg, #bb96ff, #7363ff, #27a9ff);
+  background: linear-gradient(90deg, #e9d5ff, #a78bfa, #22d3ee);
   color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
+  filter: drop-shadow(0 0 28px rgba(167, 139, 250, 0.25));
 }
 
 .lg2-root .lg2-sub {
@@ -169,15 +254,19 @@
 }
 
 .lg2-root .lg2-m {
-  border: 1px solid var(--lg2-line);
+  border: 1px solid var(--lg2-glass-border);
   border-radius: 24px;
-  background: linear-gradient(160deg, rgba(14, 20, 40, 0.94), rgba(10, 15, 30, 0.94));
+  background: var(--lg2-glass);
   padding: 28px;
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.34),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    0 18px 48px rgba(3, 6, 18, 0.4),
+    0 0 0 1px rgba(124, 58, 237, 0.08),
+    var(--lg2-inset-top);
+  isolation: isolate;
 }
 
 .lg2-root .lg2-m::before {
@@ -185,13 +274,15 @@
   position: absolute;
   left: -10%;
   right: -10%;
-  top: -30%;
-  height: 160px;
-  background: radial-gradient(40% 100% at 50% 0%, rgba(138, 125, 255, 0.2), transparent 70%);
+  top: -35%;
+  height: 180px;
+  background: radial-gradient(45% 100% at 50% 0%, rgba(167, 139, 250, 0.18), transparent 72%);
   pointer-events: none;
 }
 
 .lg2-root .lg2-m-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 1.38fr 0.62fr;
   gap: 24px;
@@ -202,22 +293,24 @@
   grid-template-columns: 0.62fr 1.38fr;
 }
 
+/* 内嵌画框：略像工作台参考区深色底 + 细描边 */
 .lg2-root .lg2-media {
   min-height: 380px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 18px;
   background:
-    radial-gradient(220px 120px at 24% 22%, rgba(120, 95, 255, 0.34), transparent 62%),
-    radial-gradient(220px 120px at 76% 72%, rgba(38, 167, 255, 0.26), transparent 58%),
-    linear-gradient(165deg, #151f43, #0e1633);
+    radial-gradient(260px 140px at 22% 18%, rgba(124, 58, 237, 0.22), transparent 60%),
+    radial-gradient(240px 120px at 78% 78%, rgba(34, 211, 238, 0.12), transparent 58%),
+    rgba(0, 0, 0, 0.32);
   position: relative;
   overflow: hidden;
   box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.34),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 14px 44px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-/* 与静态 V2 的 .media img.main 一致；用绝对定位避免 Tailwind preflight 的 img { height:auto } 撑破布局 */
 .lg2-root .lg2-media img.lg2-main-img {
   position: absolute;
   inset: 0;
@@ -237,19 +330,21 @@
   height: 96px;
   border-radius: 16px;
   object-fit: cover;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   max-width: none;
 }
 
 .lg2-root .lg2-m-info .lg2-k {
   display: inline-flex;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
   padding: 4px 9px;
   font-size: 11px;
-  color: rgba(232, 239, 255, 0.76);
+  color: rgba(196, 181, 253, 0.88);
 }
 
 .lg2-root .lg2-m-info .lg2-mini {
@@ -258,9 +353,9 @@
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  border: 1px solid rgba(140, 166, 255, 0.32);
-  background: rgba(67, 104, 255, 0.12);
-  color: rgba(214, 228, 255, 0.88);
+  border: 1px solid rgba(140, 166, 255, 0.28);
+  background: rgba(67, 104, 255, 0.14);
+  color: rgba(214, 228, 255, 0.9);
   padding: 4px 10px;
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -271,8 +366,8 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #89bcff, #6d87ff);
-  box-shadow: 0 0 8px rgba(121, 156, 255, 0.7);
+  background: linear-gradient(180deg, #5eead4, #a78bfa);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.55);
 }
 
 .lg2-root .lg2-m-info h3 {
@@ -280,6 +375,7 @@
   font-size: 38px;
   line-height: 1.12;
   letter-spacing: -0.02em;
+  color: rgba(242, 244, 255, 0.95);
 }
 
 .lg2-root .lg2-m-info ul {
@@ -304,17 +400,21 @@
   font-size: 13px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(90deg, #7a62ff, #4f84ff);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 10px 24px rgba(86, 116, 255, 0.34);
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  background: linear-gradient(92deg, rgba(109, 76, 230, 0.98), rgba(59, 130, 246, 0.9));
+  box-shadow:
+    0 12px 28px rgba(76, 52, 200, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
 .lg2-root .lg2-m-cta:hover {
   transform: translateY(-1px);
-  filter: brightness(1.04);
-  box-shadow: 0 14px 30px rgba(86, 116, 255, 0.42);
+  filter: brightness(1.06);
+  box-shadow:
+    0 16px 36px rgba(76, 52, 200, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .lg2-root .lg2-media.lg2-upscale {
@@ -322,7 +422,9 @@
   grid-template-columns: 1fr 1fr;
   min-height: 380px;
   padding: 0;
-  background: linear-gradient(165deg, #121a38, #0c1228);
+  background: rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .lg2-root .lg2-upscale-half {
@@ -353,9 +455,10 @@
   font-size: 11px;
   padding: 4px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(8, 12, 26, 0.55);
-  color: rgba(235, 242, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 14, 30, 0.72);
+  backdrop-filter: blur(8px);
+  color: rgba(235, 242, 255, 0.9);
 }
 
 .lg2-root .lg2-cta-row {
@@ -366,19 +469,62 @@
 }
 
 .lg2-root .lg2-btn-main {
-  border: 0;
+  border: 1px solid rgba(167, 139, 250, 0.35);
   border-radius: 12px;
   font-weight: 700;
   font-size: 14px;
   padding: 12px 18px;
   color: #fff;
-  background: linear-gradient(90deg, #7b63ff, #5b7dff, #2ca8ff);
-  box-shadow: 0 12px 30px rgba(87, 113, 255, 0.35);
+  background: linear-gradient(92deg, rgba(124, 58, 237, 0.98), rgba(236, 72, 153, 0.75), rgba(34, 211, 238, 0.75));
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  box-shadow:
+    0 14px 36px rgba(88, 64, 200, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   cursor: pointer;
+  transition:
+    filter 0.2s ease,
+    transform 0.15s ease,
+    background-position 0.35s ease;
 }
 
 .lg2-root .lg2-btn-main:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  background-position: 100% 50%;
+}
+
+/* 移动端：与 tikgen-panel 一致关闭 blur，减少 WebView 白边瑕疵 */
+@media (max-width: 1023px) {
+  .lg2-root .lg2-hero,
+  .lg2-root .lg2-m,
+  .lg2-root .lg2-media,
+  .lg2-root .lg2-media.lg2-upscale {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .lg2-root .lg2-hero {
+    background: rgba(14, 18, 38, 0.94);
+  }
+
+  .lg2-root .lg2-m {
+    background: rgba(14, 18, 38, 0.92);
+  }
+
+  .lg2-root .lg2-media {
+    background: rgba(10, 12, 26, 0.92);
+  }
+
+  .lg2-root .lg2-media.lg2-upscale {
+    background: rgba(10, 12, 26, 0.92);
+  }
+
+  .lg2-topbar {
+    background: rgba(14, 18, 38, 0.92);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }
 
 @media (max-width: 960px) {
@@ -416,5 +562,17 @@
   .lg2-root .lg2-upscale-half:first-child {
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* 用户偏好减少动效 */
+@media (prefers-reduced-motion: reduce) {
+  .lg2-root::after {
+    animation: none;
+    opacity: 0.25;
+  }
+
+  .lg2-root .lg2-btn-main {
+    background-position: 0% 50%;
   }
 }
