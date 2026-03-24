@@ -9680,7 +9680,6 @@ function xorpayQrImageSrc(qrPayload: string | undefined): string | null {
 function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser: () => Promise<void>; packages: PackageConfigItem[] }) {
   const [busyPlan, setBusyPlan] = useState('')
   const [payError, setPayError] = useState('')
-  const [payType, setPayType] = useState<'native' | 'alipay'>('native')
   const [checkingPaid, setCheckingPaid] = useState(false)
   const [payInfo, setPayInfo] = useState<{ orderId: string; qrcode?: string; payUrl?: string; status?: string; planId?: string } | null>(null)
   const accessToken = localStorage.getItem('tikgen.accessToken') || ''
@@ -9751,10 +9750,7 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-500">支付方式</span>
-          <select value={payType} onChange={(e) => setPayType(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="native">微信扫码</option>
-            <option value="alipay">支付宝</option>
-          </select>
+          <span className="px-3 py-2 rounded-lg text-sm bg-gray-50 border text-gray-800 font-medium">支付宝</span>
         </div>
       </div>
       {payInfo && (
@@ -9788,7 +9784,7 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
             </div>
             <div>
               <div className="text-sm text-gray-600">
-                - 支持微信/支付宝（由 XorPay 收单）<br />
+                - 当前仅支持支付宝（由 XorPay 收单）<br />
                 - 支付完成后，返回页面刷新权益<br />
                 - 若二维码不可扫，可点击下方链接跳转支付
               </div>
@@ -9858,11 +9854,11 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
                 if (!accessToken) return alert('请先登录')
                 setBusyPlan(pkg.plan_id)
                 try {
-                  const r = await createOrder({ planId: pkg.plan_id, payType }, accessToken)
-                  Sentry.captureMessage('payment_order_create_success', { level: 'info', extra: { planId: pkg.plan_id, payType } })
+                  const r = await createOrder({ planId: pkg.plan_id, payType: 'alipay' }, accessToken)
+                  Sentry.captureMessage('payment_order_create_success', { level: 'info', extra: { planId: pkg.plan_id, payType: 'alipay' } })
                   setPayInfo({ orderId: r.orderId, qrcode: r.qrcode, payUrl: r.payUrl, status: 'created', planId: pkg.plan_id })
                 } catch (e: any) {
-                  Sentry.captureException(e, { extra: { scene: 'create_order', planId: pkg.plan_id, payType } })
+                  Sentry.captureException(e, { extra: { scene: 'create_order', planId: pkg.plan_id, payType: 'alipay' } })
                   setPayError(e?.message || '下单失败')
                 } finally {
                   setBusyPlan('')

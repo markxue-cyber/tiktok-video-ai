@@ -23,9 +23,11 @@ function xorpayFailureUserMessage(status: string, data: Record<string, unknown>)
     sign_error:
       '【签名错误】请核对 Vercel 里 XORPAY_APP_SECRET 与 XorPay 后台「应用配置」的 app secret 是否完全一致（复制时不要多空格），改后需 Redeploy。',
     aid_not_exist: '【aid 无效】请核对 XORPAY_AID 与 XorPay 后台「应用配置」里的 aid 是否一致。',
-    pay_type_error: '【支付方式不支持】请使用微信扫码(native) 或 支付宝(alipay)。',
+    pay_type_error: '【支付方式不支持】当前仅支持支付宝(alipay)。',
     missing_argument: '【参数不全】请确认 XORPAY_NOTIFY_URL 为公网 HTTPS，且订单参数完整。',
     no_contract: '【通道未签约】请在 XorPay 后台按指引完成微信/支付宝收款签约。',
+    no_wechat_contract:
+      '【微信收款未开通】XorPay 检测到尚未完成微信支付/微信收单签约。请到 xorpay.com 后台点击「开通微信」或「微信支付」相关入口，按指引提交资料并完成签约；完成前请改用「支付宝」支付类型测试，或联系 XorPay 客服确认账户状态。',
     no_alipay_contract: '【支付宝未签约】请按 XorPay 或支付宝邮件完成支付宝收款签约。',
     app_off: '【XorPay 账号异常】账号可能被冻结，请联系 XorPay 客服。',
     order_payed: '该商户订单号已支付过，请关闭弹窗后重新点击「立即开通」生成新订单。',
@@ -61,7 +63,7 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
   try {
     const user = await requireBearerUser(req)
-    const { planId, payType } = req.body || {}
+    const { planId } = req.body || {}
     const pid = String(planId || '').trim()
     if (!pid) return res.status(400).json({ success: false, error: '无效的 planId' })
 
@@ -107,7 +109,8 @@ export default async function handler(req: any, res: any) {
 
     const orderId = `ord_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`
     const name = `TikGen AI ${plan.name}（${plan.days}天）`
-    const type = String(payType || 'native')
+    /** 产品侧暂仅开放支付宝；忽略请求体中的 pay_type，避免误传 native */
+    const type = 'alipay'
     const price = (plan.amountCents / 100).toFixed(2)
     const sign = md5(`${name}${type}${price}${orderId}${notifyUrl}${secret}`)
 
