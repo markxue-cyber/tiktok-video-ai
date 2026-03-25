@@ -110,6 +110,19 @@ export default async function handler(req, res) {
         }
       : null
 
+    const ordResp = await fetch(`${base}/rest/v1/orders?user_id=eq.${userId}&status=eq.paid&select=id&limit=1`, {
+      method: 'GET',
+      headers: restHeaders,
+    })
+    const ordText = await ordResp.text()
+    let ordJson: any = null
+    try {
+      ordJson = ordText ? JSON.parse(ordText) : null
+    } catch {
+      ordJson = null
+    }
+    const hasPaidProduct = Array.isArray(ordJson) && ordJson.length > 0
+
     return sendJson(res, 200, {
       success: true,
       user: {
@@ -120,6 +133,7 @@ export default async function handler(req, res) {
         updatedAt: nowIso(),
       },
       subscription: safeSub,
+      hasPaidProduct,
     })
   } catch (e: any) {
     return sendJson(res, 200, { success: false, error: e?.message || '未登录' })

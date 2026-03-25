@@ -1,5 +1,9 @@
 import { getSupabaseAdmin, requireUser } from './_supabase.js'
 
+/** 与图片/视频计费拦截共用，便于前后端识别 */
+export const PAYMENT_REQUIRED_FOR_GENERATION_MSG =
+  '请先完成本产品内一次付费订单后再使用生图、视频等生成能力（购买套餐后即可使用）。'
+
 const PLAN_LIMITS: Record<string, { imagePerDay: number; videoPerDay: number; llmPerDay: number }> = {
   trial: { imagePerDay: 3, videoPerDay: 3, llmPerDay: 30 },
   basic: { imagePerDay: 20, videoPerDay: 20, llmPerDay: 200 },
@@ -25,8 +29,25 @@ export async function requireActiveSubscription(req: any) {
   return { user, token, subscription: sub }
 }
 
+export async function hasCompletedProductPayment(userId: string): Promise<boolean> {
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin
+    .from('orders')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'paid')
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error('订单校验失败')
+  return !!data
+}
+
 export async function checkAndConsume(req: any, opts: { type: 'image' | 'video' | 'llm'; units?: number; relatedTaskId?: string; resultJson?: any }) {
   const { user, subscription } = await requireActiveSubscription(req)
+  if (opts.type === 'image' || opts.type === 'video') {
+    const paid = await hasCompletedProductPayment(user.id)
+    if (!paid) throw new Error(PAYMENT_REQUIRED_FOR_GENERATION_MSG)
+  }
   const admin = getSupabaseAdmin()
 
   const idem = String(req.headers?.['idempotency-key'] || req.headers?.['x-idempotency-key'] || '').trim()

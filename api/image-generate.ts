@@ -332,7 +332,8 @@ export default async function handler(req, res) {
     const msg = String(e?.message || 'Unknown error')
     let code = 'UNKNOWN'
     const t = msg.toLowerCase()
-    if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
+    if (t.includes('请先完成本产品内') || t.includes('付费订单')) code = 'PAYMENT_REQUIRED'
+    else if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
     else if (t.includes('timeout') || t.includes('超时')) code = 'UPSTREAM_TIMEOUT'
     else if (t.includes('model') && (t.includes('does not exist') || t.includes('invalid') || t.includes('not in'))) code = 'MODEL_UNAVAILABLE'
     return res.status(200).json({ success: false, error: msg, code })

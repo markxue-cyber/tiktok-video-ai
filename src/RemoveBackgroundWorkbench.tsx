@@ -3,8 +3,8 @@
  */
 import { ImageToolWorkbench, type ImageToolHistoryTask } from './ImageToolWorkbench'
 
-export function RemoveBackgroundWorkbench() {
-  return <ImageToolWorkbench tool="removeBg" />
+export function RemoveBackgroundWorkbench({ canGenerate }: { canGenerate: boolean }) {
+  return <ImageToolWorkbench tool="removeBg" canGenerate={canGenerate} />
 }
 
 export type RemoveBgHistoryTask = ImageToolHistoryTask

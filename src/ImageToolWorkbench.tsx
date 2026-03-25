@@ -489,7 +489,7 @@ async function maybeToJpeg(imageUrl: string, quality = 0.88): Promise<string> {
   })
 }
 
-export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
+export function ImageToolWorkbench({ tool, canGenerate }: { tool: ImageToolMode; canGenerate: boolean }) {
   const rt = RUNTIME[tool]
   const [images, setImages] = useState<Array<{ id: string; url: string; name?: string }>>([])
   const [resolution, setResolution] = useState<'1024' | '2048'>('1024')
@@ -1068,6 +1068,10 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   }
 
   const handleSubmit = async () => {
+    if (!canGenerate) {
+      setUploadNotice('请先完成本产品内付费（购买套餐）后再使用图片工具')
+      return
+    }
     if (!images.length) return
     const list = [...images]
     const refUrls = list.map((x) => x.url)
@@ -1617,7 +1621,8 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
             <div className="pt-1 w-full min-w-0">
               <button
                 type="button"
-                disabled={!images.length || uploadBusy}
+                disabled={!images.length || uploadBusy || !canGenerate}
+                title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再使用图片工具' : undefined}
                 onClick={() => void handleSubmit()}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/25 ring-1 ring-inset ring-white/10 transition-[filter,opacity] hover:brightness-[1.03] active:brightness-[0.98] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
               >

@@ -1079,7 +1079,16 @@ function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'recover' | 'recoverReset'>(() => {
     return urlType === 'recovery' ? 'recoverReset' : 'login'
   })
-  const [user, setUser] = useState<{ id?: string; name: string; email?: string; credits: number; package: string; packageExpiresAt: string } | null>(null)
+  const [user, setUser] = useState<{
+    id?: string
+    name: string
+    email?: string
+    credits: number
+    package: string
+    packageExpiresAt: string
+    /** 是否在本产品内至少有一条已支付订单（生图/视频权限） */
+    hasPaidProduct?: boolean
+  } | null>(null)
   const [accessToken, setAccessToken] = useState<string>(() => {
     const stored = localStorage.getItem('tikgen.accessToken')
     if (stored) return stored
@@ -1316,6 +1325,7 @@ function App() {
           credits: 0,
           package: plan,
           packageExpiresAt: end,
+          hasPaidProduct: !!me?.hasPaidProduct,
         })
         setPage('home')
         // Keep "处理中..." until we leave the auth page.
@@ -1342,6 +1352,7 @@ function App() {
             credits: 0,
             package: plan,
             packageExpiresAt: end,
+            hasPaidProduct: !!me?.hasPaidProduct,
           })
           setPage('home')
           // Keep "处理中..." until we leave the auth page.
@@ -1834,11 +1845,14 @@ function App() {
         credits: 0,
         package: plan,
         packageExpiresAt: end,
+        hasPaidProduct: !!me?.hasPaidProduct,
       })
     } catch {
       // ignore refresh failures in manual action
     }
   }
+
+  const canGenerateMedia = Boolean(user?.hasPaidProduct)
 
   return (
     <div className="min-h-screen min-w-[1280px] bg-gray-50 flex workbench-root">
@@ -2197,6 +2211,7 @@ function App() {
               visible={mainNav === 'image' && imageSubNav === 'imageGen'}
               templatePreset={imageTemplatePreset}
               onTemplateApplied={() => setImageTemplatePreset(null)}
+              canGenerate={canGenerateMedia}
             />
           </div>
           <div className={mainNav === 'image' && imageSubNav === 'ecommerce' ? '' : 'hidden'}>
@@ -2205,17 +2220,22 @@ function App() {
               visible={mainNav === 'image' && imageSubNav === 'ecommerce'}
               templatePreset={imageTemplatePreset}
               onTemplateApplied={() => setImageTemplatePreset(null)}
+              canGenerate={canGenerateMedia}
             />
           </div>
           {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
           <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
-            <ImageToolsWorkbench tab={imageToolsTab} onTabChange={onWorkbenchImageTabChange} />
+            <ImageToolsWorkbench tab={imageToolsTab} onTabChange={onWorkbenchImageTabChange} canGenerate={canGenerateMedia} />
           </div>
           <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
-            <VideoGenerator templatePreset={videoTemplatePreset} onTemplateApplied={() => setVideoTemplatePreset(null)} />
+            <VideoGenerator
+              templatePreset={videoTemplatePreset}
+              onTemplateApplied={() => setVideoTemplatePreset(null)}
+              canGenerate={canGenerateMedia}
+            />
           </div>
           <div className={mainNav === 'video' && videoSubNav === 'upscale' ? '' : 'hidden'}>
-            <VideoUpscaleWorkbench />
+            <VideoUpscaleWorkbench canGenerate={canGenerateMedia} />
           </div>
           {mainNav === 'creativePlaza' ? <CreativePlazaPage /> : null}
           {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && (
@@ -2304,25 +2324,27 @@ function WorkbenchSubTabNav<T extends string>({
 function ImageToolsWorkbench({
   tab,
   onTabChange,
+  canGenerate,
 }: {
   tab: ImageToolsTabId
   onTabChange: (t: ImageToolsTabId) => void
+  canGenerate: boolean
 }) {
   return (
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="图片工具" items={IMAGE_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
       {/* 保持挂载，避免切换 Tab 时 React 状态与未落盘的 IDB 写入丢失 */}
       <div className={tab === 'removeBg' ? 'block' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
-        <RemoveBackgroundWorkbench />
+        <RemoveBackgroundWorkbench canGenerate={canGenerate} />
       </div>
       <div className={tab === 'upscale' ? 'block' : 'hidden'} aria-hidden={tab !== 'upscale'}>
-        <ImageToolWorkbench tool="upscale" />
+        <ImageToolWorkbench tool="upscale" canGenerate={canGenerate} />
       </div>
       <div className={tab === 'compress' ? 'block' : 'hidden'} aria-hidden={tab !== 'compress'}>
-        <ImageToolWorkbench tool="compress" />
+        <ImageToolWorkbench tool="compress" canGenerate={canGenerate} />
       </div>
       <div className={tab === 'translate' ? 'block' : 'hidden'} aria-hidden={tab !== 'translate'}>
-        <ImageToolWorkbench tool="translate" />
+        <ImageToolWorkbench tool="translate" canGenerate={canGenerate} />
       </div>
     </div>
   )
@@ -2815,9 +2837,11 @@ function HelpCenter() {
 function VideoGenerator({
   templatePreset,
   onTemplateApplied,
+  canGenerate,
 }: {
   templatePreset: VideoTemplatePreset | null
   onTemplateApplied: () => void
+  canGenerate: boolean
 }) {
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
@@ -3467,6 +3491,10 @@ function VideoGenerator({
   }, [videoGenPersistenceReady, taskId, pollVideoGenerateTask])
 
   const handleGenerate = async () => {
+    if (!canGenerate) {
+      alert('请先完成本产品内付费（购买套餐）后再生成视频')
+      return
+    }
     if (!refImageDataUrl) { alert('请先上传参考图'); return }
     if (!prompt) { alert('请输入视频文案描述'); return }
     stopPollingRef.current = false
@@ -3870,7 +3898,14 @@ function VideoGenerator({
             placeholder="输入商品卖点/场景/风格，或使用一键生成提示词..."
           />
         </div>
-        <button onClick={handleGenerate} disabled={isGenerating || !prompt} className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50">{isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成视频'}</button>
+        <button
+          onClick={handleGenerate}
+          disabled={isGenerating || !prompt || !canGenerate}
+          title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再生成视频' : undefined}
+          className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
+        >
+          {isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成视频'}
+        </button>
       </div>
       <div className="tikgen-panel rounded-2xl p-6">
         <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
@@ -3887,7 +3922,7 @@ function VideoGenerator({
             <p className="text-red-200 font-medium">生成失败</p>
             <p className="text-sm text-red-300/90 mt-2 break-words">{errorText}</p>
             <p className="text-xs text-red-400/80 mt-2">错误码：{errorCode}</p>
-            {errorCode !== 'QUOTA_EXHAUSTED' && (
+            {errorCode !== 'QUOTA_EXHAUSTED' && errorCode !== 'PAYMENT_REQUIRED' && (
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating}
@@ -4036,6 +4071,7 @@ function ImageGenerator({
   onTemplateApplied,
   variant = 'ecommerce',
   visible = true,
+  canGenerate,
 }: {
   templatePreset: ImageTemplatePreset | null
   onTemplateApplied: () => void
@@ -4043,6 +4079,8 @@ function ImageGenerator({
   variant?: 'ecommerce' | 'simple'
   /** 为 false 时不写入共享 refs（避免隐藏实例覆盖） */
   visible?: boolean
+  /** 是否已完成本产品内付费（生图 API 权限） */
+  canGenerate: boolean
 }) {
   const isSimpleImageGen = variant === 'simple'
   const idbWorkspaceKey = isSimpleImageGen ? TIKGEN_IG_IDB.workspaceSimple : TIKGEN_IG_IDB.workspace
@@ -5925,6 +5963,7 @@ function ImageGenerator({
     neg: string | undefined,
     signal?: AbortSignal,
   ): Promise<SceneSlotGenResult> => {
+    if (!canGenerate) return { slotIndex, ok: false, error: '请先完成本产品内付费后再生成图片' }
     if (!slot.selected) return { slotIndex, ok: false, error: '未选中' }
     if (signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
     // 简版图片生成：严格使用用户输入提示词，不叠加场景增量约束
@@ -6051,6 +6090,10 @@ function ImageGenerator({
 
   /** 图片生成（简版）：规划 6 场景后立即批量出图，不在右侧展示场景勾选板 */
   const handleSimpleStartGenerate = async () => {
+    if (!canGenerate) {
+      alert('请先完成本产品内付费（购买套餐）后再生成图片')
+      return
+    }
     if (!refImages.length) {
       alert('请至少上传1张参考图')
       return
@@ -6112,6 +6155,7 @@ function ImageGenerator({
   }
 
   const handleGenerateSceneSlot = async (boardId: string, slotIndex: number) => {
+    if (!canGenerate) return
     const board = sceneRunBoardRef.current
     if (!board || board.id !== boardId) return
     const slot = board.slots[slotIndex]
@@ -6150,6 +6194,11 @@ function ImageGenerator({
   }
 
   const runBatchGenerateForBoard = async (snap: SceneRunBoard | null) => {
+    if (!canGenerate) {
+      setGenErrorText('请先完成本产品内付费（购买套餐）后再生成图片')
+      setGenErrorCode('PAYMENT_REQUIRED')
+      return
+    }
     if (!snap || !refImages.length || !snap.basePrompt.trim()) return
     const selEntries = snap.slots.map((s, i) => ({ s, i })).filter(({ s }) => s.selected)
     if (!selEntries.length) return
@@ -7326,23 +7375,26 @@ function ImageGenerator({
                   sceneBoardPreparing ||
                   simplePromptPolishBusy ||
                   !simpleDirectPrompt.trim() ||
-                  !refImages.length
+                  !refImages.length ||
+                  !canGenerate
                 }
                 title={
-                  !refImages.length
-                    ? '请先上传参考图'
-                    : !simpleDirectPrompt.trim()
-                      ? '请输入提示词'
-                      : '根据提示词规划并立即生成图片'
+                  !canGenerate
+                    ? '请先完成本产品内付费（购买套餐）后再生成图片'
+                    : !refImages.length
+                      ? '请先上传参考图'
+                      : !simpleDirectPrompt.trim()
+                        ? '请输入提示词'
+                        : '根据提示词规划并立即生成图片'
                 }
                 className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
                   sceneBoardPreparing ||
-                  (simpleDirectPrompt.trim() && refImages.length > 0)
-                    ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
+                  (simpleDirectPrompt.trim() && refImages.length > 0 && canGenerate)
+                    ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-not-allowed'
                     : 'cursor-not-allowed bg-white/[0.06] text-white/35'
                 }`}
               >
-                {!sceneBoardPreparing && simpleDirectPrompt.trim() && refImages.length > 0 ? (
+                {!sceneBoardPreparing && simpleDirectPrompt.trim() && refImages.length > 0 && canGenerate ? (
                   <span
                     className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent to-white/[0.1] opacity-80"
                     aria-hidden
@@ -7419,7 +7471,7 @@ function ImageGenerator({
                 ）
               </span>
             </span>
-            {genErrorCode !== 'QUOTA_EXHAUSTED' ? (
+            {genErrorCode !== 'QUOTA_EXHAUSTED' && genErrorCode !== 'PAYMENT_REQUIRED' ? (
               <button
                 type="button"
                 onClick={() => void handleRetryGenBanner()}
@@ -7484,7 +7536,8 @@ function ImageGenerator({
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    disabled={currentSceneBoardGenerating || !sceneBoardAllowsBatchGenerate(sceneRunBoard)}
+                    disabled={currentSceneBoardGenerating || !sceneBoardAllowsBatchGenerate(sceneRunBoard) || !canGenerate}
+                    title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再生成图片' : undefined}
                     onClick={() => void handleBatchGenerateSelectedScenes()}
                     className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -7706,6 +7759,7 @@ function ImageGenerator({
                             <span className="text-[10px] text-white/50 line-clamp-2">{slot.error}</span>
                             <button
                               type="button"
+                              disabled={!canGenerate}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 void handleGenerateSceneSlot(sceneRunBoard.id, sidx)

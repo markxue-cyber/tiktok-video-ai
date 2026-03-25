@@ -110,7 +110,7 @@ function saveHistorySlice(tasks: VideoUpscaleHistoryTask[]) {
   tryLocalStorageSetJson(VIDEO_UPSCALE_LS, slice)
 }
 
-export function VideoUpscaleWorkbench() {
+export function VideoUpscaleWorkbench({ canGenerate }: { canGenerate: boolean }) {
   const [file, setFile] = useState<File | null>(null)
   /** 本机文件名或资产库视频名（无 File 对象时展示） */
   const [sourceVideoName, setSourceVideoName] = useState('')
@@ -505,6 +505,11 @@ export function VideoUpscaleWorkbench() {
   }
 
   const handleStart = async () => {
+    if (!canGenerate) {
+      setErrorBanner('请先完成本产品内付费（购买套餐）后再使用视频增强')
+      setErrorCode('PAYMENT_REQUIRED')
+      return
+    }
     if (!publicVideoUrl) {
       setUploadError(uploading ? '正在上传视频，请稍候' : '请先选择并等待视频上传完成')
       return
@@ -731,7 +736,8 @@ export function VideoUpscaleWorkbench() {
         <button
           type="button"
           onClick={() => void handleStart()}
-          disabled={!publicVideoUrl || !!activeJob || uploading}
+          disabled={!publicVideoUrl || !!activeJob || uploading || !canGenerate}
+          title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再使用视频增强' : undefined}
           className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
         >
           {activeJob ? (
