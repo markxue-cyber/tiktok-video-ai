@@ -4143,6 +4143,7 @@ function ImageGenerator({
   /** 各场景槽出图进度（API 无真实进度，按耗时指数趋近 ~94%） */
   const [sceneSlotGenProgress, setSceneSlotGenProgress] = useState<Record<number, number>>({})
   const sceneGenProgressTimersRef = useRef<Record<number, number>>({})
+  const imageGenRootRef = useRef<HTMLDivElement | null>(null)
   /** 历史卡并发任务的百分比刷新时钟（旧任务挪到下方后仍持续跳动） */
   const [historyProgressNow, setHistoryProgressNow] = useState(() => Date.now())
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
@@ -5983,6 +5984,19 @@ function ImageGenerator({
       return
     }
     if (typeof window !== 'undefined') {
+      // 页面在不同布局下可能由外层容器滚动；向上逐层寻找可滚动父容器并回顶
+      let node = imageGenRootRef.current?.parentElement || null
+      while (node) {
+        const style = window.getComputedStyle(node)
+        const canScrollY =
+          (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+          node.scrollHeight > node.clientHeight + 2
+        if (canScrollY) {
+          node.scrollTo({ top: 0, behavior: 'smooth' })
+          break
+        }
+        node = node.parentElement
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
     setGenErrorText('')
@@ -6514,7 +6528,7 @@ function ImageGenerator({
 
   return (
     <>
-    <div className="grid grid-cols-2 gap-6 min-w-[1120px]">
+    <div ref={imageGenRootRef} className="grid grid-cols-2 gap-6 min-w-[1120px]">
       <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
         <div className="flex flex-col gap-6">
         <section>
