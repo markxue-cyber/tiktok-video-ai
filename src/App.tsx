@@ -5984,20 +5984,27 @@ function ImageGenerator({
       return
     }
     if (typeof window !== 'undefined') {
-      // 页面在不同布局下可能由外层容器滚动；向上逐层寻找可滚动父容器并回顶
-      let node = imageGenRootRef.current?.parentElement || null
-      while (node) {
-        const style = window.getComputedStyle(node)
-        const canScrollY =
-          (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
-          node.scrollHeight > node.clientHeight + 2
-        if (canScrollY) {
-          node.scrollTo({ top: 0, behavior: 'smooth' })
-          break
+      const scrollAllTop = () => {
+        // 1) 先把当前模块锚点滚到可视区顶端
+        imageGenRootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        // 2) 再把所有可滚动祖先容器回顶（含 main / 局部滚动面板）
+        let node = imageGenRootRef.current?.parentElement || null
+        while (node) {
+          const style = window.getComputedStyle(node)
+          const canScrollY =
+            (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+            node.scrollHeight > node.clientHeight + 2
+          if (canScrollY) node.scrollTo({ top: 0, behavior: 'smooth' })
+          node = node.parentElement
         }
-        node = node.parentElement
+        // 3) 最后兜底 document / window
+        document.documentElement.scrollTo({ top: 0, behavior: 'smooth' })
+        document.body.scrollTo({ top: 0, behavior: 'smooth' })
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       }
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      scrollAllTop()
+      window.setTimeout(scrollAllTop, 0)
+      window.setTimeout(scrollAllTop, 180)
     }
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
