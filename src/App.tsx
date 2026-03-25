@@ -4312,7 +4312,7 @@ function ImageGenerator({
      */
     const boardHasInFlight =
       !!sceneRunBoard &&
-      sceneRunBoard.slots.some((s) => s.selected && (s.status === 'pending' || s.status === 'generating'))
+      sceneRunBoard.slots.some((s) => s.selected && s.status === 'generating')
     const dedupeBoard = !isSimpleImageGen && !!sceneRunBoard && boardHasInFlight
     const list = dedupeBoard ? imageGenHistory.filter((t) => t.id !== sceneRunBoard!.id) : imageGenHistory
     return groupImageHistoryByDay(list)
@@ -4578,15 +4578,31 @@ function ImageGenerator({
         productAnalysisText,
         isSimpleImageGen,
       )
+      const urlScore = (urls: string[] | undefined) =>
+        (urls || []).filter((u) => String(u || '').trim()).length
       setImageGenHistory((prev) => {
         const i = prev.findIndex((t) => t.id === built.id)
         if (i < 0) return [built, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)
         const old = prev[i]
         const mergedName = (built.productName || '').trim() || old.productName
-        return [
-          { ...built, ts: old.ts, ...(mergedName ? { productName: mergedName } : {}) },
-          ...prev.filter((_, j) => j !== i),
-        ].slice(0, IMAGE_GEN_HISTORY_MAX)
+        /** 并行多波出图时，较晚的闭包可能带着较「旧」的 board 快照写入，避免用更少成片覆盖已有 outputUrls */
+        const newScore = urlScore(built.outputUrls)
+        const oldScore = urlScore(old.outputUrls)
+        const keepOldOutputs = oldScore > newScore
+        const merged: ImageGenHistoryTask = {
+          ...built,
+          ts: old.ts,
+          ...(mergedName ? { productName: mergedName } : {}),
+          ...(keepOldOutputs
+            ? {
+                outputUrls: [...(old.outputUrls || [])],
+                sceneLabels: old.sceneLabels?.length ? old.sceneLabels : built.sceneLabels,
+                sceneTeasers: old.sceneTeasers?.length ? old.sceneTeasers : built.sceneTeasers,
+                sceneDescriptions: old.sceneDescriptions?.length ? old.sceneDescriptions : built.sceneDescriptions,
+              }
+            : {}),
+        }
+        return [merged, ...prev.filter((_, j) => j !== i)].slice(0, IMAGE_GEN_HISTORY_MAX)
       })
 
       if (built.status === 'failed') {
@@ -7338,7 +7354,7 @@ function ImageGenerator({
               <button
                 type="button"
                 onClick={() => void handleRetryGenBanner()}
-                disabled={sceneBoardPreparing || sceneBatchGenerating}
+                disabled={sceneBoardPreparing || (isSimpleImageGen && sceneBatchGenerating)}
                 className="shrink-0 px-3 py-1.5 rounded-lg text-xs bg-red-500/30 border border-red-400/35 hover:bg-red-500/40 disabled:opacity-50"
               >
                 重试
@@ -7403,14 +7419,7 @@ function ImageGenerator({
                     onClick={() => void handleBatchGenerateSelectedScenes()}
                     className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {sceneBatchGenerating ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 inline mr-1 animate-spin" />
-                        生成中…
-                      </>
-                    ) : (
-                      '一键生成图片'
-                    )}
+                    一键生成图片
                   </button>
                   <button
                     type="button"
