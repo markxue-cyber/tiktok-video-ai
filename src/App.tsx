@@ -7750,25 +7750,27 @@ function ImageGenerator({
                       {task.status === 'failed' && task.errorMessage ? (
                         <p className="text-[11px] text-red-300/90 mb-3 break-words">{task.errorMessage}</p>
                       ) : null}
-                      {task.outputUrls.length > 0 ? (
+                      {task.outputUrls.length > 0 || (task.status === 'active' && task.requestedCount > task.outputUrls.length) ? (
                         <div className="space-y-2">
-                          <button
-                            type="button"
-                            disabled={
-                              task.outputUrls.filter((u) => isLikelyPersistedImageUrl(String(u || '').trim()))
-                                .length === 0
-                            }
-                            onClick={() => handleDownloadAllHistoryTask(task)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            下载全部图片（
-                            {
-                              task.outputUrls.filter((u) => isLikelyPersistedImageUrl(String(u || '').trim()))
-                                .length
-                            }
-                            ）
-                          </button>
+                          {task.outputUrls.length > 0 ? (
+                            <button
+                              type="button"
+                              disabled={
+                                task.outputUrls.filter((u) => isLikelyPersistedImageUrl(String(u || '').trim()))
+                                  .length === 0
+                              }
+                              onClick={() => handleDownloadAllHistoryTask(task)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/18 text-white/85 hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              下载全部图片（
+                              {
+                                task.outputUrls.filter((u) => isLikelyPersistedImageUrl(String(u || '').trim()))
+                                  .length
+                              }
+                              ）
+                            </button>
+                          ) : null}
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {task.outputUrls.map((url, idx) => {
                               const urlClean = String(url || '').trim()
@@ -7868,6 +7870,27 @@ function ImageGenerator({
                                 </div>
                               )
                             })}
+                            {task.status === 'active' &&
+                              task.requestedCount > task.outputUrls.length &&
+                              Array.from({ length: task.requestedCount - task.outputUrls.length }).map((_, i) => {
+                                const idx = task.outputUrls.length + i
+                                return (
+                                  <div
+                                    key={`${task.id}_pending_${idx}`}
+                                    className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30"
+                                  >
+                                    <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
+                                      <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS}>图 {idx + 1}</span>
+                                    </div>
+                                    <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/45">
+                                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/28 text-white/88">
+                                        <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
+                                        <span className="text-[10px] text-white/65">生成中…</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
                           </div>
                         </div>
                       ) : task.status === 'active' ? (
