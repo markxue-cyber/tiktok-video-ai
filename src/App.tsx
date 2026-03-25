@@ -5982,6 +5982,9 @@ function ImageGenerator({
       alert('请先用「重新分析」或「AI 生成」生成出图描述，再点击「免费生成预览」')
       return
     }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
     setSceneBoardPreparing(true)
