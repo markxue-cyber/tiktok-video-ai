@@ -4708,8 +4708,9 @@ function ImageGenerator({
   /** 删除主参考图后清空与本次分析/场景相关的编辑态（不删生成历史归档） */
   const clearImageGenPageAfterMainRefRemoved = () => {
     const snap = sceneRunBoardRef.current
+    const hasInFlight = !!snap?.slots.some((s) => s.selected && s.status === 'generating')
     const productNameSnap = productInfo.name?.trim() || ''
-    if (snap?.slots.some((s) => s.status === 'done' && s.imageUrl)) {
+    if (!hasInFlight && snap?.slots.some((s) => s.status === 'done' && s.imageUrl)) {
       const resLb =
         resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
       const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
@@ -4730,16 +4731,20 @@ function ImageGenerator({
         const rest = prev.filter((t) => t.id !== built.id)
         return [{ ...built, ts: keepTs }, ...rest].slice(0, IMAGE_GEN_HISTORY_MAX)
       })
-    } else if (snap) {
+    } else if (snap && !hasInFlight) {
       setImageGenHistory((prev) => prev.filter((t) => t.id !== snap.id))
     }
-    sceneBatchDepthRef.current = 0
-    setSceneBatchGenerating(false)
+
+    /** 存在进行中任务时，保留看板/历史与批量状态，避免任务从页面瞬间消失 */
+    if (!hasInFlight) {
+      sceneBatchDepthRef.current = 0
+      setSceneBatchGenerating(false)
+    }
     setHotStyles([])
     setSelectedHotStyleIndex(0)
     setProductAnalysisText('')
     setProductInfo({ ...DEFAULT_PRODUCT_INFO })
-    setSceneRunBoard(null)
+    if (!hasInFlight) setSceneRunBoard(null)
     setPrompt('')
     setOptimizedPrompt('')
     setOptimizedNegativePrompt('')
@@ -4763,14 +4768,21 @@ function ImageGenerator({
 
   const requestRemoveRefImage = (id: string, slotIndex: number) => {
     const isMain = slotIndex === 0
+    const hasInFlight = !!sceneRunBoardRef.current?.slots.some(
+      (s) => s.selected && s.status === 'generating',
+    )
     const hasAnalysisOrBoard = isSimpleImageGen
       ? simpleDirectPrompt.trim() !== '' || sceneRunBoard != null
       : hotStyles.length > 0 || productAnalysisText.trim() !== '' || sceneRunBoard != null
     if (isMain && hasAnalysisOrBoard) {
       const ok = window.confirm(
         isSimpleImageGen
-          ? '删除主参考图后，当前提示词与进行中的生成任务将被清空。是否继续删除？'
-          : '删除主参考图后，当前页面内的商品分析、爆款风格与场景看板等内容将被清空。是否继续删除？',
+          ? hasInFlight
+            ? '删除主参考图后，当前提示词会被清空，但进行中的生成任务会继续并保留在生成历史中。是否继续删除？'
+            : '删除主参考图后，当前提示词与进行中的生成任务将被清空。是否继续删除？'
+          : hasInFlight
+            ? '删除主参考图后，商品分析/爆款风格会被清空；进行中的生成任务不会中断，仍会继续显示在生成历史中。是否继续删除？'
+            : '删除主参考图后，当前页面内的商品分析、爆款风格与场景看板等内容将被清空。是否继续删除？',
       )
       if (!ok) return
       clearImageGenPageAfterMainRefRemoved()
