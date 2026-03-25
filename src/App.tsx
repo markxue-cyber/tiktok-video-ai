@@ -6273,6 +6273,8 @@ function ImageGenerator({
   const outputSpecsMismatch =
     !!promptGenOutputSettings &&
     (promptGenOutputSettings.aspect !== size || promptGenOutputSettings.resolution !== resolution)
+  const currentSceneBoardGenerating =
+    !!sceneRunBoard && sceneRunBoard.slots.some((s) => s.selected && s.status === 'generating')
 
   const workbenchOpsLocked =
     workbenchFullAnalysisBusy ||
@@ -7443,11 +7445,18 @@ function ImageGenerator({
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    disabled={!sceneBoardAllowsBatchGenerate(sceneRunBoard)}
+                    disabled={currentSceneBoardGenerating || !sceneBoardAllowsBatchGenerate(sceneRunBoard)}
                     onClick={() => void handleBatchGenerateSelectedScenes()}
                     className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-500 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    一键生成图片
+                    {currentSceneBoardGenerating ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 inline mr-1 animate-spin" />
+                        生成中…
+                      </>
+                    ) : (
+                      '一键生成图片'
+                    )}
                   </button>
                   <button
                     type="button"
