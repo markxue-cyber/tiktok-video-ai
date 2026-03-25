@@ -11,27 +11,12 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
   const base = import.meta.env.BASE_URL || '/'
   const asset = (name: string) => `${base}landing-preview/assets/${name}`
   const onetapMosaicRef = useRef<HTMLDivElement>(null)
-  const videoCaseSlides: Array<{ src: string; fallback: string }> = [
-    {
-      src: '/@fs/Users/haoxue/.cursor/projects/Users-haoxue-tiktok-video-ai/assets/tikgen-ig_1774438633237_5f2bebcaf567e-1-__________-a6353b0c-095c-43e4-ac66-a7ff7843a4b3.png',
-      fallback: asset('scene-case-1.png'),
-    },
-    {
-      src: '/@fs/Users/haoxue/.cursor/projects/Users-haoxue-tiktok-video-ai/assets/tikgen-ig_1774438633237_5f2bebcaf567e-2-__________-9656d606-4814-4f4f-8727-5f1a8f255f0e.png',
-      fallback: asset('scene-case-2.png'),
-    },
-    {
-      src: '/@fs/Users/haoxue/.cursor/projects/Users-haoxue-tiktok-video-ai/assets/tikgen-ig_1774438633237_5f2bebcaf567e-3-__________-6f121a5d-5e74-464d-86d6-279256b73d0a.png',
-      fallback: asset('scene-case-3.png'),
-    },
-    {
-      src: '/@fs/Users/haoxue/.cursor/projects/Users-haoxue-tiktok-video-ai/assets/tikgen-ig_1774438633237_5f2bebcaf567e-4-____________-28e06015-ccc8-43a6-8e8c-20a2e8b0bc74.png',
-      fallback: asset('scene-case-4.png'),
-    },
-    {
-      src: '/@fs/Users/haoxue/.cursor/projects/Users-haoxue-tiktok-video-ai/assets/tikgen-ig_1774438633237_5f2bebcaf567e-6-__________-089b3253-6d98-45d8-920b-07dae855da79.png',
-      fallback: asset('scene-case-5.png'),
-    },
+  const videoCaseSlides = [
+    asset('video-traffic-case-1.png'),
+    asset('video-traffic-case-2.png'),
+    asset('video-traffic-case-3.png'),
+    asset('video-traffic-case-4.png'),
+    asset('video-traffic-case-5.png'),
   ]
 
   const goStart = () => onRegister()
@@ -277,23 +262,16 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                   立即去使用
                 </button>
               </div>
-              <div className="lg2-media lg2-video-case" aria-label="商品视频案例图轮播">
+              <div className="lg2-media lg2-video-case" aria-label="商品视频案例图轮播，逐张淡入淡出">
                 <div className="lg2-video-carousel">
-                  {videoCaseSlides.map((slide, idx) => (
+                  {videoCaseSlides.map((src, idx) => (
                     <img
-                      key={slide.src}
+                      key={src}
                       className="lg2-video-slide"
-                      style={{ animationDelay: `${-idx * 5}s` }}
-                      src={slide.src}
+                      src={src}
                       alt={`商品视频案例图 ${idx + 1}`}
-                      loading="lazy"
+                      loading={idx === 0 ? 'eager' : 'lazy'}
                       decoding="async"
-                      onError={(e) => {
-                        const img = e.currentTarget
-                        if (img.dataset.fallbackApplied === '1') return
-                        img.dataset.fallbackApplied = '1'
-                        img.src = slide.fallback
-                      }}
                     />
                   ))}
                 </div>

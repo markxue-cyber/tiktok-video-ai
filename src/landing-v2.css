@@ -854,24 +854,24 @@
   color: rgba(235, 242, 255, 0.9);
 }
 
-/* 商品视频：案例图轮播（柔和淡入 + 轻微景深缩放） */
+/* 商品视频：案例图逐张轮播（单张全显、短淡入淡出，无叠化拼接感） */
 .lg2-root .lg2-media.lg2-video-case {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 310px;
+  min-height: 300px;
   padding: clamp(10px, 1.6vw, 18px);
 }
 
 .lg2-root .lg2-video-carousel {
   position: relative;
   width: 100%;
-  max-width: min(100%, 470px);
-  aspect-ratio: 0.96;
+  max-width: min(100%, 420px);
+  aspect-ratio: 1;
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(8, 10, 22, 0.65);
+  background: rgba(6, 8, 18, 0.92);
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.4);
   isolation: isolate;
 }
@@ -881,10 +881,8 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(72% 54% at 50% 0%, rgba(255, 255, 255, 0.1), transparent 62%),
-    linear-gradient(to top, rgba(7, 8, 20, 0.2), transparent 34%);
-  z-index: 2;
+  background: radial-gradient(70% 55% at 50% 0%, rgba(255, 255, 255, 0.08), transparent 60%);
+  z-index: 6;
 }
 
 .lg2-root .lg2-video-slide {
@@ -892,37 +890,51 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
   opacity: 0;
-  transform: scale(1.04);
-  filter: saturate(1.03) contrast(1.03);
-  animation: lg2-video-fade-kenburns 25s ease-in-out infinite;
-  will-change: opacity, transform;
+  animation: lg2-video-solo-fade 25s ease-in-out infinite;
+  will-change: opacity;
+  z-index: 1;
 }
 
-@keyframes lg2-video-fade-kenburns {
+/* 5 张 × 5s/张：同周期内各占用 20% 时间轴，依次单独显隐 */
+.lg2-root .lg2-video-slide:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.lg2-root .lg2-video-slide:nth-child(2) {
+  animation-delay: -5s;
+}
+
+.lg2-root .lg2-video-slide:nth-child(3) {
+  animation-delay: -10s;
+}
+
+.lg2-root .lg2-video-slide:nth-child(4) {
+  animation-delay: -15s;
+}
+
+.lg2-root .lg2-video-slide:nth-child(5) {
+  animation-delay: -20s;
+}
+
+@keyframes lg2-video-solo-fade {
   0% {
     opacity: 0;
-    transform: scale(1.045);
   }
 
-  4% {
+  1% {
     opacity: 1;
   }
 
-  18% {
+  19% {
     opacity: 1;
-    transform: scale(1.01);
   }
 
-  22% {
-    opacity: 0;
-    transform: scale(1);
-  }
-
+  20%,
   100% {
     opacity: 0;
-    transform: scale(1);
   }
 }
 
@@ -1207,22 +1219,20 @@
 
   .lg2-root .lg2-video-slide {
     animation: none !important;
-    position: relative;
-    inset: auto;
-    opacity: 1;
+    position: absolute;
+    inset: 0;
+    opacity: 0 !important;
     transform: none;
     display: block;
   }
 
+  .lg2-root .lg2-video-slide:first-child {
+    opacity: 1 !important;
+  }
+
   .lg2-root .lg2-video-carousel {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    aspect-ratio: auto;
-    max-width: none;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
+    aspect-ratio: 1;
+    max-width: min(100%, 420px);
   }
 
   .lg2-root .lg2-video-carousel::after {
