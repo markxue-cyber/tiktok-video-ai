@@ -296,8 +296,7 @@ type SceneRunBoard = {
 function sceneBoardAllowsBatchGenerate(board: SceneRunBoard | null): boolean {
   if (!board) return false
   const sel = board.slots.filter((s) => s.selected)
-  if (!sel.length) return false
-  return sel.some((s) => s.status === 'pending' || s.status === 'failed')
+  return sel.length > 0
 }
 
 /** 删除主参考/放弃看板时：把进行中的槽视为未出图，便于历史记为「已完成」且只展示已出好的图 */
@@ -4564,6 +4563,63 @@ function ImageGenerator({
 
   const sceneHistorySentryLoggedRef = useRef<Set<string>>(new Set())
 
+  const upsertImageHistoryFromBoard = useCallback(
+    (board: SceneRunBoard) => {
+      const resLb =
+        resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
+      const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
+      const built = buildHistoryTaskFromSceneBoard(
+        board,
+        model,
+        modelLabel,
+        size,
+        resLb,
+        productInfo.name?.trim(),
+        productAnalysisText,
+        isSimpleImageGen,
+      )
+      setImageGenHistory((prev) => {
+        const i = prev.findIndex((t) => t.id === built.id)
+        if (i < 0) return [built, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)
+        const old = prev[i]
+        const mergedName = (built.productName || '').trim() || old.productName
+        return [
+          { ...built, ts: old.ts, ...(mergedName ? { productName: mergedName } : {}) },
+          ...prev.filter((_, j) => j !== i),
+        ].slice(0, IMAGE_GEN_HISTORY_MAX)
+      })
+
+      if (built.status === 'failed') {
+        const failLine = built.errorMessage || '生成失败'
+        setGenErrorText(failLine)
+        setGenErrorCode(/\b已取消\b/.test(failLine) ? 'CANCELLED' : 'UNKNOWN')
+      } else if (built.status === 'completed' && built.errorMessage) {
+        setGenErrorText(built.errorMessage)
+        setGenErrorCode('PARTIAL')
+      } else if (built.status === 'completed') {
+        setGenErrorText('')
+        setGenErrorCode('UNKNOWN')
+        const selDone = board.slots.filter((s) => s.selected)
+        const allTerminal = selDone.length > 0 && selDone.every((s) => s.status === 'done' || s.status === 'failed')
+        if (
+          built.outputUrls.length > 0 &&
+          allTerminal &&
+          !sceneHistorySentryLoggedRef.current.has(built.id)
+        ) {
+          sceneHistorySentryLoggedRef.current.add(built.id)
+          Sentry.captureMessage('image_generation_success', {
+            level: 'info',
+            extra: { model, size, resolution, scenes: built.outputUrls.length },
+          })
+        }
+      } else {
+        setGenErrorText('')
+        setGenErrorCode('UNKNOWN')
+      }
+    },
+    [model, size, resolution, imageModelOptions, productInfo.name, productAnalysisText, isSimpleImageGen],
+  )
+
   /** 场景看板 ⇄ 生成历史：实时同步（进行中增量、多轮合并同一 id、刷新后可从 localStorage 恢复看板） */
   useEffect(() => {
     if (!sceneRunBoard || !sceneRunBoard.slots.length) return
@@ -4577,58 +4633,8 @@ function ImageGenerator({
       setGenErrorCode('UNKNOWN')
       return
     }
-    const resLb =
-      resolution === '1024' ? '1k' : resolution === '1536' ? '1.5k' : resolution === '2048' ? '2k' : resolution === '4096' ? '4k' : String(resolution)
-    const modelLabel = imageModelOptions.find((m) => m.id === model)?.name || model
-    const built = buildHistoryTaskFromSceneBoard(
-      sceneRunBoard,
-      model,
-      modelLabel,
-      size,
-      resLb,
-      productInfo.name?.trim(),
-      productAnalysisText,
-      isSimpleImageGen,
-    )
-    setImageGenHistory((prev) => {
-      const i = prev.findIndex((t) => t.id === built.id)
-      if (i < 0) return [built, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)
-      const old = prev[i]
-      const mergedName = (built.productName || '').trim() || old.productName
-      return [
-        { ...built, ts: old.ts, ...(mergedName ? { productName: mergedName } : {}) },
-        ...prev.filter((_, j) => j !== i),
-      ].slice(0, IMAGE_GEN_HISTORY_MAX)
-    })
-
-    if (built.status === 'failed') {
-      const failLine = built.errorMessage || '生成失败'
-      setGenErrorText(failLine)
-      setGenErrorCode(/\b已取消\b/.test(failLine) ? 'CANCELLED' : 'UNKNOWN')
-    } else if (built.status === 'completed' && built.errorMessage) {
-      setGenErrorText(built.errorMessage)
-      setGenErrorCode('PARTIAL')
-    } else if (built.status === 'completed') {
-      setGenErrorText('')
-      setGenErrorCode('UNKNOWN')
-      const selDone = sceneRunBoard.slots.filter((s) => s.selected)
-      const allTerminal = selDone.length > 0 && selDone.every((s) => s.status === 'done' || s.status === 'failed')
-      if (
-        built.outputUrls.length > 0 &&
-        allTerminal &&
-        !sceneHistorySentryLoggedRef.current.has(built.id)
-      ) {
-        sceneHistorySentryLoggedRef.current.add(built.id)
-        Sentry.captureMessage('image_generation_success', {
-          level: 'info',
-          extra: { model, size, resolution, scenes: built.outputUrls.length },
-        })
-      }
-    } else {
-      setGenErrorText('')
-      setGenErrorCode('UNKNOWN')
-    }
-  }, [sceneRunBoard, model, size, resolution, imageModelOptions, productInfo.name, productAnalysisText, isSimpleImageGen])
+    upsertImageHistoryFromBoard(sceneRunBoard)
+  }, [sceneRunBoard, upsertImageHistoryFromBoard])
 
   useEffect(() => {
     const first = refImages[0]?.url || ''
@@ -6074,7 +6080,6 @@ function ImageGenerator({
 
     let batchSignal: AbortSignal | undefined
     if (isSimpleImageGen) {
-      imageGenSimpleBatchAbortRef.current?.abort()
       const ac = new AbortController()
       imageGenSimpleBatchAbortRef.current = ac
       batchSignal = ac.signal
@@ -6088,33 +6093,73 @@ function ImageGenerator({
     setSceneBatchGenerating(true)
     setGenErrorText('')
     setGenErrorCode('UNKNOWN')
+    const pendingSet = new Set(indices)
+    const boardGenerating: SceneRunBoard = {
+      ...snap,
+      slots: snap.slots.map((s, i) =>
+        pendingSet.has(i)
+          ? { ...s, status: 'generating' as const, error: undefined, imageUrl: undefined }
+          : s,
+      ),
+    }
     setSceneRunBoard((b) => {
       if (!b || b.id !== snap.id) return b
-      return {
-        ...b,
-        slots: b.slots.map((s, i) =>
-          indices.includes(i)
-            ? { ...s, status: 'generating' as const, error: undefined, imageUrl: undefined }
-            : s,
-        ),
-      }
+      return boardGenerating
     })
+    upsertImageHistoryFromBoard(boardGenerating)
     try {
       await new Promise<void>((r) => setTimeout(r, 0))
-      const results = await Promise.all(
-        slotSnap.map(({ i, slot }) =>
-          executeSceneSlotGenerationOnce(snap.id, i, basePrompt, slot, refUrl, neg, batchSignal),
-        ),
-      )
-      applySceneSlotResultsToBoard(snap.id, results)
+      let boardLive = boardGenerating
+      const tasks = slotSnap.map(async ({ i, slot }) => {
+        const result = await executeSceneSlotGenerationOnce(snap.id, i, basePrompt, slot, refUrl, neg, batchSignal)
+        boardLive = {
+          ...boardLive,
+          slots: boardLive.slots.map((s, si) => {
+            if (si !== i) return s
+            if (result.ok) return { ...s, status: 'done' as const, imageUrl: result.imageUrl, error: undefined }
+            return { ...s, status: 'failed' as const, imageUrl: undefined, error: 'error' in result ? result.error : '失败' }
+          }),
+        }
+        applySceneSlotResultsToBoard(snap.id, [result])
+        upsertImageHistoryFromBoard(boardLive)
+      })
+      await Promise.all(tasks)
     } finally {
+      if (isSimpleImageGen && imageGenSimpleBatchAbortRef.current?.signal === batchSignal) {
+        imageGenSimpleBatchAbortRef.current = null
+      }
       sceneBatchDepthRef.current = Math.max(0, sceneBatchDepthRef.current - 1)
       setSceneBatchGenerating(sceneBatchDepthRef.current > 0)
     }
   }
 
+  const cloneBoardForNewBatchRun = (board: SceneRunBoard): SceneRunBoard => ({
+    ...board,
+    id: `ig_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    ts: Date.now(),
+    slots: board.slots.map((s) =>
+      s.selected
+        ? {
+            ...s,
+            status: 'pending' as const,
+            imageUrl: undefined,
+            error: undefined,
+          }
+        : s,
+    ),
+  })
+
   const handleBatchGenerateSelectedScenes = async () => {
-    await runBatchGenerateForBoard(sceneRunBoardRef.current)
+    const current = sceneRunBoardRef.current
+    if (!current) return
+    const hasInFlight = current.slots.some((s) => s.selected && s.status === 'generating')
+    const target = hasInFlight ? cloneBoardForNewBatchRun(current) : current
+    if (hasInFlight) {
+      flushSync(() => {
+        setSceneRunBoard(target)
+      })
+    }
+    await runBatchGenerateForBoard(target)
   }
 
   const handleRetryGenBanner = async () => {
@@ -7194,7 +7239,6 @@ function ImageGenerator({
                 onClick={() => void handleSimpleStartGenerate()}
                 disabled={
                   sceneBoardPreparing ||
-                  sceneBatchGenerating ||
                   simplePromptPolishBusy ||
                   !simpleDirectPrompt.trim() ||
                   !refImages.length
@@ -7208,13 +7252,12 @@ function ImageGenerator({
                 }
                 className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl py-4 text-base font-bold tracking-wide transition-all duration-200 ${
                   sceneBoardPreparing ||
-                  sceneBatchGenerating ||
                   (simpleDirectPrompt.trim() && refImages.length > 0)
                     ? 'bg-gradient-to-r from-fuchsia-500 via-purple-500 to-indigo-600 text-white shadow-[0_12px_36px_-8px_rgba(192,80,250,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.2)] hover:enabled:shadow-[0_16px_44px_-8px_rgba(192,80,250,0.55)] hover:enabled:brightness-[1.04] active:enabled:scale-[0.995] active:enabled:brightness-100 disabled:cursor-wait'
                     : 'cursor-not-allowed bg-white/[0.06] text-white/35'
                 }`}
               >
-                {!sceneBoardPreparing && !sceneBatchGenerating && simpleDirectPrompt.trim() && refImages.length > 0 ? (
+                {!sceneBoardPreparing && simpleDirectPrompt.trim() && refImages.length > 0 ? (
                   <span
                     className="pointer-events-none absolute inset-0 bg-gradient-to-t from-transparent to-white/[0.1] opacity-80"
                     aria-hidden
@@ -7224,11 +7267,6 @@ function ImageGenerator({
                   <>
                     <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
                     <span className="relative">正在规划场景…</span>
-                  </>
-                ) : sceneBatchGenerating ? (
-                  <>
-                    <RefreshCw className="relative h-5 w-5 shrink-0 animate-spin" />
-                    <span className="relative">生成中…</span>
                   </>
                 ) : (
                   <>
