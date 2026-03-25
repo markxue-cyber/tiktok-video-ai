@@ -232,6 +232,15 @@ type ImageGenHistoryTask = {
   sceneTeasers?: string[]
   /** 与各 outputUrls 对齐的完整场景说明（description + imagePrompt），悬停场景名展示 */
   sceneDescriptions?: string[]
+  /** 活跃任务实时槽位快照：用于历史卡展示「生成中」动效，不因切到新任务而消失 */
+  sceneSlots?: Array<{
+    title: string
+    status: 'pending' | 'generating' | 'done' | 'failed'
+    imageUrl?: string
+    error?: string
+    description?: string
+    imagePrompt?: string
+  }>
   errorMessage?: string
 }
 
@@ -760,6 +769,14 @@ function buildHistoryTaskFromSceneBoard(
     sceneLabels,
     sceneTeasers,
     sceneDescriptions,
+    sceneSlots: selected.map((s) => ({
+      title: s.title,
+      status: s.status,
+      imageUrl: s.imageUrl,
+      error: s.error,
+      description: s.description,
+      imagePrompt: s.imagePrompt,
+    })),
     errorMessage: failMsg,
   }
 }
@@ -4580,6 +4597,8 @@ function ImageGenerator({
       )
       const urlScore = (urls: string[] | undefined) =>
         (urls || []).filter((u) => String(u || '').trim()).length
+      const slotScore = (slots: ImageGenHistoryTask['sceneSlots'] | undefined) =>
+        (slots || []).reduce((n, s) => n + (s.status === 'done' ? 3 : s.status === 'generating' ? 2 : s.status === 'failed' ? 1 : 0), 0)
       setImageGenHistory((prev) => {
         const i = prev.findIndex((t) => t.id === built.id)
         if (i < 0) return [built, ...prev].slice(0, IMAGE_GEN_HISTORY_MAX)
@@ -4589,6 +4608,7 @@ function ImageGenerator({
         const newScore = urlScore(built.outputUrls)
         const oldScore = urlScore(old.outputUrls)
         const keepOldOutputs = oldScore > newScore
+        const keepOldSceneSlots = slotScore(old.sceneSlots) > slotScore(built.sceneSlots)
         const merged: ImageGenHistoryTask = {
           ...built,
           ts: old.ts,
@@ -4601,6 +4621,7 @@ function ImageGenerator({
                 sceneDescriptions: old.sceneDescriptions?.length ? old.sceneDescriptions : built.sceneDescriptions,
               }
             : {}),
+          ...(keepOldSceneSlots ? { sceneSlots: old.sceneSlots } : {}),
         }
         return [merged, ...prev.filter((_, j) => j !== i)].slice(0, IMAGE_GEN_HISTORY_MAX)
       })
@@ -7870,27 +7891,49 @@ function ImageGenerator({
                                 </div>
                               )
                             })}
-                            {task.status === 'active' &&
-                              task.requestedCount > task.outputUrls.length &&
-                              Array.from({ length: task.requestedCount - task.outputUrls.length }).map((_, i) => {
-                                const idx = task.outputUrls.length + i
-                                return (
-                                  <div
-                                    key={`${task.id}_pending_${idx}`}
-                                    className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30"
-                                  >
-                                    <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
-                                      <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS}>图 {idx + 1}</span>
-                                    </div>
-                                    <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/45">
-                                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/28 text-white/88">
-                                        <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
-                                        <span className="text-[10px] text-white/65">生成中…</span>
+                            {task.status === 'active'
+                              ? (() => {
+                                  const inflightSlots =
+                                    (task.sceneSlots || []).filter(
+                                      (s) => s.status === 'generating' || s.status === 'pending',
+                                    ) || []
+                                  const fallbackCount = Math.max(0, task.requestedCount - task.outputUrls.length)
+                                  const list =
+                                    inflightSlots.length > 0
+                                      ? inflightSlots
+                                      : Array.from({ length: fallbackCount }).map((_, i) => ({
+                                          title: `图 ${task.outputUrls.length + i + 1}`,
+                                          status: 'generating' as const,
+                                        }))
+                                  return list.map((slot, i) => (
+                                    <div
+                                      key={`${task.id}_pending_${i}`}
+                                      className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30"
+                                    >
+                                      <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
+                                        <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS}>{slot.title || `图 ${i + 1}`}</span>
+                                      </div>
+                                      <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/45">
+                                        {task.refThumb ? (
+                                          <img
+                                            src={task.refThumb}
+                                            alt=""
+                                            className="absolute inset-0 h-full w-full object-cover scale-[1.26] blur-[24px] opacity-55"
+                                            draggable={false}
+                                          />
+                                        ) : null}
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/36 px-4 text-white/88">
+                                          <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
+                                          <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
+                                            <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85" />
+                                          </div>
+                                          <span className="text-[10px] text-white/65">生成中…</span>
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                )
-                              })}
+                                  ))
+                                })()
+                              : null}
                           </div>
                         </div>
                       ) : task.status === 'active' ? (
