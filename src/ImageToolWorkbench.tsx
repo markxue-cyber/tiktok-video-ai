@@ -191,6 +191,7 @@ type TranslateJobV1 = {
 }
 
 type AnyJobV1 = RemoveBgJobV1 | UpscaleJobV1 | CompressJobV1 | TranslateJobV1
+type JobQueueV1 = { v: 1; jobs: AnyJobV1[] }
 
 /** 刷新后续跑时使用任务创建时的参数，避免与当前面板状态不一致 */
 type LockedPipelineSettings =
@@ -319,6 +320,21 @@ function buildRecoveryTaskFromJob(job: AnyJobV1, tool: ImageToolMode): ImageTool
     }
   }
   return null
+}
+
+function parseJobQueue(raw: unknown): AnyJobV1[] {
+  if (!raw || typeof raw !== 'object') return []
+  const v = raw as Partial<JobQueueV1 & AnyJobV1>
+  if (v.v !== 1) return []
+  if (Array.isArray((v as JobQueueV1).jobs)) {
+    return ((v as JobQueueV1).jobs || []).filter(
+      (j): j is AnyJobV1 => !!j && typeof j === 'object' && (j as AnyJobV1).v === 1 && typeof (j as AnyJobV1).taskId === 'string',
+    )
+  }
+  if (typeof v.taskId === 'string' && Array.isArray((v as AnyJobV1).refUrls)) {
+    return [v as AnyJobV1]
+  }
+  return []
 }
 
 async function fileToDataUrl(file: File): Promise<string> {
@@ -484,7 +500,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   const [outputFormatNano, setOutputFormatNano] = useState<'png' | 'jpeg'>('png')
   const [uploadNotice, setUploadNotice] = useState('')
   const [uploadBusy, setUploadBusy] = useState(false)
-  const [submitBusy, setSubmitBusy] = useState(false)
+  const [submittingCount, setSubmittingCount] = useState(0)
   const [history, setHistory] = useState<ImageToolHistoryTask[]>([])
   const [lightbox, setLightbox] = useState<{ url: string; downloadName?: string } | null>(null)
   const [persistenceReady, setPersistenceReady] = useState(false)
@@ -509,6 +525,29 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   }, [history, rt.historyKey, rt.historyIdbKey, persistenceReady])
 
   const sortedHistory = useMemo(() => [...history].sort((a, b) => b.ts - a.ts), [history])
+  const readJobQueue = useCallback(async (): Promise<AnyJobV1[]> => {
+    const raw = await tikgenIgIdbGet<unknown>(rt.jobKey)
+    return parseJobQueue(raw)
+  }, [rt.jobKey])
+
+  const upsertJobQueueItem = useCallback(
+    async (job: AnyJobV1) => {
+      const jobs = await readJobQueue()
+      const next = [job, ...jobs.filter((j) => j.taskId !== job.taskId)]
+      await tikgenIgIdbSet(rt.jobKey, { v: 1, jobs: next } satisfies JobQueueV1)
+    },
+    [readJobQueue, rt.jobKey],
+  )
+
+  const removeJobQueueItem = useCallback(
+    async (taskId: string) => {
+      const jobs = await readJobQueue()
+      const next = jobs.filter((j) => j.taskId !== taskId)
+      if (next.length) await tikgenIgIdbSet(rt.jobKey, { v: 1, jobs: next } satisfies JobQueueV1)
+      else await tikgenIgIdbDelete(rt.jobKey)
+    },
+    [readJobQueue, rt.jobKey],
+  )
 
   const stopProgressTicker = useCallback((taskId: string) => {
     const t = progressTimersRef.current[taskId]
@@ -530,11 +569,10 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       if (!didRemove) return
       stopProgressTicker(taskId)
       void (async () => {
-        const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
-        if (job?.v === 1 && job.taskId === taskId) await tikgenIgIdbDelete(rt.jobKey)
+        await removeJobQueueItem(taskId)
       })()
     },
-    [stopProgressTicker, rt.jobKey],
+    [stopProgressTicker, removeJobQueueItem],
   )
 
   const startProgressTicker = useCallback(
@@ -636,7 +674,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
         }
       }
 
-      setSubmitBusy(true)
+      setSubmittingCount((n) => n + 1)
       try {
         for (let i = startIndex; i < refUrls.length; i++) {
           if (isCancelled()) return
@@ -736,7 +774,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
             }
 
             outputs.push(out)
-            await tikgenIgIdbSet(rt.jobKey, buildJobSnapshot(outputs))
+            await upsertJobQueueItem(buildJobSnapshot(outputs))
 
             const doneChunk = Math.round(((i + 1) / refUrls.length) * 100)
             setHistory((prev) =>
@@ -755,7 +793,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
           } catch (e: any) {
             const failedMsg = String(e?.message || '处理失败')
             stopProgressTicker(taskId)
-            await tikgenIgIdbDelete(rt.jobKey)
+            await removeJobQueueItem(taskId)
             setHistory((prev) =>
               prev.map((x) =>
                 x.id === taskId
@@ -776,7 +814,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
 
         if (isCancelled()) return
 
-        await tikgenIgIdbDelete(rt.jobKey)
+        await removeJobQueueItem(taskId)
         setHistory((prev) =>
           prev.map((x) =>
             x.id === taskId
@@ -792,12 +830,13 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
         if (clearImagesOnComplete) setImages([])
       } finally {
         stopProgressTicker(taskId)
-        setSubmitBusy(false)
+        setSubmittingCount((n) => Math.max(0, n - 1))
       }
     },
     [
       tool,
-      rt.jobKey,
+      upsertJobQueueItem,
+      removeJobQueueItem,
       resolution,
       outputFormatRemoveBg,
       scale,
@@ -824,7 +863,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       } else {
         h0 = loadHistoryFromLocalStorage(rt.historyKey)
       }
-      const job = await tikgenIgIdbGet<AnyJobV1>(rt.jobKey)
+      const jobs = await readJobQueue()
 
       if (tool === 'removeBg') {
         const ws = await tikgenIgIdbGet<RemoveBgWorkspaceV1>(rt.workspaceKey)
@@ -861,67 +900,73 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
 
       let nextHistory = h0
 
-      if (job && job.v === 1 && Array.isArray(job.refUrls) && job.refUrls.length) {
+      const resumable: Array<{
+        taskId: string
+        refUrls: string[]
+        startIndex: number
+        merged: string[]
+        locked: LockedPipelineSettings
+      }> = []
+
+      for (const job of jobs) {
+        if (!Array.isArray(job.refUrls) || !job.refUrls.length) continue
         const isOurJob =
           tool === 'removeBg'
             ? !('tool' in job && job.tool != null && job.tool !== 'removeBg')
             : 'tool' in job && job.tool === tool
+        if (!isOurJob) continue
 
-        if (isOurJob) {
-          const locked = lockedSettingsFromJob(job, tool)
-          if (!locked) {
-            await tikgenIgIdbDelete(rt.jobKey)
-          } else {
-            let task = h0.find((t) => t.id === job.taskId && t.status === 'active')
-            if (!task) {
-              const stub = buildRecoveryTaskFromJob(job, tool)
-              if (stub) {
-                nextHistory = [stub, ...h0.filter((t) => t.id !== job.taskId)]
-              } else {
-                await tikgenIgIdbDelete(rt.jobKey)
-              }
-            }
+        const locked = lockedSettingsFromJob(job, tool)
+        if (!locked) {
+          await removeJobQueueItem(job.taskId)
+          continue
+        }
 
-            const taskRow = nextHistory.find((t) => t.id === job.taskId && t.status === 'active')
-            if (taskRow && locked) {
-              const jobOut = Array.isArray(job.outputs) ? job.outputs : []
-              const taskOut = Array.isArray(taskRow.outputUrls) ? taskRow.outputUrls : []
-              const merged = taskOut.length >= jobOut.length ? [...taskOut] : [...jobOut]
-              const startIndex = merged.length
-              if (startIndex >= job.refUrls.length) {
-                await tikgenIgIdbDelete(rt.jobKey)
-                nextHistory = nextHistory.map((x) =>
-                  x.id === job.taskId
-                    ? { ...x, status: 'completed' as const, progress: 100, outputUrls: merged }
-                    : x,
-                )
-              } else if (!cancelled && mountedRef.current) {
-                setHistory(nextHistory)
-                setPersistenceReady(true)
-                await runPipelineRef.current({
-                  taskId: job.taskId,
-                  refUrls: job.refUrls,
-                  startIndex,
-                  initialOutputs: merged.slice(),
-                  clearImagesOnComplete: false,
-                  isCancelled: () => cancelled || !mountedRef.current,
-                  locked,
-                })
-                return
-              }
-            }
+        let task = nextHistory.find((t) => t.id === job.taskId && t.status === 'active')
+        if (!task) {
+          const stub = buildRecoveryTaskFromJob(job, tool)
+          if (stub) nextHistory = [stub, ...nextHistory.filter((t) => t.id !== job.taskId)]
+          else {
+            await removeJobQueueItem(job.taskId)
+            continue
           }
         }
+
+        const taskRow = nextHistory.find((t) => t.id === job.taskId && t.status === 'active')
+        if (!taskRow) continue
+        const jobOut = Array.isArray(job.outputs) ? job.outputs : []
+        const taskOut = Array.isArray(taskRow.outputUrls) ? taskRow.outputUrls : []
+        const merged = taskOut.length >= jobOut.length ? [...taskOut] : [...jobOut]
+        const startIndex = merged.length
+        if (startIndex >= job.refUrls.length) {
+          await removeJobQueueItem(job.taskId)
+          nextHistory = nextHistory.map((x) =>
+            x.id === job.taskId ? { ...x, status: 'completed' as const, progress: 100, outputUrls: merged } : x,
+          )
+          continue
+        }
+        resumable.push({ taskId: job.taskId, refUrls: job.refUrls, startIndex, merged, locked })
       }
 
       if (cancelled) return
       setHistory(nextHistory)
       setPersistenceReady(true)
+      for (const r of resumable) {
+        void runPipelineRef.current({
+          taskId: r.taskId,
+          refUrls: r.refUrls,
+          startIndex: r.startIndex,
+          initialOutputs: r.merged.slice(),
+          clearImagesOnComplete: false,
+          isCancelled: () => cancelled || !mountedRef.current,
+          locked: r.locked,
+        })
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [tool, rt.historyKey, rt.historyIdbKey, rt.workspaceKey, rt.jobKey])
+  }, [tool, rt.historyKey, rt.historyIdbKey, rt.workspaceKey, readJobQueue, removeJobQueueItem])
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -1023,7 +1068,7 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
   }
 
   const handleSubmit = async () => {
-    if (!images.length || submitBusy) return
+    if (!images.length) return
     const list = [...images]
     const refUrls = list.map((x) => x.url)
     const taskId = `${rt.taskPrefix}${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -1041,46 +1086,46 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
       outputUrls: [],
     }
 
-    if (tool === 'removeBg') {
-      await tikgenIgIdbSet(rt.jobKey, {
-        v: 1,
-        taskId,
-        refUrls,
-        resolution,
-        outputFormat: outputFormatRemoveBg,
-        outputs: [],
-      })
-    } else if (tool === 'upscale') {
-      await tikgenIgIdbSet(rt.jobKey, {
-        v: 1,
-        tool: 'upscale',
-        taskId,
-        refUrls,
-        scale,
-        outputFormat: outputFormatNano,
-        outputs: [],
-      })
-    } else if (tool === 'compress') {
-      await tikgenIgIdbSet(rt.jobKey, {
-        v: 1,
-        tool: 'compress',
-        taskId,
-        refUrls,
-        compressPercent: Math.max(1, Math.min(100, Math.round(compressPercent))),
-        outputFormat: outputFormatNano,
-        outputs: [],
-      })
-    } else {
-      await tikgenIgIdbSet(rt.jobKey, {
-        v: 1,
-        tool: 'translate',
-        taskId,
-        refUrls,
-        targetLang,
-        outputFormat: outputFormatNano,
-        outputs: [],
-      })
-    }
+    const jobSnapshot: AnyJobV1 =
+      tool === 'removeBg'
+        ? {
+            v: 1,
+            taskId,
+            refUrls,
+            resolution,
+            outputFormat: outputFormatRemoveBg,
+            outputs: [],
+          }
+        : tool === 'upscale'
+          ? {
+              v: 1,
+              tool: 'upscale',
+              taskId,
+              refUrls,
+              scale,
+              outputFormat: outputFormatNano,
+              outputs: [],
+            }
+          : tool === 'compress'
+            ? {
+                v: 1,
+                tool: 'compress',
+                taskId,
+                refUrls,
+                compressPercent: Math.max(1, Math.min(100, Math.round(compressPercent))),
+                outputFormat: outputFormatNano,
+                outputs: [],
+              }
+            : {
+                v: 1,
+                tool: 'translate',
+                taskId,
+                refUrls,
+                targetLang,
+                outputFormat: outputFormatNano,
+                outputs: [],
+              }
+    await upsertJobQueueItem(jobSnapshot)
 
     setHistory((prev) => [task, ...prev])
 
@@ -1572,11 +1617,11 @@ export function ImageToolWorkbench({ tool }: { tool: ImageToolMode }) {
             <div className="pt-1 w-full min-w-0">
               <button
                 type="button"
-                disabled={!images.length || submitBusy}
+                disabled={!images.length || uploadBusy}
                 onClick={() => void handleSubmit()}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/25 ring-1 ring-inset ring-white/10 transition-[filter,opacity] hover:brightness-[1.03] active:brightness-[0.98] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
               >
-                {submitBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <SubmitIcon className="w-4 h-4" />}
+                {submittingCount > 0 ? <RefreshCw className="w-4 h-4 animate-spin" /> : <SubmitIcon className="w-4 h-4" />}
                 {rt.submitLabel}
               </button>
             </div>
