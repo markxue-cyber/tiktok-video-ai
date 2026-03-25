@@ -859,20 +859,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 360px;
-  padding: clamp(12px, 2vw, 24px);
+  min-height: 310px;
+  padding: clamp(10px, 1.6vw, 18px);
 }
 
 .lg2-root .lg2-video-carousel {
   position: relative;
   width: 100%;
-  max-width: min(100%, 560px);
-  aspect-ratio: 1;
-  border-radius: 16px;
+  max-width: min(100%, 470px);
+  aspect-ratio: 0.96;
+  border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(8, 10, 22, 0.65);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.4);
   isolation: isolate;
 }
 
