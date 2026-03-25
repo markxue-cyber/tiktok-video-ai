@@ -4144,6 +4144,7 @@ function ImageGenerator({
   const [sceneSlotGenProgress, setSceneSlotGenProgress] = useState<Record<number, number>>({})
   const sceneGenProgressTimersRef = useRef<Record<number, number>>({})
   const imageGenRootRef = useRef<HTMLDivElement | null>(null)
+  const imageGenHistoryTopRef = useRef<HTMLDivElement | null>(null)
   /** 历史卡并发任务的百分比刷新时钟（旧任务挪到下方后仍持续跳动） */
   const [historyProgressNow, setHistoryProgressNow] = useState(() => Date.now())
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
@@ -5985,9 +5986,11 @@ function ImageGenerator({
     }
     if (typeof window !== 'undefined') {
       const scrollAllTop = () => {
-        // 1) 先把当前模块锚点滚到可视区顶端
+        // 1) 优先把右侧「生成历史」面板顶端滚到可视区（用户期望锚点）
+        imageGenHistoryTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+        // 2) 兜底：若锚点不可用，回退到模块顶端
         imageGenRootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        // 2) 再把所有可滚动祖先容器回顶（含 main / 局部滚动面板）
+        // 3) 再把所有可滚动祖先容器回顶（含 main / 局部滚动面板）
         let node = imageGenRootRef.current?.parentElement || null
         while (node) {
           const style = window.getComputedStyle(node)
@@ -5997,7 +6000,7 @@ function ImageGenerator({
           if (canScrollY) node.scrollTo({ top: 0, behavior: 'smooth' })
           node = node.parentElement
         }
-        // 3) 最后兜底 document / window
+        // 4) 最后兜底 document / window
         document.documentElement.scrollTo({ top: 0, behavior: 'smooth' })
         document.body.scrollTo({ top: 0, behavior: 'smooth' })
         window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -7400,7 +7403,7 @@ function ImageGenerator({
         </div>
         </div>
       </div>
-      <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
+      <div ref={imageGenHistoryTopRef} className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
         <h2 className="text-xl font-bold mb-3 text-white/95">生成历史</h2>
         {genErrorText && !sceneBoardPreparing ? (
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
