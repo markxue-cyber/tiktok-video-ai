@@ -854,7 +854,7 @@
   color: rgba(235, 242, 255, 0.9);
 }
 
-/* 商品视频：案例 MP4，contain 避免裁切 */
+/* 商品视频：案例图轮播（柔和淡入 + 轻微景深缩放） */
 .lg2-root .lg2-media.lg2-video-case {
   display: flex;
   align-items: center;
@@ -863,15 +863,67 @@
   padding: clamp(12px, 2vw, 24px);
 }
 
-.lg2-root .lg2-demo-video {
+.lg2-root .lg2-video-carousel {
+  position: relative;
   width: 100%;
   max-width: min(100%, 560px);
-  max-height: min(70vh, 520px);
-  height: auto;
+  aspect-ratio: 1;
   border-radius: 16px;
-  object-fit: contain;
-  background: #000;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 10, 22, 0.65);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  isolation: isolate;
+}
+
+.lg2-root .lg2-video-carousel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(72% 54% at 50% 0%, rgba(255, 255, 255, 0.1), transparent 62%),
+    linear-gradient(to top, rgba(7, 8, 20, 0.2), transparent 34%);
+  z-index: 2;
+}
+
+.lg2-root .lg2-video-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.04);
+  filter: saturate(1.03) contrast(1.03);
+  animation: lg2-video-fade-kenburns 25s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes lg2-video-fade-kenburns {
+  0% {
+    opacity: 0;
+    transform: scale(1.045);
+  }
+
+  4% {
+    opacity: 1;
+  }
+
+  18% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+
+  22% {
+    opacity: 0;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
 /* 图片翻译：左右并排对比，双图同时可见 */
@@ -1151,5 +1203,29 @@
     height: auto;
     padding: 10px;
     overflow: visible;
+  }
+
+  .lg2-root .lg2-video-slide {
+    animation: none !important;
+    position: relative;
+    inset: auto;
+    opacity: 1;
+    transform: none;
+    display: block;
+  }
+
+  .lg2-root .lg2-video-carousel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    aspect-ratio: auto;
+    max-width: none;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .lg2-root .lg2-video-carousel::after {
+    display: none;
   }
 }
