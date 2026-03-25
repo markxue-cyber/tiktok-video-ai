@@ -4143,6 +4143,8 @@ function ImageGenerator({
   /** 各场景槽出图进度（API 无真实进度，按耗时指数趋近 ~94%） */
   const [sceneSlotGenProgress, setSceneSlotGenProgress] = useState<Record<number, number>>({})
   const sceneGenProgressTimersRef = useRef<Record<number, number>>({})
+  /** 历史卡并发任务的百分比刷新时钟（旧任务挪到下方后仍持续跳动） */
+  const [historyProgressNow, setHistoryProgressNow] = useState(() => Date.now())
   const [imageScenes, setImageScenes] = useState<ImageSceneRow[]>(() =>
     IMAGE_SCENE_BLUEPRINT.map((b) => ({
       key: b.key,
@@ -4502,6 +4504,11 @@ function ImageGenerator({
       Object.values(sceneGenProgressTimersRef.current).forEach((t) => window.clearInterval(t))
       sceneGenProgressTimersRef.current = {}
     }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setHistoryProgressNow(Date.now()), 850)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -7905,33 +7912,44 @@ function ImageGenerator({
                                           title: `图 ${task.outputUrls.length + i + 1}`,
                                           status: 'generating' as const,
                                         }))
-                                  return list.map((slot, i) => (
-                                    <div
-                                      key={`${task.id}_pending_${i}`}
-                                      className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30"
-                                    >
-                                      <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
-                                        <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS}>{slot.title || `图 ${i + 1}`}</span>
-                                      </div>
-                                      <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/45">
-                                        {task.refThumb ? (
-                                          <img
-                                            src={task.refThumb}
-                                            alt=""
-                                            className="absolute inset-0 h-full w-full object-cover scale-[1.26] blur-[24px] opacity-55"
-                                            draggable={false}
-                                          />
-                                        ) : null}
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/36 px-4 text-white/88">
-                                          <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
-                                          <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
-                                            <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85" />
+                                  return list.map((slot, i) => {
+                                    const cap = 94
+                                    const tauMs = 44000
+                                    const elapsed = Math.max(0, historyProgressNow - task.ts - i * 800)
+                                    const eased = 1 - Math.exp(-elapsed / tauMs)
+                                    const pct = Math.max(2, Math.min(cap, Math.round(2 + (cap - 2) * eased)))
+                                    return (
+                                      <div
+                                        key={`${task.id}_pending_${i}`}
+                                        className="flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30"
+                                      >
+                                        <div className="relative z-20 shrink-0 rounded-t-2xl bg-black/30 px-2.5 pb-1.5 pt-2.5">
+                                          <span className={IMAGE_HISTORY_SCENE_TITLE_CLASS}>{slot.title || `图 ${i + 1}`}</span>
+                                        </div>
+                                        <div className="relative aspect-square w-full overflow-hidden rounded-b-2xl bg-black/45">
+                                          {task.refThumb ? (
+                                            <img
+                                              src={task.refThumb}
+                                              alt=""
+                                              className="absolute inset-0 h-full w-full object-cover scale-[1.26] blur-[24px] opacity-55"
+                                              draggable={false}
+                                            />
+                                          ) : null}
+                                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/36 px-4 text-white/88">
+                                            <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
+                                            <span className="tabular-nums text-sm font-semibold tracking-tight">{pct}%</span>
+                                            <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
+                                              <div
+                                                className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
+                                                style={{ width: `${pct}%` }}
+                                              />
+                                            </div>
+                                            <span className="text-[10px] text-white/65">生成中…</span>
                                           </div>
-                                          <span className="text-[10px] text-white/65">生成中…</span>
                                         </div>
                                       </div>
-                                    </div>
-                                  ))
+                                    )
+                                  })
                                 })()
                               : null}
                           </div>
