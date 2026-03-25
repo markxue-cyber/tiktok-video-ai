@@ -242,6 +242,8 @@ type ImageGenHistoryTask = {
     imagePrompt?: string
   }>
   errorMessage?: string
+  /** 顶部提示条用的简短分类，避免对用户展示 UNKNOWN */
+  errorHintCode?: string
 }
 
 function loadImageGenHistoryFromStorage(lsKey: string = TIKGEN_IG_LS_HISTORY): ImageGenHistoryTask[] {
@@ -696,6 +698,66 @@ function formatImageGenHistoryPromptDisplay(prompt: string): string {
   return head + body
 }
 
+type SceneFailureKind = 'quota' | 'payment' | 'cancelled' | 'other'
+
+function classifySceneSlotError(err: string): SceneFailureKind {
+  const e = String(err || '')
+  if (/今日额度|额度已用尽|quota/i.test(e)) return 'quota'
+  if (/请先完成本产品内|付费订单|PAYMENT_REQUIRED/i.test(e)) return 'payment'
+  if (/已取消|已中断|abort/i.test(e)) return 'cancelled'
+  return 'other'
+}
+
+function summarizeSceneBatchFailures(
+  failedSelected: { title: string; error?: string }[],
+  mode: { type: 'all_failed' } | { type: 'partial'; successCount: number },
+): { text: string; code: string } {
+  if (!failedSelected.length) return { text: '', code: 'UNKNOWN' }
+  if (failedSelected.length === 1) {
+    const s = failedSelected[0]
+    const err = String(s.error || '失败')
+    const k = classifySceneSlotError(err)
+    const code =
+      k === 'quota' ? 'QUOTA_EXHAUSTED' : k === 'payment' ? 'PAYMENT_REQUIRED' : k === 'cancelled' ? 'CANCELLED' : 'UNKNOWN'
+    return { text: `${s.title}：${err}`, code }
+  }
+
+  const counts: Record<SceneFailureKind, number> = { quota: 0, payment: 0, cancelled: 0, other: 0 }
+  for (const s of failedSelected) {
+    counts[classifySceneSlotError(String(s.error || ''))]++
+  }
+
+  const parts: string[] = []
+  if (counts.quota) parts.push(`今日额度已用尽（${counts.quota} 张），可升级套餐或次日再试`)
+  if (counts.payment) parts.push(`需先完成本产品内付费（${counts.payment} 张），请前往套餐页购买`)
+  if (counts.cancelled) parts.push(`任务已中断（${counts.cancelled} 张），请留在本页后重试`)
+  if (counts.other) parts.push(`生成失败（${counts.other} 张），请稍后重试`)
+
+  const nonZeroKinds = (['quota', 'payment', 'cancelled', 'other'] as const).filter((x) => counts[x] > 0)
+  const code =
+    nonZeroKinds.length === 1
+      ? nonZeroKinds[0] === 'quota'
+        ? 'QUOTA_EXHAUSTED'
+        : nonZeroKinds[0] === 'payment'
+          ? 'PAYMENT_REQUIRED'
+          : nonZeroKinds[0] === 'cancelled'
+            ? 'CANCELLED'
+            : 'UNKNOWN'
+      : 'PARTIAL'
+
+  const n = failedSelected.length
+  if (mode.type === 'all_failed') {
+    return {
+      text: `本次共 ${n} 张未生成。${parts.join('；')}。`,
+      code,
+    }
+  }
+  return {
+    text: `已生成 ${mode.successCount} 张；另有 ${n} 张未成功：${parts.join('；')}。`,
+    code,
+  }
+}
+
 /** 由当前场景看板同步到「生成历史」的一条记录（支持进行中 / 增量更新） */
 function buildHistoryTaskFromSceneBoard(
   board: SceneRunBoard,
@@ -745,10 +807,17 @@ function buildHistoryTaskFromSceneBoard(
     status = 'completed'
   }
 
-  const errors = failedSelected.map((s) => `${s.title}：${s.error || '失败'}`)
-  const errMsg =
-    errors.length && status === 'completed' ? `部分失败：${errors.join('；')}` : undefined
-  const failMsg = status === 'failed' ? errors.join('\n') || '生成失败' : errMsg
+  let errorMessage: string | undefined
+  let errorHintCode: string | undefined
+  if (status === 'failed' && failedSelected.length) {
+    const f = summarizeSceneBatchFailures(failedSelected, { type: 'all_failed' })
+    errorMessage = f.text
+    errorHintCode = f.code
+  } else if (status === 'completed' && failedSelected.length) {
+    const f = summarizeSceneBatchFailures(failedSelected, { type: 'partial', successCount: doneSlots.length })
+    errorMessage = f.text
+    errorHintCode = f.code
+  }
 
   const pn =
     String(productName || '').trim() ||
@@ -777,7 +846,8 @@ function buildHistoryTaskFromSceneBoard(
       description: s.description,
       imagePrompt: s.imagePrompt,
     })),
-    errorMessage: failMsg,
+    errorMessage,
+    errorHintCode,
   }
 }
 
@@ -4676,10 +4746,10 @@ function ImageGenerator({
       if (built.status === 'failed') {
         const failLine = built.errorMessage || '生成失败'
         setGenErrorText(failLine)
-        setGenErrorCode(/\b已取消\b/.test(failLine) ? 'CANCELLED' : 'UNKNOWN')
+        setGenErrorCode(built.errorHintCode || 'UNKNOWN')
       } else if (built.status === 'completed' && built.errorMessage) {
         setGenErrorText(built.errorMessage)
-        setGenErrorCode('PARTIAL')
+        setGenErrorCode(built.errorHintCode || 'PARTIAL')
       } else if (built.status === 'completed') {
         setGenErrorText('')
         setGenErrorCode('UNKNOWN')
@@ -7461,15 +7531,23 @@ function ImageGenerator({
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <span className="break-words">
               <span className="font-medium">上次失败</span> · {genErrorText}
-              <span className="text-red-300/80 ml-1">
-                （
-                {genErrorCode === 'CANCELLED'
-                  ? '已中断'
-                  : genErrorCode === 'PARTIAL'
-                    ? '部分失败'
-                    : genErrorCode}
-                ）
-              </span>
+              {(() => {
+                const hint =
+                  genErrorCode === 'CANCELLED'
+                    ? '已中断'
+                    : genErrorCode === 'PARTIAL'
+                      ? '多种原因'
+                      : genErrorCode === 'QUOTA_EXHAUSTED'
+                        ? '今日额度已用尽'
+                        : genErrorCode === 'PAYMENT_REQUIRED'
+                          ? '需先完成付费'
+                          : genErrorCode === 'UNKNOWN'
+                            ? ''
+                            : genErrorCode
+                return hint ? (
+                  <span className="text-red-300/80 ml-1">（{hint}）</span>
+                ) : null
+              })()}
             </span>
             {genErrorCode !== 'QUOTA_EXHAUSTED' && genErrorCode !== 'PAYMENT_REQUIRED' ? (
               <button
