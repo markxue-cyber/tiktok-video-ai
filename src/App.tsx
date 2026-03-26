@@ -4072,14 +4072,19 @@ function VideoGenerator({
             placeholder="输入商品卖点/场景/风格，或使用一键生成提示词..."
           />
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={!prompt || !canGenerate}
-          title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再生成视频' : undefined}
-          className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
-        >
-          {processingCount > 0 ? <>再提交一个（进行中 {processingCount}）</> : '生成视频'}
-        </button>
+        <div>
+          <button
+            onClick={handleGenerate}
+            disabled={!prompt || !canGenerate}
+            title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再生成视频' : undefined}
+            className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
+          >
+            {processingCount > 0 ? <>再提交一个（进行中 {processingCount}）</> : '生成视频'}
+          </button>
+          {!canGenerate ? (
+            <div className="mt-2 text-xs text-amber-300/95 text-center">请开通会员</div>
+          ) : null}
+        </div>
       </div>
       <div className="tikgen-panel rounded-2xl p-6">
         <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
