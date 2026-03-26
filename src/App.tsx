@@ -2913,6 +2913,23 @@ function VideoGenerator({
   onTemplateApplied: () => void
   canGenerate: boolean
 }) {
+  type VideoGenTaskItem = {
+    id: string
+    createdAt: number
+    prompt: string
+    model: string
+    size: string
+    resolution: string
+    durationSec: number
+    taskId: string
+    status: 'processing' | 'completed' | 'failed'
+    progress: string
+    statusText: string
+    errorText: string
+    errorCode: string
+    videoUrl: string
+  }
+
   const [refImagePreviewUrl, setRefImagePreviewUrl] = useState('')
   const [refImageDataUrl, setRefImageDataUrl] = useState('')
   const [showAssetPicker, setShowAssetPicker] = useState(false)
@@ -2928,13 +2945,9 @@ function VideoGenerator({
   const [size, setSize] = useState<VideoAspect>('9:16')
   const [resolution, setResolution] = useState<VideoRes>('720p')
   const [durationSec, setDurationSec] = useState<VideoDur>(10)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [generatedVideo, setGeneratedVideo] = useState('')
-  const [taskId, setTaskId] = useState('')
-  const [progress, setProgress] = useState('0%')
-  const [statusText, setStatusText] = useState('')
-  const [errorText, setErrorText] = useState('')
-  const [errorCode, setErrorCode] = useState('UNKNOWN')
+  const [videoTasks, setVideoTasks] = useState<VideoGenTaskItem[]>([])
+  const [activeTaskId, setActiveTaskId] = useState('')
+  const [resultLightbox, setResultLightbox] = useState<{ url: string; title: string } | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalStep, setModalStep] = useState(1)
   const [productInfo, setProductInfo] = useState<ProductInfo>({ ...DEFAULT_PRODUCT_INFO })
@@ -2949,13 +2962,27 @@ function VideoGenerator({
   const [aiError, setAiError] = useState('')
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [unavailableVideoMap, setUnavailableVideoMap] = useState<Record<string, string>>({})
-  const stopPollingRef = useRef(false)
   const aiJobRef = useRef(0)
+  const pollRunningRef = useRef<Set<string>>(new Set())
+  const unmountedRef = useRef(false)
   const [videoGenPersistenceReady, setVideoGenPersistenceReady] = useState(false)
   const skipVideoGenPersistRef = useRef(true)
-  const resumeVideoGenPollRef = useRef(false)
+  const resumeVideoGenPollRef = useRef<string[]>([])
   /** 已从 IndexedDB 恢复工作台时，避免可用性接口再把模型覆盖成「推荐模型」 */
   const restoredVideoGenWorkspaceRef = useRef(false)
+
+  const updateVideoTask = useCallback((taskId: string, patch: Partial<VideoGenTaskItem>) => {
+    setVideoTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, ...patch } : t)))
+  }, [])
+
+  const activeTask = useMemo<VideoGenTaskItem | null>(() => {
+    if (!videoTasks.length) return null
+    const picked = activeTaskId ? videoTasks.find((t) => t.taskId === activeTaskId) : null
+    if (picked) return picked
+    return videoTasks.find((t) => t.status === 'processing') || videoTasks[0]
+  }, [videoTasks, activeTaskId])
+
+  const processingCount = useMemo(() => videoTasks.filter((t) => t.status === 'processing').length, [videoTasks])
 
   useEffect(() => {
     void (async () => {
@@ -2993,15 +3020,52 @@ function VideoGenerator({
           setSelectedScript(String(w.selectedScript || ''))
           setOptimizedPrompt(String(w.optimizedPrompt || ''))
           setTags(Array.isArray(w.tags) ? w.tags.map(String) : [])
-          setGeneratedVideo(String(w.generatedVideo || ''))
-          setTaskId(String(w.taskId || ''))
-          setProgress(String(w.progress || '0%'))
-          setStatusText(String(w.statusText || ''))
-          setErrorText(String(w.errorText || ''))
-          setErrorCode(String(w.errorCode || 'UNKNOWN'))
-          const needResume = !!(w.taskId && !w.generatedVideo && !w.errorText && w.isGenerating)
-          resumeVideoGenPollRef.current = needResume
-          if (needResume) setIsGenerating(true)
+          const restoredTasks = Array.isArray((w as any).videoTasks)
+            ? ((w as any).videoTasks as any[])
+                .map((x) => ({
+                  id: String(x?.id || x?.taskId || crypto.randomUUID()),
+                  createdAt: Number(x?.createdAt || Date.now()),
+                  prompt: String(x?.prompt || ''),
+                  model: String(x?.model || w.model || 'sora-2'),
+                  size: String(x?.size || w.size || '9:16'),
+                  resolution: String(x?.resolution || w.resolution || '720p'),
+                  durationSec: Number(x?.durationSec || w.durationSec || 10),
+                  taskId: String(x?.taskId || ''),
+                  status: x?.status === 'completed' || x?.status === 'failed' ? x.status : 'processing',
+                  progress: String(x?.progress || '0%'),
+                  statusText: String(x?.statusText || ''),
+                  errorText: String(x?.errorText || ''),
+                  errorCode: String(x?.errorCode || 'UNKNOWN'),
+                  videoUrl: String(x?.videoUrl || ''),
+                }))
+                .filter((x) => x.taskId)
+            : []
+          if (restoredTasks.length) {
+            setVideoTasks(restoredTasks.sort((a, b) => b.createdAt - a.createdAt).slice(0, 20))
+            const at = String((w as any).activeTaskId || restoredTasks[0]?.taskId || '')
+            setActiveTaskId(at)
+            resumeVideoGenPollRef.current = restoredTasks.filter((x) => x.status === 'processing').map((x) => x.taskId)
+          } else if (w.taskId) {
+            const oldOne: VideoGenTaskItem = {
+              id: crypto.randomUUID(),
+              createdAt: Date.now(),
+              prompt: String(w.prompt || ''),
+              model: String(w.model || 'sora-2'),
+              size: String(w.size || '9:16'),
+              resolution: String(w.resolution || '720p'),
+              durationSec: Number(w.durationSec || 10),
+              taskId: String(w.taskId || ''),
+              status: w.generatedVideo ? 'completed' : w.errorText ? 'failed' : 'processing',
+              progress: String(w.progress || '0%'),
+              statusText: String(w.statusText || ''),
+              errorText: String(w.errorText || ''),
+              errorCode: String(w.errorCode || 'UNKNOWN'),
+              videoUrl: String(w.generatedVideo || ''),
+            }
+            setVideoTasks([oldOne])
+            setActiveTaskId(oldOne.taskId)
+            resumeVideoGenPollRef.current = oldOne.status === 'processing' ? [oldOne.taskId] : []
+          }
         }
       } catch {
         // ignore
@@ -3036,13 +3100,15 @@ function VideoGenerator({
       selectedScript,
       optimizedPrompt,
       tags,
-      generatedVideo,
-      taskId,
-      progress,
-      statusText,
-      errorText,
-      errorCode,
-      isGenerating,
+      generatedVideo: activeTask?.videoUrl || '',
+      taskId: activeTask?.taskId || '',
+      progress: activeTask?.progress || '0%',
+      statusText: activeTask?.statusText || '',
+      errorText: activeTask?.errorText || '',
+      errorCode: activeTask?.errorCode || 'UNKNOWN',
+      isGenerating: activeTask?.status === 'processing',
+      videoTasks: videoTasks.slice(0, 20),
+      activeTaskId: activeTask?.taskId || activeTaskId,
     }
     void tikgenIgIdbSet(TIKGEN_IG_IDB.videoGeneratorWorkspace, snap)
   }, [
@@ -3062,13 +3128,9 @@ function VideoGenerator({
     selectedScript,
     optimizedPrompt,
     tags,
-    generatedVideo,
-    taskId,
-    progress,
-    statusText,
-    errorText,
-    errorCode,
-    isGenerating,
+    activeTask,
+    videoTasks,
+    activeTaskId,
   ])
 
   useEffect(() => {
@@ -3316,7 +3378,7 @@ function VideoGenerator({
 
   useEffect(() => {
     return () => {
-      stopPollingRef.current = true
+      unmountedRef.current = true
     }
   }, [])
 
@@ -3497,31 +3559,40 @@ function VideoGenerator({
   }, [optimizedPrompt, selectedScript, prompt, productInfo, size, resolution, durationSec])
 
   const pollVideoGenerateTask = useCallback(
-    async (submitTaskId: string) => {
-      stopPollingRef.current = false
+    async (submitTaskId: string, meta: { model: string; size: string; resolution: string; durationSec: number }) => {
+      if (pollRunningRef.current.has(submitTaskId)) return
+      pollRunningRef.current.add(submitTaskId)
       try {
         for (let i = 0; i < 120; i++) {
-          if (stopPollingRef.current) return
+          if (unmountedRef.current) return
           await new Promise((r) => setTimeout(r, 5000))
-          if (stopPollingRef.current) return
+          if (unmountedRef.current) return
 
           const s = await checkVideoStatus(submitTaskId)
-          setProgress(s.progress || '0%')
+          updateVideoTask(submitTaskId, {
+            progress: s.progress || '0%',
+            statusText: `生成中... ${s.progress || ''}`.trim(),
+          })
 
           const status = (s.status || '').toLowerCase()
           if (status === 'succeeded' || status === 'success' || status === 'completed') {
             if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
-            setGeneratedVideo(s.videoUrl)
-            Sentry.captureMessage('video_generation_success', { level: 'info', extra: { taskId: submitTaskId, model } })
+            updateVideoTask(submitTaskId, {
+              status: 'completed',
+              videoUrl: s.videoUrl,
+              progress: '100%',
+              statusText: '生成完成',
+              errorText: '',
+              errorCode: 'UNKNOWN',
+            })
+            Sentry.captureMessage('video_generation_success', { level: 'info', extra: { taskId: submitTaskId, model: meta.model } })
             await safeArchiveAsset({
               source: 'ai_generated',
               type: 'video',
               url: s.videoUrl,
               name: `video-${Date.now()}.mp4`,
-              metadata: { from: 'video_generator', model, size, resolution, durationSec },
+              metadata: { from: 'video_generator', model: meta.model, size: meta.size, resolution: meta.resolution, durationSec: meta.durationSec },
             })
-            setStatusText('生成完成')
-            setIsGenerating(false)
             return
           }
 
@@ -3530,35 +3601,41 @@ function VideoGenerator({
             err.code = s.failCode || 'UNKNOWN'
             throw err
           }
-
-          setStatusText(`生成中... ${s.progress || ''}`.trim())
         }
 
         const err: any = new Error('生成超时，请稍后在任务列表中查看')
         err.code = 'UPSTREAM_TIMEOUT'
         throw err
       } catch (e: any) {
-        Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
-        setErrorText(e?.message || '生成失败')
-        setErrorCode(e?.code || 'UNKNOWN')
-        setIsGenerating(false)
-        setStatusText('')
+        Sentry.captureException(e, { extra: { scene: 'video_generate', model: meta.model } })
+        updateVideoTask(submitTaskId, {
+          status: 'failed',
+          errorText: e?.message || '生成失败',
+          errorCode: e?.code || 'UNKNOWN',
+          statusText: '',
+        })
+      } finally {
+        pollRunningRef.current.delete(submitTaskId)
       }
     },
-    [model, size, resolution, durationSec],
+    [updateVideoTask],
   )
 
   useEffect(() => {
-    if (!videoGenPersistenceReady || !resumeVideoGenPollRef.current) return
-    const tid = taskId
-    if (!tid) {
-      resumeVideoGenPollRef.current = false
-      setIsGenerating(false)
-      return
-    }
-    resumeVideoGenPollRef.current = false
-    void pollVideoGenerateTask(tid)
-  }, [videoGenPersistenceReady, taskId, pollVideoGenerateTask])
+    if (!videoGenPersistenceReady || resumeVideoGenPollRef.current.length === 0) return
+    const queue = [...resumeVideoGenPollRef.current]
+    resumeVideoGenPollRef.current = []
+    queue.forEach((tid) => {
+      const t = videoTasks.find((x) => x.taskId === tid)
+      if (!t) return
+      void pollVideoGenerateTask(tid, {
+        model: t.model,
+        size: t.size,
+        resolution: t.resolution,
+        durationSec: t.durationSec,
+      })
+    })
+  }, [videoGenPersistenceReady, videoTasks, pollVideoGenerateTask])
 
   const handleGenerate = async () => {
     if (!canGenerate) {
@@ -3567,26 +3644,53 @@ function VideoGenerator({
     }
     if (!refImageDataUrl) { alert('请先上传参考图'); return }
     if (!prompt) { alert('请输入视频文案描述'); return }
-    stopPollingRef.current = false
-    setIsGenerating(true)
-    setGeneratedVideo('')
-    setErrorText('')
-    setErrorCode('UNKNOWN')
-    setProgress('0%')
-    setStatusText('任务提交中...')
-    setTaskId('')
 
     try {
       const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage: refImageDataUrl })
-      setTaskId(submit.taskId)
-      setStatusText(submit.message || '视频生成中...')
-      await pollVideoGenerateTask(submit.taskId)
+      const item: VideoGenTaskItem = {
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        prompt: String(prompt || '').slice(0, 160),
+        model,
+        size,
+        resolution,
+        durationSec,
+        taskId: submit.taskId,
+        status: 'processing',
+        progress: '0%',
+        statusText: submit.message || '视频生成中...',
+        errorText: '',
+        errorCode: 'UNKNOWN',
+        videoUrl: '',
+      }
+      setVideoTasks((prev) => [item, ...prev.filter((x) => x.taskId !== item.taskId)].slice(0, 20))
+      setActiveTaskId(item.taskId)
+      void pollVideoGenerateTask(item.taskId, {
+        model: item.model,
+        size: item.size,
+        resolution: item.resolution,
+        durationSec: item.durationSec,
+      })
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
-      setErrorText(e?.message || '生成失败')
-      setErrorCode(e?.code || 'UNKNOWN')
-      setIsGenerating(false)
-      setStatusText('')
+      const failed: VideoGenTaskItem = {
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        prompt: String(prompt || '').slice(0, 160),
+        model,
+        size,
+        resolution,
+        durationSec,
+        taskId: `failed_${Date.now()}`,
+        status: 'failed',
+        progress: '0%',
+        statusText: '',
+        errorText: e?.message || '生成失败',
+        errorCode: e?.code || 'UNKNOWN',
+        videoUrl: '',
+      }
+      setVideoTasks((prev) => [failed, ...prev].slice(0, 20))
+      setActiveTaskId(failed.taskId)
     }
   }
 
@@ -3970,67 +4074,113 @@ function VideoGenerator({
         </div>
         <button
           onClick={handleGenerate}
-          disabled={isGenerating || !prompt || !canGenerate}
+          disabled={!prompt || !canGenerate}
           title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再生成视频' : undefined}
           className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
         >
-          {isGenerating ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin inline" />生成中...</> : '生成视频'}
+          {processingCount > 0 ? <>再提交一个（进行中 {processingCount}）</> : '生成视频'}
         </button>
       </div>
       <div className="tikgen-panel rounded-2xl p-6">
         <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
-        {isGenerating ? (
-          <GenerationLoadingCard
-            title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.title}
-            subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.subtitle}
-            chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.chips}
-            statusText={statusText || '视频生成中...'}
-            progressText={`进度：${progress}${taskId ? ` | 任务ID：${taskId}` : ''}`}
-          />
-        ) : errorText ? (
-          <div className="h-96 flex flex-col items-center justify-center text-center rounded-xl px-6 border border-red-400/25 bg-red-500/10">
-            <p className="text-red-200 font-medium">生成失败</p>
-            <p className="text-sm text-red-300/90 mt-2 break-words">{errorText}</p>
-            <p className="text-xs text-red-400/80 mt-2">错误码：{errorCode}</p>
-            {errorCode !== 'QUOTA_EXHAUSTED' && errorCode !== 'PAYMENT_REQUIRED' && (
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="mt-5 px-4 py-2 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
-              >
-                重试（保留参数）
-              </button>
-            )}
-            {taskId && <p className="text-xs text-red-400/70 mt-3 break-all">任务ID：{taskId}</p>}
+        {activeTask?.status === 'processing' ? (
+          <div className="mb-5">
+            <GenerationLoadingCard
+              title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.title}
+              subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.subtitle}
+              chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.chips}
+              statusText={activeTask.statusText || '视频生成中...'}
+              progressText={`进度：${activeTask.progress || '0%'}${activeTask.taskId ? ` | 任务ID：${activeTask.taskId}` : ''}`}
+            />
           </div>
-        ) : generatedVideo ? (
-          <div>
-            <video src={generatedVideo} className="w-full rounded-xl ring-1 ring-inset ring-white/10" controls />
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <button
-                type="button"
-                className="py-3 rounded-xl flex items-center justify-center text-white/85 bg-white/[0.06] ring-1 ring-inset ring-white/[0.1] hover:bg-white/[0.1]"
-              >
-                <Play className="w-5 h-5 mr-2" />
-                预览
-              </button>
-              <a
-                href={buildDownloadProxyUrl(generatedVideo, 'video.mp4')}
-                download
-                className="py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl flex items-center justify-center"
-              >
-                <Download className="w-5 h-5 mr-2" />
-                下载
-              </a>
-            </div>
-          </div>
-        ) : (
+        ) : null}
+
+        {videoTasks.length === 0 ? (
           <div className="h-96 flex items-center justify-center text-white/40 border border-white/12 rounded-xl bg-white/[0.02]">
             <Video className="w-16 h-16 opacity-40" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {videoTasks.map((t) => (
+              <div
+                key={t.id}
+                className={`rounded-xl border p-3 ${
+                  activeTaskId === t.taskId ? 'border-violet-300/40 bg-white/[0.07]' : 'border-white/12 bg-white/[0.03]'
+                }`}
+                onClick={() => setActiveTaskId(t.taskId)}
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-xs text-white/60 truncate">
+                    {new Date(t.createdAt).toLocaleTimeString()} · {t.model} · {t.size} · {t.resolution}
+                  </div>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                      t.status === 'completed'
+                        ? 'border-emerald-400/35 text-emerald-200 bg-emerald-500/12'
+                        : t.status === 'failed'
+                          ? 'border-red-400/35 text-red-200 bg-red-500/12'
+                          : 'border-amber-400/35 text-amber-200 bg-amber-500/12'
+                    }`}
+                  >
+                    {t.status === 'completed' ? '已完成' : t.status === 'failed' ? '失败' : `生成中 ${t.progress || '0%'}`}
+                  </span>
+                </div>
+
+                {t.status === 'completed' && t.videoUrl ? (
+                  <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                    <video src={t.videoUrl} className="w-full h-36 rounded-lg object-cover bg-black" controls playsInline />
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setResultLightbox({ url: t.videoUrl, title: `任务 ${t.taskId}` })
+                        }}
+                        className="px-3 py-2 rounded-lg text-xs bg-white/[0.08] ring-1 ring-inset ring-white/[0.12] hover:bg-white/[0.12]"
+                      >
+                        放大
+                      </button>
+                      <a
+                        href={buildDownloadProxyUrl(t.videoUrl, `${t.taskId || 'video'}.mp4`)}
+                        download
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-3 py-2 rounded-lg text-xs text-center bg-gradient-to-r from-pink-500 to-purple-500 text-white"
+                      >
+                        下载
+                      </a>
+                    </div>
+                  </div>
+                ) : t.status === 'failed' ? (
+                  <div className="text-xs text-red-300/90 break-words">
+                    {t.errorText || '生成失败'} {t.errorCode && t.errorCode !== 'UNKNOWN' ? `（${t.errorCode}）` : ''}
+                  </div>
+                ) : (
+                  <div className="text-xs text-white/60">任务提交中... {t.statusText || ''}</div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
     </div>
+    {resultLightbox ? (
+      <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+        <div className="w-full max-w-5xl bg-black rounded-2xl border border-white/15 p-3">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="text-xs text-white/70 truncate">{resultLightbox.title}</div>
+            <button
+              type="button"
+              onClick={() => setResultLightbox(null)}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-white"
+              aria-label="关闭视频预览"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <video src={resultLightbox.url} className="w-full max-h-[80vh] rounded-xl bg-black" controls autoPlay playsInline />
+        </div>
+      </div>
+    ) : null}
     {showAssetPicker && (
       <div className="fixed inset-0 z-50 bg-black/55 flex items-center justify-center p-4">
         <div className="w-full max-w-6xl max-h-[88vh] overflow-hidden bg-white rounded-2xl border shadow-2xl flex flex-col">

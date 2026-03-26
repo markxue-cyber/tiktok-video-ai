@@ -94,6 +94,24 @@ export type VideoGeneratorWorkspaceV1 = {
   errorText: string
   errorCode: string
   isGenerating: boolean
+  /** v2: 支持并发视频任务历史（向后兼容，旧快照无此字段） */
+  videoTasks?: Array<{
+    id?: string
+    createdAt?: number
+    prompt?: string
+    model?: string
+    size?: string
+    resolution?: string
+    durationSec?: number
+    taskId?: string
+    status?: 'processing' | 'completed' | 'failed'
+    progress?: string
+    statusText?: string
+    errorText?: string
+    errorCode?: string
+    videoUrl?: string
+  }>
+  activeTaskId?: string
 }
 
 /** 视频增强（画质提升）左侧工作区 */
