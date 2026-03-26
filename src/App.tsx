@@ -8944,7 +8944,7 @@ function Assets() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-3">
+      <div className="mb-2 flex items-center justify-between gap-3 flex-wrap">
         <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
           <button
             type="button"
@@ -8965,8 +8965,6 @@ function Assets() {
             AI 生成
           </button>
         </div>
-      </div>
-      <div className="flex items-center justify-end mb-3">
         <div className="flex items-center gap-2">
           <select
             value={sortBy}
