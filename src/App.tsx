@@ -8647,6 +8647,7 @@ function Assets() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [searchKeyword, setSearchKeyword] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
+  const [assetsTab, setAssetsTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
   const [previewAsset, setPreviewAsset] = useState<AssetItem | null>(null)
   const initializedRef = useRef(false)
   const reloadAiAssetsRef = useRef<() => Promise<void>>(async () => {})
@@ -8981,29 +8982,56 @@ function Assets() {
         </div>
       </div>
       {!!error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>}
-      <div className="grid md:grid-cols-2 gap-6">
       <div className="bg-white rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold">本地上传</h3>
-            <div className="flex items-center gap-1">
-              {(['all', 'image', 'video'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setUserFilter(f)}
-                  className={`px-2.5 py-1 text-xs rounded-lg border ${userFilter === f ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600'}`}
-                >
-                  {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
-                </button>
-              ))}
-            </div>
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+            <button
+              type="button"
+              onClick={() => setAssetsTab('user_upload')}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                assetsTab === 'user_upload' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              本地上传
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssetsTab('ai_generated')}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                assetsTab === 'ai_generated' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              AI 生成
+            </button>
           </div>
-          <p className="text-sm text-gray-500">包含：本地上传（创作模块上传 + 资产库手动上传），均归档到当前账号。</p>
-          <div className="mt-4">
-            {loading ? (
-              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
-            ) : shownUserUploads.length ? (
+          <div className="flex items-center gap-1">
+            {(['all', 'image', 'video'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => (assetsTab === 'user_upload' ? setUserFilter(f) : setAiFilter(f))}
+                className={`px-2.5 py-1 text-xs rounded-lg border ${
+                  (assetsTab === 'user_upload' ? userFilter : aiFilter) === f
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-600'
+                }`}
+              >
+                {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-sm text-gray-500">
+          {assetsTab === 'user_upload'
+            ? '包含：创作模块上传 + 资产库手动上传，均归档到当前账号。'
+            : '包含：视频生成、电商套图成功后的结果，自动归档到当前账号。'}
+        </p>
+        <div className="mt-4">
+          {loading ? (
+            <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
+          ) : assetsTab === 'user_upload' ? (
+            shownUserUploads.length ? (
               <>
-                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{shownUserUploads.map(renderAssetCard)}</div>
+                <div className="grid grid-cols-2 gap-3 max-h-[520px] overflow-auto pr-1">{shownUserUploads.map(renderAssetCard)}</div>
                 {userHasMore && (
                   <button
                     disabled={loadingMoreUser}
@@ -9023,52 +9051,30 @@ function Assets() {
               </>
             ) : (
               <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无素材</div>
-            )}
-          </div>
-      </div>
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold">AI生成</h3>
-            <div className="flex items-center gap-1">
-              {(['all', 'image', 'video'] as const).map((f) => (
+            )
+          ) : shownAiOutputs.length ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 max-h-[520px] overflow-auto pr-1">{shownAiOutputs.map(renderAssetCard)}</div>
+              {aiHasMore && (
                 <button
-                  key={f}
-                  onClick={() => setAiFilter(f)}
-                  className={`px-2.5 py-1 text-xs rounded-lg border ${aiFilter === f ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600'}`}
+                  disabled={loadingMoreAi}
+                  onClick={async () => {
+                    setLoadingMoreAi(true)
+                    try {
+                      await loadSource('ai_generated', false)
+                    } finally {
+                      setLoadingMoreAi(false)
+                    }
+                  }}
+                  className="mt-3 w-full py-2 rounded-lg border text-sm disabled:opacity-50"
                 >
-                  {f === 'all' ? '全部' : f === 'image' ? '图片' : '视频'}
+                  {loadingMoreAi ? '加载中...' : '加载更多'}
                 </button>
-              ))}
-      </div>
-          </div>
-          <p className="text-sm text-gray-500">包含：视频生成、电商套图成功后的结果，自动归档到当前账号。</p>
-          <div className="mt-4">
-            {loading ? (
-              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">加载中...</div>
-            ) : shownAiOutputs.length ? (
-              <>
-                <div className="grid grid-cols-2 gap-3 max-h-[420px] overflow-auto pr-1">{shownAiOutputs.map(renderAssetCard)}</div>
-                {aiHasMore && (
-                  <button
-                    disabled={loadingMoreAi}
-                    onClick={async () => {
-                      setLoadingMoreAi(true)
-                      try {
-                        await loadSource('ai_generated', false)
-                      } finally {
-                        setLoadingMoreAi(false)
-                      }
-                    }}
-                    className="mt-3 w-full py-2 rounded-lg border text-sm disabled:opacity-50"
-                  >
-                    {loadingMoreAi ? '加载中...' : '加载更多'}
-                  </button>
-                )}
-              </>
-            ) : (
-              <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无生成记录</div>
-            )}
-          </div>
+              )}
+            </>
+          ) : (
+            <div className="h-48 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无生成记录</div>
+          )}
         </div>
       </div>
       {previewAsset && (
