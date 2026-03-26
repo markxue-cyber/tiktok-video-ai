@@ -8921,13 +8921,13 @@ function Assets() {
         <button
           type="button"
           onClick={() => setPreviewAsset(a)}
-          className="w-full h-28 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden"
+          className="w-full h-44 rounded-lg bg-black/5 flex items-center justify-center overflow-hidden"
           title="点击放大预览"
         >
           {isImage ? (
-            <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+            <img src={a.url} alt={a.name || 'asset'} className="w-full h-full object-contain bg-black" loading="lazy" decoding="async" />
           ) : (
-            <video src={a.url} className="w-full h-full object-cover" preload="metadata" />
+            <video src={a.url} className="w-full h-full object-contain bg-black" preload="metadata" />
           )}
         </button>
         <div className="mt-2 text-xs text-gray-600 truncate">{a.name || `${a.type} 资产`}</div>
