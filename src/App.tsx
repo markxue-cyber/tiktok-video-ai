@@ -9106,6 +9106,13 @@ function TaskCenter() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'processing' | 'succeeded' | 'failed'>('all')
   const [previewTaskMedia, setPreviewTaskMedia] = useState<{ url: string; type: 'image' | 'video'; title?: string } | null>(null)
 
+  const buildTaskPreviewUrl = (assetUrl: string, filename?: string) => {
+    const q = new URLSearchParams()
+    q.set('url', String(assetUrl || ''))
+    if (filename) q.set('name', String(filename))
+    return `/api/preview-asset?${q.toString()}`
+  }
+
   const load = async (reset: boolean) => {
     const current = reset ? 0 : offset
     const r = await listTasksAPI({
@@ -9215,7 +9222,7 @@ function TaskCenter() {
                           type="button"
                           onClick={() =>
                             setPreviewTaskMedia({
-                              url: t.output_url!,
+                              url: buildTaskPreviewUrl(t.output_url!, `task-${t.id || 'output'}`),
                               type: t.type === 'video' ? 'video' : 'image',
                               title: `${t.type === 'video' ? '视频' : '图片'}任务预览`,
                             })
@@ -9225,13 +9232,23 @@ function TaskCenter() {
                         >
                           {t.type === 'video' ? (
                             <>
-                              <video src={t.output_url} className="w-full h-full object-contain bg-black" muted playsInline preload="metadata" />
+                              <video
+                                src={buildTaskPreviewUrl(t.output_url!, `task-${t.id || 'video'}`)}
+                                className="w-full h-full object-contain bg-black"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
                               <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black/25 group-hover:bg-black/35 transition-colors">
                                 <Play className="w-7 h-7 text-white drop-shadow" />
                               </div>
                             </>
                           ) : (
-                            <img src={t.output_url} alt="" className="w-full h-full object-cover" />
+                            <img
+                              src={buildTaskPreviewUrl(t.output_url!, `task-${t.id || 'image'}`)}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
                           )}
                         </button>
                         <a href={t.output_url} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-sm">预览</a>
