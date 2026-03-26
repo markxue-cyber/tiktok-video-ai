@@ -1922,7 +1922,8 @@ function App() {
     }
   }
 
-  const canGenerateMedia = Boolean(user?.hasPaidProduct)
+  const isAdminBypass = String(user?.email || '').trim().toLowerCase() === 'haoxue2027@gmail.com'
+  const canGenerateMedia = isAdminBypass || Boolean(user?.hasPaidProduct)
 
   return (
     <div className="min-h-screen min-w-[1280px] bg-gray-50 flex workbench-root">
@@ -7637,6 +7638,9 @@ function ImageGenerator({
                   </>
                 )}
               </button>
+              {!canGenerate ? (
+                <div className="mt-2 text-xs text-amber-300/95 text-center">请开通会员</div>
+              ) : null}
             </div>
           ) : productStylePanelOpen || refImages.length === 0 ? (
             <div>
@@ -7792,6 +7796,9 @@ function ImageGenerator({
                     <Download className="w-3.5 h-3.5 inline mr-1" />
                     下载全部
                   </button>
+                  {!canGenerate ? (
+                    <span className="text-xs text-amber-300/95">请开通会员</span>
+                  ) : null}
                 </div>
               </div>
             </div>
