@@ -308,6 +308,18 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
 
           <article className="lg2-m">
             <div className="lg2-m-grid">
+              <div className="lg2-m-info">
+                <span className="lg2-k">图片翻译</span>
+                <span className="lg2-mini">跨境上架</span>
+                <h3>主图文案一键译成目标市场语言</h3>
+                <ul>
+                  <li>尽量保留版式与视觉结构，减少重做多语言主图</li>
+                  <li>适合多站点、多语种同步上新</li>
+                </ul>
+                <button type="button" className="lg2-m-cta" onClick={goStart}>
+                  立即去使用
+                </button>
+              </div>
               <div className="lg2-media lg2-translate-stage" aria-label="图片翻译案例：中英文对比">
                 <div className="lg2-translate-compare">
                   <figure className="lg2-translate-col">
@@ -322,18 +334,6 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
                     <figcaption>English</figcaption>
                   </figure>
                 </div>
-              </div>
-              <div className="lg2-m-info">
-                <span className="lg2-k">图片翻译</span>
-                <span className="lg2-mini">跨境上架</span>
-                <h3>主图文案一键译成目标市场语言</h3>
-                <ul>
-                  <li>尽量保留版式与视觉结构，减少重做多语言主图</li>
-                  <li>适合多站点、多语种同步上新</li>
-                </ul>
-                <button type="button" className="lg2-m-cta" onClick={goStart}>
-                  立即去使用
-                </button>
               </div>
             </div>
           </article>
