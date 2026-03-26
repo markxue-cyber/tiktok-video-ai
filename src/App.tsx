@@ -9104,6 +9104,7 @@ function TaskCenter() {
   const [error, setError] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'video' | 'image'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'processing' | 'succeeded' | 'failed'>('all')
+  const [previewTaskMedia, setPreviewTaskMedia] = useState<{ url: string; type: 'image' | 'video'; title?: string } | null>(null)
 
   const load = async (reset: boolean) => {
     const current = reset ? 0 : offset
@@ -9207,9 +9208,32 @@ function TaskCenter() {
                     <div className="mt-1 text-xs text-gray-400">创建时间：{new Date(t.created_at).toLocaleString()}</div>
                     {t.provider_task_id ? <div className="mt-1 text-xs text-gray-400 break-all">任务ID：{t.provider_task_id}</div> : null}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     {t.output_url ? (
                       <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPreviewTaskMedia({
+                              url: t.output_url!,
+                              type: t.type === 'video' ? 'video' : 'image',
+                              title: `${t.type === 'video' ? '视频' : '图片'}任务预览`,
+                            })
+                          }
+                          className="group relative w-36 h-24 rounded-lg overflow-hidden border border-gray-200 bg-black/5"
+                          title={t.type === 'video' ? '点击播放/放大' : '点击放大预览'}
+                        >
+                          {t.type === 'video' ? (
+                            <>
+                              <video src={t.output_url} className="w-full h-full object-contain bg-black" muted playsInline preload="metadata" />
+                              <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black/25 group-hover:bg-black/35 transition-colors">
+                                <Play className="w-7 h-7 text-white drop-shadow" />
+                              </div>
+                            </>
+                          ) : (
+                            <img src={t.output_url} alt="" className="w-full h-full object-cover" />
+                          )}
+                        </button>
                         <a href={t.output_url} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-sm">预览</a>
                         <a href={buildDownloadProxyUrl(t.output_url, `task-${t.id || 'output'}.mp4`)} download className="px-3 py-2 rounded-lg border text-sm">下载</a>
                       </>
@@ -9243,6 +9267,26 @@ function TaskCenter() {
           <div className="h-44 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-400">暂无任务记录</div>
         )}
       </div>
+      {previewTaskMedia ? (
+        <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreviewTaskMedia(null)}>
+          <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewTaskMedia(null)}
+              className="absolute -top-10 right-0 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+            >
+              关闭
+            </button>
+            <div className="rounded-2xl border border-white/20 bg-white/5 p-2">
+              {previewTaskMedia.type === 'video' ? (
+                <video src={previewTaskMedia.url} className="w-full max-h-[78vh] rounded-xl bg-black" controls autoPlay playsInline />
+              ) : (
+                <img src={previewTaskMedia.url} alt={previewTaskMedia.title || '任务结果预览'} className="w-full max-h-[78vh] object-contain rounded-xl" />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
