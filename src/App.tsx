@@ -4134,7 +4134,12 @@ function VideoGenerator({
 
                 {t.status === 'completed' && t.videoUrl ? (
                   <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
-                    <video src={t.videoUrl} className="w-full h-36 rounded-lg object-cover bg-black" controls playsInline />
+                    <video
+                      src={t.videoUrl}
+                      className="w-full h-44 rounded-lg object-contain bg-black"
+                      controls
+                      playsInline
+                    />
                     <div className="flex flex-col gap-2">
                       <button
                         type="button"
