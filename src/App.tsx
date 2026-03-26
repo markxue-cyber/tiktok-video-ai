@@ -2274,7 +2274,7 @@ function App() {
             </div>
           </div>
         </header>
-        <div className="p-6">
+        <div className={`p-6 ${mainNav === 'assets' ? 'pt-2' : ''}`}>
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
           <div className={mainNav === 'image' && imageSubNav === 'imageGen' ? '' : 'hidden'}>
             <ImageGenerator
