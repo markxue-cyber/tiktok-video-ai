@@ -307,7 +307,7 @@ export function LandingV2({ onLogin, onRegister }: LandingV2Props) {
           </article>
 
           <article className="lg2-m">
-            <div className="lg2-m-grid">
+            <div className="lg2-m-grid lg2-flip">
               <div className="lg2-m-info">
                 <span className="lg2-k">图片翻译</span>
                 <span className="lg2-mini">跨境上架</span>
