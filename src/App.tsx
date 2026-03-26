@@ -8944,8 +8944,7 @@ function Assets() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">资产库</h2>
+      <div className="flex items-center justify-end mb-3">
         <div className="flex items-center gap-2">
           <select
             value={sortBy}
@@ -8982,8 +8981,8 @@ function Assets() {
         </div>
       </div>
       {!!error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>}
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <div className="flex items-center justify-between gap-4 mb-3">
+      <div className="bg-white rounded-2xl p-5 shadow-lg">
+        <div className="flex items-center justify-between gap-4 mb-2">
           <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
             <button
               type="button"
