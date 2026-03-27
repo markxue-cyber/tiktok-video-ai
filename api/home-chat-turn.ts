@@ -402,16 +402,17 @@ function forkReqWithIdem(req: any, idem: string) {
 
 function quickActionsFor(mediaType: MediaType): string[] {
   if (mediaType === 'video') {
-    return ['提炼3个电商卖点', '按抖音风格总结', '输出可用标题与卖点', '提取关键帧亮点']
+    return ['提炼3个电商卖点', '按抖音风格总结', '输出可用标题与卖点']
   }
-  return ['换场景', '更亮一点', '突出质感', '改成白底主图', '改成信息流风格', '改成9:16竖版']
+  // 与 nextQuestion 去重：正文不再枚举白底/信息流等，由按钮承担
+  return ['换场景', '更亮一点', '改成白底主图', '改成信息流风格']
 }
 
 function nextQuestionFor(mediaType: MediaType): string {
   if (mediaType === 'video') {
-    return '你希望我优先给你「关键帧拆解」还是「可直接上架的标题+卖点文案」？'
+    return '需要拆解脚本、总结风格或上架文案时，可直接点下方快捷指令。'
   }
-  return '下一步你想优先要哪类图：白底主图、场景图，还是信息流风格图？'
+  return '需要继续生成或微调画面时，可直接点下方快捷指令。'
 }
 
 async function runNanoBananaGeneration(params: {

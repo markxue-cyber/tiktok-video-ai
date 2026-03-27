@@ -1334,8 +1334,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         ? ['拆解视频脚本', '分析拍摄手法', '提取完整台词']
         : ['帮我分析这张图', '生成同款风格图片', '提取图中商品信息']
 
+  /** 已有正常助手回复时隐藏输入区标签，避免与气泡内快捷指令重复 */
+  const hasNonBlockedAssistant =
+    active?.messages.some((m) => m.role === 'assistant' && !m.blocked) ?? false
   const showSuggestTags =
-    pendingReady || !!lastUserWithMedia || pendingUploads.length > 0
+    (pendingReady || !!lastUserWithMedia || pendingUploads.length > 0) && !hasNonBlockedAssistant
 
   const updateParams = (patch: Partial<HomeChatSession['params']>) => {
     if (!activeId) return
@@ -1739,24 +1742,36 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             </div>
                           ) : null}
                           {m.followUps?.length ? (
-                            <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
-                              {m.followUps.map((t) => (
-                                <button
-                                  key={t}
-                                  type="button"
-                                  className="rounded-lg border border-violet-400/30 bg-violet-500/12 px-3 py-1.5 text-xs text-violet-100/90 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-white"
-                                  onClick={() => {
-                                    if (t === '确认高清生成') {
-                                      setInput('确认高清生成')
-                                      window.setTimeout(() => void handleSend(), 0)
-                                      return
-                                    }
-                                    setInput(t)
-                                  }}
-                                >
-                                  {t}
-                                </button>
-                              ))}
+                            <div className="mt-3 border-t border-white/10 pt-3">
+                              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-white/35">
+                                快捷指令
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {m.followUps.map((t, i) => {
+                                  const primary = i < 2
+                                  return (
+                                    <button
+                                      key={`${t}-${i}`}
+                                      type="button"
+                                      className={
+                                        primary
+                                          ? 'rounded-lg border border-violet-400/45 bg-violet-500/22 px-3 py-1.5 text-xs font-medium text-violet-50/95 shadow-[0_0_0_1px_rgba(139,92,246,0.12)] transition hover:border-violet-300/55 hover:bg-violet-500/30'
+                                          : 'rounded-lg border border-white/12 bg-white/[0.05] px-2.5 py-1.5 text-[11px] text-white/72 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white/90'
+                                      }
+                                      onClick={() => {
+                                        if (t === '确认高清生成') {
+                                          setInput('确认高清生成')
+                                          window.setTimeout(() => void handleSend(), 0)
+                                          return
+                                        }
+                                        setInput(t)
+                                      }}
+                                    >
+                                      {t}
+                                    </button>
+                                  )
+                                })}
+                              </div>
                             </div>
                           ) : null}
                         </>
