@@ -35,6 +35,8 @@ export type HomeChatTurnPayload = {
   mediaType: 'image' | 'video'
   mediaUrl: string
   userMessage: string
+  generateMode?: 'preview' | 'final'
+  previewToken?: string
   history: { role: 'user' | 'assistant'; text: string }[]
   params: {
     resolution: string
@@ -44,10 +46,46 @@ export type HomeChatTurnPayload = {
     optimizePrompt: boolean
     hdEnhance: boolean
     negativePrompt: boolean
+    subjectLock?: 'high' | 'medium'
+    multiRatio?: boolean
+    targetRatios?: string[]
+    abVariant?: boolean
+    qcEnabled?: boolean
+    generateMode?: 'preview' | 'final'
+    previewToken?: string
   }
 }
 
-export async function homeChatTurnAPI(body: HomeChatTurnPayload): Promise<any> {
+export type HomeChatImageItem = {
+  url: string
+  ratio?: string
+  variant?: string
+  qcScore?: number
+  qcIssues?: string[]
+}
+
+export type HomeChatTurnResult = {
+  success: boolean
+  kind?: 'analysis' | 'mixed' | 'blocked' | 'mock'
+  code?: string
+  error?: string
+  message?: string
+  analysisText?: string
+  optimizedPrompt?: string
+  imageUrls?: string[]
+  images?: HomeChatImageItem[]
+  nextQuestion?: string
+  quickActions?: string[]
+  previewToken?: string
+  opsPack?: {
+    titles?: string[]
+    sellingPoints?: string[]
+    detailLead?: string
+  }
+  meta?: Record<string, unknown>
+}
+
+export async function homeChatTurnAPI(body: HomeChatTurnPayload): Promise<HomeChatTurnResult> {
   const token = localStorage.getItem('tikgen.accessToken') || ''
   if (!token) throw new Error('请先登录')
 
@@ -78,5 +116,5 @@ export async function homeChatTurnAPI(body: HomeChatTurnPayload): Promise<any> {
       if (next) data = await callOnce(next)
     }
   }
-  return data
+  return data as HomeChatTurnResult
 }

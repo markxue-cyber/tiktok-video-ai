@@ -25,7 +25,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
-import { homeChatTurnAPI } from './api/homeChat'
+import { homeChatTurnAPI, type HomeChatImageItem } from './api/homeChat'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 
 const STORAGE_KEY = 'tikgen.homeChat.sessions.v1'
@@ -50,6 +50,7 @@ export type HomeChatMsg = {
   text: string
   attachments?: HomeChatAttachment[]
   images?: string[]
+  imageItems?: HomeChatImageItem[]
   blocked?: boolean
   followUps?: string[]
   /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
@@ -76,6 +77,10 @@ export type HomeChatSession = {
     aspectRatio: '1:1' | '16:9' | '9:16' | '4:3'
     style: '写实' | '动漫' | '国潮' | '手绘' | '赛博朋克' | '水墨'
     refWeight: number
+    subjectLock: 'high' | 'medium'
+    multiRatio: boolean
+    abVariant: boolean
+    qcEnabled: boolean
     syncToAssets: boolean
     optimizePrompt: boolean
     hdEnhance: boolean
@@ -100,6 +105,10 @@ const defaultParams = (): HomeChatSession['params'] => ({
   aspectRatio: '1:1',
   style: '写实',
   refWeight: 0.7,
+  subjectLock: 'high',
+  multiRatio: false,
+  abVariant: false,
+  qcEnabled: true,
   syncToAssets: true,
   optimizePrompt: true,
   hdEnhance: true,
@@ -282,8 +291,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   })
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [busyStage, setBusyStage] = useState<'idle' | 'identify' | 'analyze' | 'optimize' | 'generate'>('idle')
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [previewToken, setPreviewToken] = useState('')
   const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
   const [assetBusy, setAssetBusy] = useState(false)
@@ -632,6 +643,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     setPendingUploads([])
     setInput('')
     setBusy(true)
+    setBusyStage('identify')
     setError('')
     abortRef.current?.abort()
     abortRef.current = new AbortController()
@@ -639,16 +651,34 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     hist = [...hist, { role: 'user' as const, text: `[附件] ${sendText}` }]
 
     try {
+      const wantsGenerate = likelyGenerateIntent(sendText)
+      const wantsFinal = /(确认|继续|正式|高清|final)/i.test(sendText)
+      const generateMode: 'preview' | 'final' = wantsGenerate
+        ? previewToken && wantsFinal
+          ? 'final'
+          : 'preview'
+        : 'final'
+      if (generateMode === 'preview') setPreviewToken('')
+      setBusyStage('analyze')
       const data = await homeChatTurnAPI({
         mediaType: primary.type,
         mediaUrl: primary.url,
         userMessage: `${paramLine}\n${sendText}`,
+        generateMode,
+        previewToken: generateMode === 'final' ? previewToken : '',
         history: hist.slice(-API_HISTORY_MAX),
         params: {
           resolution: s.params.resolution,
           aspectRatio: s.params.aspectRatio,
           style: s.params.style,
           refWeight: s.params.refWeight,
+          subjectLock: s.params.subjectLock,
+          multiRatio: s.params.multiRatio,
+          targetRatios: s.params.multiRatio ? ['1:1', '3:4', '9:16'] : [s.params.aspectRatio],
+          abVariant: s.params.abVariant,
+          qcEnabled: s.params.qcEnabled,
+          generateMode,
+          previewToken: generateMode === 'final' ? previewToken : '',
           optimizePrompt: s.params.optimizePrompt,
           hdEnhance: s.params.hdEnhance,
           negativePrompt: s.params.negativePrompt,
@@ -673,6 +703,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           role: 'assistant',
           text: msg,
           blocked: true,
+          followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
         }
         setSessions((prev) =>
           prev.map((x) =>
@@ -688,6 +719,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           role: 'assistant',
           text: String(data.message || ''),
           blocked: true,
+          followUps: ['仅分析素材', '提炼可用卖点', '重新描述我的需求'],
         }
         setSessions((prev) =>
           prev.map((x) =>
@@ -699,16 +731,45 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
       if (data.kind === 'analysis' || data.kind === 'mixed') {
         const parts: string[] = []
+        setBusyStage('optimize')
         if (data.analysisText) parts.push(String(data.analysisText))
         if (data.optimizedPrompt) parts.push(`【优化后提示词】\n${String(data.optimizedPrompt)}`)
+        if (data.opsPack) {
+          const titles = (data.opsPack.titles || []).filter(Boolean).map((t) => `- ${t}`).join('\n')
+          const points = (data.opsPack.sellingPoints || []).filter(Boolean).map((t) => `- ${t}`).join('\n')
+          const lead = String(data.opsPack.detailLead || '').trim()
+          const block = [
+            titles ? `【可直接使用标题】\n${titles}` : '',
+            points ? `【可直接使用卖点】\n${points}` : '',
+            lead ? `【详情页开场文案】\n${lead}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n')
+          if (block) parts.push(block)
+        }
+        if (data.nextQuestion) parts.push(`【下一步建议】\n${String(data.nextQuestion)}`)
         const assistantText = parts.filter(Boolean).join('\n\n') || '（无文本回复）'
-        const imgs: string[] = Array.isArray(data.imageUrls) ? data.imageUrls.filter(Boolean) : []
+        setBusyStage('generate')
+        const imageItems: HomeChatImageItem[] = Array.isArray(data.images)
+          ? data.images.filter((x) => !!x?.url)
+          : []
+        const imgs: string[] = imageItems.length
+          ? imageItems.map((x) => x.url)
+          : Array.isArray(data.imageUrls)
+            ? data.imageUrls.filter(Boolean)
+            : []
+        if (data.previewToken) setPreviewToken(String(data.previewToken))
+        else if (generateMode === 'final') setPreviewToken('')
         const am: HomeChatMsg = {
           id: `m_${Date.now()}_a`,
           role: 'assistant',
           text: assistantText,
           images: imgs.length ? imgs : undefined,
-          followUps: ASSISTANT_FOLLOWUPS,
+          imageItems: imageItems.length ? imageItems : undefined,
+          followUps:
+            data.quickActions && data.quickActions.length
+              ? [...data.quickActions, ...(data.previewToken ? ['确认高清生成'] : [])]
+              : ASSISTANT_FOLLOWUPS,
           streamLen: 0,
         }
         setSessions((prev) =>
@@ -758,6 +819,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         role: 'assistant',
         text: `请求失败：${actionable}`,
         blocked: true,
+        followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
       }
       setSessions((prev) =>
         prev.map((x) =>
@@ -766,6 +828,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       )
     } finally {
       setBusy(false)
+      setBusyStage('idle')
     }
   }
 
@@ -796,6 +859,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     setActiveId(s.id)
     setInput('')
     setError('')
+    setPreviewToken('')
   }
 
   const deleteSession = (id: string) => {
@@ -820,6 +884,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     const s = newSession()
     setSessions([s])
     setActiveId(s.id)
+    setPreviewToken('')
   }
 
   const renameSession = (id: string) => {
@@ -895,6 +960,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     const n = m.streamLen ?? full.length
     return full.slice(0, n)
   }
+
+  const likelyGenerateIntent = (txt: string) =>
+    /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(
+      String(txt || ''),
+    )
 
   return (
     <div className="flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
@@ -1234,7 +1304,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <div className="whitespace-pre-wrap">{displayAssistantText(m)}</div>
                           {m.images?.length ? (
                             <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
-                              {m.images.map((u, i) => (
+                              {m.images.map((u, i) => {
+                                const meta = m.imageItems?.[i]
+                                return (
                                 <button
                                   key={i}
                                   type="button"
@@ -1242,8 +1314,16 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                   onClick={() => openPreview(u, 'image', `生成 ${i + 1}`, m.images)}
                                 >
                                   <img src={u} alt="" className="h-full w-full object-cover" />
+                                  {(meta?.ratio || meta?.variant || Number.isFinite(meta?.qcScore)) ? (
+                                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] text-white/90">
+                                      {[meta?.ratio, meta?.variant && meta.variant !== 'normal' ? meta.variant : '', Number.isFinite(meta?.qcScore) ? `QC ${meta!.qcScore}` : '']
+                                        .filter(Boolean)
+                                        .join(' · ')}
+                                    </span>
+                                  ) : null}
                                 </button>
-                              ))}
+                                )
+                              })}
                             </div>
                           ) : null}
                           {m.followUps?.length ? (
@@ -1253,7 +1333,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                   key={t}
                                   type="button"
                                   className="rounded-lg border border-violet-400/30 bg-violet-500/12 px-3 py-1.5 text-xs text-violet-100/90 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-white"
-                                  onClick={() => setInput(t)}
+                                  onClick={() => {
+                                    if (t === '确认高清生成') {
+                                      setInput('确认高清生成')
+                                      window.setTimeout(() => void handleSend(), 0)
+                                      return
+                                    }
+                                    setInput(t)
+                                  }}
                                 >
                                   {t}
                                 </button>
@@ -1346,7 +1433,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 <AssistantBubble>
                   <div className="flex items-center gap-2.5 text-white/75">
                     <TypingDots />
-                    <span className="text-sm">正在识别商品主体并生成商用分析/图片...</span>
+                    <span className="text-sm">
+                      {busyStage === 'identify'
+                        ? '正在识别商品主体...'
+                        : busyStage === 'analyze'
+                          ? '正在输出商用分析...'
+                          : busyStage === 'optimize'
+                            ? '正在优化提示词...'
+                            : busyStage === 'generate'
+                              ? '正在生成图片...'
+                              : 'AI 正在处理...'}
+                    </span>
                   </div>
                 </AssistantBubble>
               </div>

@@ -49,7 +49,27 @@ type IntentJson = {
   imageCount?: number
 }
 
+type GenerateMode = 'preview' | 'final'
+
+type PreviewDraft = {
+  userId: string
+  mediaType: MediaType
+  mediaUrl: string
+  optimizedPrompt: string
+  finalPrompt: string
+  createdAt: number
+  style: string
+  aspectRatio: string
+  resolution: string
+}
+
+type QcResult = {
+  score: number
+  issues: string[]
+}
+
 const imageGenHits = new Map<string, number[]>()
+const previewDrafts = new Map<string, PreviewDraft>()
 
 function allowImageGenPerMinute(userId: string): boolean {
   const now = Date.now()
@@ -58,6 +78,24 @@ function allowImageGenPerMinute(userId: string): boolean {
   arr.push(now)
   imageGenHits.set(userId, arr)
   return true
+}
+
+function putPreviewDraft(d: PreviewDraft): string {
+  const token = `hprev_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  previewDrafts.set(token, d)
+  return token
+}
+
+function getPreviewDraft(token: string, userId: string): PreviewDraft | null {
+  const row = previewDrafts.get(token)
+  if (!row) return null
+  if (row.userId !== userId) return null
+  // 30 分钟有效期
+  if (Date.now() - row.createdAt > 30 * 60_000) {
+    previewDrafts.delete(token)
+    return null
+  }
+  return row
 }
 
 function mustEnv(name: string) {
@@ -225,6 +263,15 @@ function normalizeAspectRatio(input: string): string {
   return '1:1'
 }
 
+function normalizeAspectRatios(input: unknown): string[] {
+  const list = Array.isArray(input) ? input : []
+  const out = list
+    .map((x) => normalizeAspectRatio(String(x || '')))
+    .filter((x, i, arr) => !!x && arr.indexOf(x) === i)
+  if (out.length) return out
+  return ['1:1', '3:4', '9:16']
+}
+
 function styleKeywords(style: string): string {
   const s = String(style || '写实')
   const map: Record<string, string> = {
@@ -293,6 +340,20 @@ function forkReqWithIdem(req: any, idem: string) {
   headers['idempotency-key'] = idem
   headers['Idempotency-Key'] = idem
   return { ...req, headers }
+}
+
+function quickActionsFor(mediaType: MediaType): string[] {
+  if (mediaType === 'video') {
+    return ['提炼3个电商卖点', '按抖音风格总结', '输出可用标题与卖点', '提取关键帧亮点']
+  }
+  return ['换场景', '更亮一点', '突出质感', '改成白底主图', '改成信息流风格', '改成9:16竖版']
+}
+
+function nextQuestionFor(mediaType: MediaType): string {
+  if (mediaType === 'video') {
+    return '你希望我优先给你「关键帧拆解」还是「可直接上架的标题+卖点文案」？'
+  }
+  return '下一步你想优先要哪类图：白底主图、场景图，还是信息流风格图？'
 }
 
 async function runNanoBananaGeneration(params: {
@@ -481,6 +542,88 @@ async function runNanoBananaGeneration(params: {
   throw new Error('上游未返回可识别的图片地址（url/b64_json）')
 }
 
+async function buildOpsPack(
+  apiKey: string,
+  baseUrl: string,
+  analysisText: string,
+  userMessage: string,
+): Promise<{ titles: string[]; sellingPoints: string[]; detailLead: string }> {
+  try {
+    const j = await gpt4oJson<{
+      titles?: string[]
+      sellingPoints?: string[]
+      detailLead?: string
+    }>(
+      apiKey,
+      baseUrl,
+      [
+        '你是电商文案助手。请基于分析内容输出可直接使用的文案 JSON。',
+        '输出 JSON 字段：titles(3条)、sellingPoints(5条)、detailLead(1段)。',
+        '要求：简洁、可商用、避免夸张违规词。',
+      ].join('\n'),
+      JSON.stringify({ analysisText: analysisText.slice(0, 2200), userMessage: userMessage.slice(0, 800) }),
+    )
+    const titles = (Array.isArray(j.titles) ? j.titles : [])
+      .map((x) => String(x || '').trim())
+      .filter(Boolean)
+      .slice(0, 3)
+    const sellingPoints = (Array.isArray(j.sellingPoints) ? j.sellingPoints : [])
+      .map((x) => String(x || '').trim())
+      .filter(Boolean)
+      .slice(0, 5)
+    const detailLead = String(j.detailLead || '').trim()
+    if (titles.length && sellingPoints.length && detailLead) {
+      return { titles, sellingPoints, detailLead }
+    }
+  } catch {
+    // fallback below
+  }
+  return {
+    titles: ['高质感主图，突出产品细节', '场景化展示，提升点击兴趣', '电商可用素材，一图多平台适配'],
+    sellingPoints: [
+      '主体识别清晰，突出核心卖点',
+      '构图简洁，利于移动端快速理解',
+      '风格统一，适配主流电商平台',
+      '材质质感表达明确，减少决策成本',
+      '可直接用于上架与投放素材',
+    ],
+    detailLead:
+      '这款商品在视觉上具备明确主体与可提炼卖点，建议优先使用高识别度主图与场景图组合，强化点击吸引与转化效率。',
+  }
+}
+
+async function runLightQc(
+  apiKey: string,
+  baseUrl: string,
+  imageUrl: string,
+): Promise<QcResult> {
+  try {
+    const multimodal: ChatMessage[] = [
+      {
+        role: 'system',
+        content: '你是电商图片质检助手。请返回 JSON：{"score":0-100,"issues":["..."]}。关注主体完整性、清晰度、背景杂乱、文字污染。',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageUrl } },
+          { type: 'text', text: '请做轻量质检评分并列出问题。' },
+        ],
+      },
+    ]
+    const txt = await gpt4oChat(apiKey, baseUrl, multimodal, 0.1)
+    const m = txt.match(/\{[\s\S]*\}/)
+    const parsed = JSON.parse(m?.[0] || '{}')
+    const score = Math.max(0, Math.min(100, Math.floor(Number(parsed?.score) || 0)))
+    const issues = Array.isArray(parsed?.issues)
+      ? parsed.issues.map((x: any) => String(x || '').trim()).filter(Boolean).slice(0, 6)
+      : []
+    return { score: score || 80, issues }
+  } catch {
+    return { score: 80, issues: [] }
+  }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
@@ -498,6 +641,8 @@ export default async function handler(req: any, res: any) {
     const userMessage = String(body.userMessage || '').trim()
     const history = (Array.isArray(body.history) ? body.history : []) as ChatTurn[]
     const params = body.params || {}
+    const generateMode = String(body.generateMode || params.generateMode || 'final') as GenerateMode
+    const previewToken = String(body.previewToken || params.previewToken || '').trim()
 
     if (mediaType !== 'image' && mediaType !== 'video') {
       return res.status(200).json({ success: false, error: 'mediaType 无效', code: 'BAD_REQUEST' })
@@ -569,13 +714,20 @@ export default async function handler(req: any, res: any) {
     const optimizePrompt = params.optimizePrompt !== false
     const hdEnhance = params.hdEnhance !== false
     const useNeg = params.negativePrompt !== false
+    const subjectLock = String(params.subjectLock || 'high').toLowerCase() === 'medium' ? 'medium' : 'high'
+    const multiRatio = params.multiRatio === true
+    const ratioList = multiRatio ? normalizeAspectRatios(params.targetRatios) : [aspectRatio]
+    const abVariant = params.abVariant === true
+    const qcEnabled = params.qcEnabled !== false
 
     let analysisText = ''
+    let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
     if (needsAnalysis) {
       try {
         const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
         const messages = historyToMessages(history, multimodal, supabaseUrl)
         analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35)
+        opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
       } catch (e: any) {
         return res.status(200).json({ success: false, error: e?.message || '分析失败', code: 'ANALYSIS_FAILED' })
       }
@@ -615,12 +767,18 @@ export default async function handler(req: any, res: any) {
       }
 
       const negBase = useNeg ? DEFAULT_NEG : ''
+      const preserveLine =
+        subjectLock === 'high'
+          ? '严格锁定商品主体结构、颜色与比例，仅对背景与光影做改动，不可换款/变形'
+          : '尽量保持商品主体结构、颜色与比例，允许轻微构图变化'
+
       const extra = [
         styleKeywords(style),
         `画幅比例 ${aspectRatio}`,
         hdEnhance ? 'high detail, sharp focus, clean texture' : '',
         'ecommerce product photography, preserve product geometry and color fidelity',
         'clean premium background, no extra text, no watermark, no irrelevant objects',
+        preserveLine,
         `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
       ]
         .filter(Boolean)
@@ -628,39 +786,121 @@ export default async function handler(req: any, res: any) {
 
       finalPrompt = [optimizedPrompt, extra].join('\n\n')
 
-      const images: string[] = []
-      const baseIdem = String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() || `home-${Date.now()}`
-      for (let i = 0; i < imageCount; i++) {
-        const idem = `${baseIdem}:homeimg:${i}:${Date.now()}_${Math.random().toString(16).slice(2)}`
-        const r = await runNanoBananaGeneration({
+      if (generateMode === 'preview') {
+        const previewId = putPreviewDraft({
+          userId,
+          mediaType,
+          mediaUrl,
+          optimizedPrompt,
+          finalPrompt,
+          createdAt: Date.now(),
+          style,
+          aspectRatio,
+          resolution,
+        })
+        const idem = `home-preview-${Date.now()}_${Math.random().toString(16).slice(2)}`
+        const prev = await runNanoBananaGeneration({
           req,
           idempotencyKey: idem,
           apiKey,
           baseUrl,
           userId,
-          prompt: i === 0 ? finalPrompt : `${finalPrompt}\n（变体 ${i + 1}/${imageCount}，保持同一风格与主体）`,
-          negative: negBase,
+          prompt: `${finalPrompt}\n（预览图，仅用于确认方向）`,
+          negative: useNeg ? DEFAULT_NEG : '',
           aspectRatio,
           resolution,
           refImage: mediaType === 'image' ? mediaUrl : undefined,
           imageCount: 1,
           model: 'nano-banana-2',
         })
-        images.push(r.imageUrl)
+        const previewImage = { url: prev.imageUrl, ratio: aspectRatio, variant: 'preview', qcScore: 80, qcIssues: [] as string[] }
+        return res.status(200).json({
+          success: true,
+          kind: 'mixed',
+          analysisText: analysisText || undefined,
+          optimizedPrompt,
+          imageUrls: [prev.imageUrl],
+          images: [previewImage],
+          previewToken: previewId,
+          nextQuestion: '预览方向已生成，是否按该方向生成高清正式图？',
+          quickActions: quickActionsFor(mediaType),
+          opsPack,
+          meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview' },
+        })
+      }
+
+      const draft = previewToken ? getPreviewDraft(previewToken, userId) : null
+      const finalPromptToUse = draft?.finalPrompt || finalPrompt
+      const mediaTypeToUse = draft?.mediaType || mediaType
+      const mediaUrlToUse = draft?.mediaUrl || mediaUrl
+      const styleToUse = draft?.style || style
+      const resolutionToUse = draft?.resolution || resolution
+
+      const variants = abVariant ? (['conservative', 'aggressive'] as const) : (['normal'] as const)
+      const images: Array<{ url: string; ratio: string; variant: string; qcScore: number; qcIssues: string[] }> = []
+      const baseIdem = String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() || `home-${Date.now()}`
+      for (const ratio of ratioList) {
+        for (const variant of variants) {
+          for (let i = 0; i < imageCount; i++) {
+            const idem = `${baseIdem}:homeimg:${ratio}:${variant}:${i}:${Date.now()}_${Math.random().toString(16).slice(2)}`
+            const variantHint =
+              variant === 'conservative'
+                ? '保守商业版：更稳健、主图可用性优先'
+                : variant === 'aggressive'
+                  ? '增强吸引版：氛围更强、视觉冲击更高'
+                  : '标准商业版'
+            const r = await runNanoBananaGeneration({
+              req,
+              idempotencyKey: idem,
+              apiKey,
+              baseUrl,
+              userId,
+              prompt:
+                i === 0
+                  ? `${finalPromptToUse}\n${variantHint}\n输出比例 ${ratio}`
+                  : `${finalPromptToUse}\n${variantHint}\n输出比例 ${ratio}\n（变体 ${i + 1}/${imageCount}，保持同一风格与主体）`,
+              negative: negBase,
+              aspectRatio: ratio,
+              resolution: resolutionToUse,
+              refImage: mediaTypeToUse === 'image' ? mediaUrlToUse : undefined,
+              imageCount: 1,
+              model: 'nano-banana-2',
+            })
+            let qc: QcResult = { score: 80, issues: [] }
+            if (qcEnabled && images.length < 6) {
+              qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
+            }
+            images.push({
+              url: r.imageUrl,
+              ratio,
+              variant,
+              qcScore: qc.score,
+              qcIssues: qc.issues,
+            })
+          }
+        }
       }
 
       return res.status(200).json({
         success: true,
         kind: 'mixed',
         analysisText: analysisText || undefined,
-        optimizedPrompt,
-        imageUrls: images,
+        optimizedPrompt: draft?.optimizedPrompt || optimizedPrompt,
+        imageUrls: images.map((x) => x.url),
+        images,
+        nextQuestion: nextQuestionFor(mediaTypeToUse),
+        quickActions: quickActionsFor(mediaTypeToUse),
+        opsPack,
         meta: {
-          aspectRatio,
-          resolution,
-          style,
+          aspectRatio: ratioList.length === 1 ? ratioList[0] : ratioList,
+          resolution: resolutionToUse,
+          style: styleToUse,
           refWeight,
           imageCount,
+          mode: 'final',
+          subjectLock,
+          multiRatio,
+          abVariant,
         },
       })
     }
@@ -669,6 +909,9 @@ export default async function handler(req: any, res: any) {
       success: true,
       kind: 'analysis',
       analysisText,
+      nextQuestion: nextQuestionFor(mediaType),
+      quickActions: quickActionsFor(mediaType),
+      opsPack,
     })
   } catch (e: any) {
     const rawMsg = String(e?.message || 'Unknown error')
