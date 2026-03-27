@@ -1064,9 +1064,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
           {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
-          <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
+          <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
             <div className="flex items-end gap-2.5">
-              <div className="isolate flex min-h-[5.25rem] min-w-0 flex-1 overflow-visible rounded-2xl border border-white/10 bg-black/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow] focus-within:border-violet-400/30 focus-within:ring-1 focus-within:ring-violet-400/20">
+              <div className="isolate flex min-h-[5.25rem] min-w-0 flex-1 overflow-visible">
                 <div
                   className="relative z-10 flex min-w-[2.75rem] shrink-0 flex-col justify-start border-r border-white/10 pb-2 pl-2 pr-2 pt-2.5"
                   ref={plusMenuRef}
