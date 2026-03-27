@@ -7,8 +7,6 @@ import {
   Folder,
   ImagePlus,
   Pencil,
-  PanelRightClose,
-  PanelRightOpen,
   Pin,
   Plus,
   SlidersHorizontal,
@@ -295,6 +293,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const composerRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const plusMenuRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
@@ -360,6 +359,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     document.addEventListener('click', onDoc)
     return () => document.removeEventListener('click', onDoc)
   }, [plusMenuOpen, paramsOpen])
+
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const next = Math.min(180, Math.max(42, el.scrollHeight))
+    el.style.height = `${next}px`
+  }, [input])
 
   useEffect(() => {
     if (!preview) return
@@ -862,7 +869,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-4 overflow-hidden">
+    <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-3 overflow-hidden">
       <div className="flex h-full min-w-0 flex-1 flex-col min-h-0">
         <div
           className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(88,70,166,0.18)_0%,rgba(46,62,130,0.12)_28%,rgba(16,22,40,0.94)_62%,rgba(10,14,26,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
@@ -1079,6 +1086,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           >
             <div className="flex items-end">
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={inputDisabled}
@@ -1093,8 +1101,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     ? '上传图片或视频，开始对话'
                     : '请输入您的需求，支持图片分析、图片生成、视频分析'
                 }
-                rows={2}
-                className="home-chat-composer-textarea min-h-[3.5rem] min-w-0 flex-1 resize-none !border-transparent !bg-transparent px-2 py-1.5 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
+                rows={1}
+                className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
               />
             </div>
 
@@ -1293,29 +1301,39 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
       <aside
         className={`sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[width,padding] duration-200 ${
-          sidebarCollapsed ? 'w-[68px] px-2 py-3' : 'w-[320px]'
+          sidebarCollapsed ? 'w-[58px] px-2 py-3' : 'w-[292px]'
         }`}
       >
-        <button
-          type="button"
-          onClick={() => setSidebarCollapsed((v) => !v)}
-          className="mb-3 inline-flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-lg border border-white/12 bg-white/[0.04] text-white/75 transition hover:border-violet-400/35 hover:text-violet-200"
-          title={sidebarCollapsed ? '展开历史对话' : '收起历史对话'}
-        >
-          {sidebarCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
-        </button>
-
-        {sidebarCollapsed ? null : (
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(false)}
+            className="mb-2 inline-flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-lg border border-white/12 bg-white/[0.04] text-white/75 transition hover:border-violet-400/35 hover:text-violet-200"
+            title="展开历史对话"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        ) : (
           <>
-            <button
-              type="button"
-              onClick={newChat}
-              className="mb-4 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
-            >
-              <span className="inline-flex items-center justify-center gap-2">
-                <Plus className="h-4 w-4" /> 新建对话
-              </span>
-            </button>
+            <div className="mb-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(true)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/12 bg-white/[0.04] text-white/75 transition hover:border-violet-400/35 hover:text-violet-200"
+                title="收起历史对话"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={newChat}
+                className="flex-1 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Plus className="h-4 w-4" /> 新建对话
+                </span>
+              </button>
+            </div>
             <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
             <input
               value={sessionSearch}
