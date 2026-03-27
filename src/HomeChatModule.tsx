@@ -913,7 +913,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <div className="mx-auto w-full max-w-3xl">
                 <h1 className="text-center text-4xl font-semibold tracking-tight text-white">给你灵感，也给你爆款</h1>
               </div>
-              <div className="mx-auto mt-6 w-full max-w-3xl">
+              <div className="mx-auto mt-8 w-full max-w-3xl">
                 {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
                 {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
                 <div
