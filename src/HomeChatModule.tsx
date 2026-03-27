@@ -86,6 +86,8 @@ export type HomeChatMsg = {
   pendingAnalysis?: boolean
   /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
   streamLen?: number
+  /** 用户消息：发送瞬间的参数快照（气泡展示不随底部配置改动） */
+  sendParams?: Pick<HomeChatSession['params'], 'aspectRatio' | 'imageCount' | 'subjectLock'>
 }
 
 export type HomeChatSession = {
@@ -775,6 +777,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
     const sendText = trimmed || DEFAULT_SEND_TEXT
 
+    const conn =
+      typeof navigator !== 'undefined'
+        ? (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection
+        : undefined
+    const softNetwork =
+      !!conn && (conn.saveData === true || /2g|slow-2g/i.test(String(conn.effectiveType || '')))
+    const ep = softNetwork
+      ? { ...s.params, multiRatio: false as const, abVariant: false as const, qcEnabled: false as const }
+      : s.params
+    if (softNetwork) {
+      setToast('当前网络较慢，已自动关闭多比例、A/B 与轻量质检以加快出图')
+      window.setTimeout(() => setToast(''), 4500)
+    }
+
     let hist = buildHistoryForApi(s.messages)
     if (hist.length > API_HISTORY_MAX) {
       setToast('已为您保留最近 20 轮有效对话，更早的对话内容已自动精简，保证模型响应速度')
@@ -786,10 +802,15 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       role: 'user',
       text: sendText,
       attachments: attachments.length ? attachments : undefined,
+      sendParams: {
+        aspectRatio: ep.aspectRatio,
+        imageCount: ep.imageCount,
+        subjectLock: ep.subjectLock,
+      },
     }
 
-    const paramLine = `【${s.params.aspectRatio} · ${s.params.imageCount}张 · ${
-      s.params.subjectLock === 'high' ? '高保真' : '标准保真'
+    const paramLine = `【${ep.aspectRatio} · ${ep.imageCount}张 · ${
+      ep.subjectLock === 'high' ? '高保真' : '标准保真'
     }】`
 
     setSessions((prev) =>
@@ -827,18 +848,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           : 'preview'
         : 'final'
       if (generateMode === 'preview') setPreviewToken('')
-
-      const conn = typeof navigator !== 'undefined' ? (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection : undefined
-      const softNetwork =
-        !!conn &&
-        (conn.saveData === true || /2g|slow-2g/i.test(String(conn.effectiveType || '')))
-      const ep = softNetwork
-        ? { ...s.params, multiRatio: false as const, abVariant: false as const, qcEnabled: false as const }
-        : s.params
-      if (softNetwork) {
-        setToast('当前网络较慢，已自动关闭多比例、A/B 与轻量质检以加快出图')
-        window.setTimeout(() => setToast(''), 4500)
-      }
 
       const paramsPayload = {
         resolution: ep.resolution,
@@ -1712,10 +1721,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                         </div>
                       ) : null}
                       <div className="whitespace-pre-wrap">{m.text}</div>
-                      {active ? (
+                      {m.sendParams ? (
                         <div className="mt-2 text-[11px] leading-snug text-zinc-400/95">
-                          {active.params.aspectRatio} · {active.params.imageCount}张 ·{' '}
-                          {active.params.subjectLock === 'high' ? '高保真' : '标准保真'}
+                          {m.sendParams.aspectRatio} · {m.sendParams.imageCount}张 ·{' '}
+                          {m.sendParams.subjectLock === 'high' ? '高保真' : '标准保真'}
                         </div>
                       ) : null}
                     </UserBubble>
