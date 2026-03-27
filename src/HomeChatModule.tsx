@@ -1083,7 +1083,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     : '请输入您的需求，支持图片分析、图片生成、视频分析'
                 }
                 rows={3}
-                className="min-h-[5.25rem] min-w-0 flex-1 resize-none rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/28 focus:border-violet-400/25 focus:ring-1 focus:ring-violet-400/20 disabled:opacity-45"
+                className="min-h-[5.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm leading-relaxed text-white/90 outline-none ring-0 placeholder:text-white/28 focus:ring-0 disabled:opacity-45"
               />
               <button
                 type="button"
@@ -1095,7 +1095,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               </button>
             </div>
 
-            <div className="mt-3 border-t border-white/10 pt-2.5">
+            <div className="mt-2 pt-1">
               <div className="flex items-start gap-2.5">
                 <div className="relative shrink-0" ref={plusMenuRef}>
                   <button
@@ -1106,10 +1106,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                       setPlusMenuOpen((v) => !v)
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-dashed border-white/30 bg-white/[0.02] text-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-violet-300/55 hover:bg-violet-500/10 hover:text-violet-100 active:scale-95 disabled:opacity-45"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/[0.06] hover:text-violet-100 active:scale-95 disabled:opacity-45"
                     title="上传"
                   >
-                    <ImagePlus className="pointer-events-none h-[18px] w-[18px] stroke-[2]" />
+                    <ImagePlus className="pointer-events-none h-[17px] w-[17px] stroke-[2]" />
                   </button>
                   {plusMenuOpen ? (
                     <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
