@@ -1074,7 +1074,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
             ref={composerRef}
             className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
           >
-            <div className="flex items-end gap-2.5">
+            <div className="flex items-end">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1091,19 +1091,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     : '请输入您的需求，支持图片分析、图片生成、视频分析'
                 }
                 rows={3}
-                className="min-h-[5.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm leading-relaxed text-white/90 outline-none ring-0 placeholder:text-white/28 focus:ring-0 disabled:opacity-45"
+                className="min-h-[5.25rem] min-w-0 flex-1 resize-none !border-transparent !bg-transparent px-2 py-2 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
               />
-              <button
-                type="button"
-                disabled={!canSend}
-                onClick={() => void handleSend()}
-                className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
-              >
-                发送
-              </button>
             </div>
 
             <div className="mt-2 flex items-center gap-2 pt-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
               <div className="relative shrink-0" ref={plusMenuRef}>
                 <button
                   type="button"
@@ -1177,6 +1170,15 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                   <span>参考权重 {active?.params.refWeight?.toFixed(2)}</span>
                 </div>
               </div>
+              </div>
+              <button
+                type="button"
+                disabled={!canSend}
+                onClick={() => void handleSend()}
+                className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
+              >
+                发送
+              </button>
             </div>
 
             {paramsOpen ? (
