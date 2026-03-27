@@ -1067,13 +1067,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
         </div>
 
-        <div className="shrink-0 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-3 pt-2.5 backdrop-blur-xl">
+        <div className="shrink-0 bg-[linear-gradient(180deg,rgba(26,36,70,0.34)_0%,rgba(20,30,58,0.38)_100%)] px-4 pb-3 pt-2.5 backdrop-blur-xl">
           {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
           {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
           <div
             ref={composerRef}
-            className="group rounded-[1.35rem] border border-white/12 bg-[linear-gradient(135deg,rgba(80,105,190,0.12)_0%,rgba(63,84,160,0.1)_40%,rgba(30,42,86,0.1)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_30px_rgba(8,12,28,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
+            className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(135deg,rgba(148,169,235,0.06)_0%,rgba(115,142,220,0.05)_40%,rgba(68,90,165,0.06)_100%)] p-3 shadow-[0_8px_18px_rgba(8,12,28,0.1)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
           >
             <div className="flex items-end">
               <textarea
