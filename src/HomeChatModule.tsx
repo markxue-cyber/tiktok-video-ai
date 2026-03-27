@@ -1066,7 +1066,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-4 pt-3 backdrop-blur-xl">
+        <div className="shrink-0 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-4 pt-3 backdrop-blur-xl">
           {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
           {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
@@ -1103,7 +1103,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               </button>
             </div>
 
-            <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2">
+            <div className="mt-2 flex items-center gap-2 pt-2">
               <div className="relative shrink-0" ref={plusMenuRef}>
                 <button
                   type="button"
@@ -1167,37 +1167,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               </button>
 
               <div className="min-w-0 flex-1 overflow-x-auto">
-                <div className="flex min-w-max items-center gap-1.5 pr-1">
-                  <button
-                    type="button"
-                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
-                  >
-                    {active?.params.resolution || '2K'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
-                  >
-                    {active?.params.aspectRatio || '1:1'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
-                  >
-                    {active?.params.style || '写实'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
-                  >
-                    参考权重 {active?.params.refWeight?.toFixed(2)}
-                  </button>
+                <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
+                  <span>{active?.params.resolution || '2K'}</span>
+                  <span className="text-white/25">/</span>
+                  <span>{active?.params.aspectRatio || '1:1'}</span>
+                  <span className="text-white/25">/</span>
+                  <span>{active?.params.style || '写实'}</span>
+                  <span className="text-white/25">/</span>
+                  <span>参考权重 {active?.params.refWeight?.toFixed(2)}</span>
                 </div>
               </div>
             </div>
 
             {paramsOpen ? (
-              <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
+              <div className="mt-2 p-1">
                 <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                     <span className="shrink-0 whitespace-nowrap">分辨率</span>
