@@ -163,16 +163,6 @@ function getLastMediaFromMessages(messages: HomeChatMsg[]): { type: 'image' | 'v
   return null
 }
 
-function sessionHasVideo(s: HomeChatSession): boolean {
-  if (s.media?.type === 'video') return true
-  return s.messages.some((m) => m.role === 'user' && m.attachments?.some((a) => a.type === 'video'))
-}
-
-function sessionHasImageContext(s: HomeChatSession): boolean {
-  if (s.media?.type === 'image') return true
-  return s.messages.some((m) => m.role === 'user' && m.attachments?.some((a) => a.type === 'image'))
-}
-
 function pickPrimaryMedia(
   attachments: HomeChatAttachment[],
   fallback: { type: 'image' | 'video'; url: string } | null,
@@ -282,7 +272,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
-  const [sessionFilter, setSessionFilter] = useState<'all' | 'image_gen' | 'video_analysis'>('all')
   const [sessionSearch, setSessionSearch] = useState('')
   const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
@@ -798,11 +787,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     const kw = sessionSearch.trim().toLowerCase()
     return sessions
       .filter((s) => {
-        if (sessionFilter === 'all') return true
-        if (sessionFilter === 'video_analysis') return sessionHasVideo(s)
-        return sessionHasImageContext(s) || !sessionHasVideo(s)
-      })
-      .filter((s) => {
         if (!kw) return true
         return (
           s.title.toLowerCase().includes(kw) ||
@@ -810,7 +794,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
         )
       })
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt)
-  }, [sessions, sessionFilter, sessionSearch])
+  }, [sessions, sessionSearch])
 
   const pendingReady = pendingUploads.some((p) => p.status === 'done' && p.url)
   const canSend =
@@ -1081,63 +1065,65 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
           <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
             <div className="flex items-end gap-2.5">
-            <div className="relative shrink-0" ref={plusMenuRef}>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setPlusMenuOpen((v) => !v)}
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-violet-600 to-indigo-600 text-white shadow-[0_8px_24px_rgba(124,58,237,0.35)] transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:opacity-45"
-                title="上传"
-              >
-                <Plus className="h-5 w-5 stroke-[2.5]" />
-              </button>
-              {plusMenuOpen ? (
-                <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
+              <div className="flex min-h-[5.25rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow] focus-within:border-violet-400/30 focus-within:ring-1 focus-within:ring-violet-400/20">
+                <div className="relative flex shrink-0 flex-col justify-start pb-2 pl-2 pt-2.5" ref={plusMenuRef}>
                   <button
                     type="button"
-                    className="w-full text-left px-3 py-2 text-sm text-white/90 hover:bg-white/[0.06]"
-                    onClick={() => {
-                      setPlusMenuOpen(false)
-                      uploadInputRef.current?.click()
-                    }}
+                    disabled={busy}
+                    onClick={() => setPlusMenuOpen((v) => !v)}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-violet-600 to-indigo-600 text-white shadow-[0_4px_14px_rgba(124,58,237,0.35)] transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:opacity-45"
+                    title="上传"
                   >
-                    从本地上传
+                    <Plus className="h-4 w-4 stroke-[2.25]" />
                   </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-sm text-white/90 hover:bg-white/[0.06]"
-                    onClick={() => openAssetPicker('both')}
-                  >
-                    从资产库选择
-                  </button>
+                  {plusMenuOpen ? (
+                    <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                        onClick={() => {
+                          setPlusMenuOpen(false)
+                          uploadInputRef.current?.click()
+                        }}
+                      >
+                        从本地上传
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                        onClick={() => openAssetPicker('both')}
+                      >
+                        从资产库选择
+                      </button>
+                    </div>
+                  ) : null}
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                    className="hidden"
+                    onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
+                  />
                 </div>
-              ) : null}
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                className="hidden"
-                onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={inputDisabled}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  if (canSend) void handleSend()
-                }
-              }}
-              placeholder={
-                !hasThreadMedia && !pendingReady
-                  ? '上传图片或视频，开始对话'
-                  : '请输入您的需求，支持图片分析、图片生成、视频分析'
-              }
-              rows={3}
-              className="min-h-[5.25rem] flex-1 min-w-0 resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white/90 outline-none ring-0 placeholder:text-white/28 focus:border-violet-400/25 focus:ring-1 focus:ring-violet-400/25 disabled:opacity-45"
-            />
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  disabled={inputDisabled}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (canSend) void handleSend()
+                    }
+                  }}
+                  placeholder={
+                    !hasThreadMedia && !pendingReady
+                      ? '上传图片或视频，开始对话'
+                      : '请输入您的需求，支持图片分析、图片生成、视频分析'
+                  }
+                  rows={3}
+                  className="min-h-[5.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent py-3 pr-3 pl-1 text-sm leading-relaxed text-white/90 outline-none ring-0 placeholder:text-white/28 focus:ring-0 disabled:opacity-45"
+                />
+              </div>
             <button
               type="button"
               disabled={!canSend}
@@ -1260,22 +1246,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </span>
         </button>
         <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
-        <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
-          {(['all', 'image_gen', 'video_analysis'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              className={`rounded-full px-2.5 py-1 text-[11px] transition ${
-                sessionFilter === k
-                  ? 'bg-gradient-to-r from-violet-700/90 to-fuchsia-700/85 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
-                  : 'border border-violet-400/25 bg-violet-500/10 text-violet-100/80 hover:border-violet-400/40 hover:bg-violet-500/16'
-              }`}
-              onClick={() => setSessionFilter(k)}
-            >
-              {k === 'all' ? '全部' : k === 'image_gen' ? '图片生成' : '视频分析'}
-            </button>
-          ))}
-        </div>
         <input
           value={sessionSearch}
           onChange={(e) => setSessionSearch(e.target.value)}
