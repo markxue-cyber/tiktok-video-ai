@@ -26,7 +26,12 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
-import { homeChatTurnAPI, type HomeChatImageItem, type HomeChatTurnResult } from './api/homeChat'
+import {
+  homeChatTurnAPI,
+  homeChatTurnStreamAPI,
+  type HomeChatImageItem,
+  type HomeChatTurnResult,
+} from './api/homeChat'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 
 const STORAGE_KEY = 'tikgen.homeChat.sessions.v1'
@@ -810,6 +815,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
     hist = [...hist, { role: 'user' as const, text: `[附件] ${sendText}` }]
 
+    let assistantMsgId: string | null = null
     try {
       const wantsGenerate = likelyGenerateIntent(sendText)
       const wantsFinal = /(确认|继续|正式|高清|final)/i.test(sendText)
@@ -851,7 +857,27 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       }
 
       setBusyStage('analyze')
-      const data = await homeChatTurnAPI(
+      assistantMsgId = `m_${Date.now()}_a`
+      setSessions((prev) =>
+        prev.map((x) => {
+          if (x.id !== activeId) return x
+          return {
+            ...x,
+            updatedAt: Date.now(),
+            messages: [
+              ...x.messages,
+              {
+                id: assistantMsgId!,
+                role: 'assistant' as const,
+                text: '',
+                followUps: ASSISTANT_FOLLOWUPS,
+              },
+            ],
+          }
+        }),
+      )
+
+      const data = await homeChatTurnStreamAPI(
         {
           mediaType: primary.type,
           mediaUrl: primary.url,
@@ -862,7 +888,29 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           splitPipeline: true,
           params: paramsPayload,
         },
-        { signal: abortRef.current?.signal },
+        {
+          signal: abortRef.current?.signal,
+          onDelta: (chunk) => {
+            setSessions((prev) =>
+              prev.map((session) => {
+                if (session.id !== activeId) return session
+                return {
+                  ...session,
+                  updatedAt: Date.now(),
+                  messages: session.messages.map((m) =>
+                    m.id === assistantMsgId
+                      ? {
+                          ...m,
+                          text: (m.text || '') + chunk,
+                          streamLen: (m.text || '').length + chunk.length,
+                        }
+                      : m,
+                  ),
+                }
+              }),
+            )
+          },
+        },
       )
 
       if (!data?.success) {
@@ -879,60 +927,79 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 ? '请求过于频繁，请等待 10-20 秒后重试。'
                 : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
                   ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
-                : msgRaw
+                  : msgRaw
         if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
         if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()
-        const am: HomeChatMsg = {
-          id: `m_${Date.now()}_e`,
-          role: 'assistant',
-          text: msg,
-          blocked: true,
-          followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
-        }
         setSessions((prev) =>
-          prev.map((x) =>
-            x.id === activeId ? { ...x, updatedAt: Date.now(), messages: [...x.messages, am] } : x,
-          ),
+          prev.map((x) => {
+            if (x.id !== activeId) return x
+            return {
+              ...x,
+              updatedAt: Date.now(),
+              messages: x.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      text: msg,
+                      blocked: true,
+                      followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
+                    }
+                  : m,
+              ),
+            }
+          }),
         )
         return
       }
 
       if (data.kind === 'blocked') {
-        const am: HomeChatMsg = {
-          id: `m_${Date.now()}_a`,
-          role: 'assistant',
-          text: String(data.message || ''),
-          blocked: true,
-          followUps: ['仅分析素材', '提炼可用卖点', '重新描述我的需求'],
-        }
         setSessions((prev) =>
-          prev.map((x) =>
-            x.id === activeId ? { ...x, updatedAt: Date.now(), messages: [...x.messages, am] } : x,
-          ),
+          prev.map((x) => {
+            if (x.id !== activeId) return x
+            return {
+              ...x,
+              updatedAt: Date.now(),
+              messages: x.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      text: String(data.message || ''),
+                      blocked: true,
+                      followUps: ['仅分析素材', '提炼可用卖点', '重新描述我的需求'],
+                    }
+                  : m,
+              ),
+            }
+          }),
         )
         return
       }
 
-      if (data.kind === 'analysis' || data.kind === 'mixed') {
+      if (data.kind === 'analysis' || data.kind === 'mixed' || data.kind === 'mock') {
+        const assistantTextFinal = buildAssistantTextFromTurn(data)
+        setSessions((prev) =>
+          prev.map((x) => {
+            if (x.id !== activeId) return x
+            return {
+              ...x,
+              updatedAt: Date.now(),
+              messages: x.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      text: assistantTextFinal,
+                      streamLen: assistantTextFinal.length,
+                      followUps: data.quickActions?.length ? [...data.quickActions] : ASSISTANT_FOLLOWUPS,
+                    }
+                  : m,
+              ),
+            }
+          }),
+        )
+
         /** 首轮仅分析，出图在第二轮请求，先展示文字再补图 */
         if (data.deferredImageGen && data.analysisText) {
-          const assistantMsgId = `m_${Date.now()}_a`
           setBusyStage('optimize')
-          const assistantTextFirst = buildAssistantTextFromTurn(data)
-          const amFirst: HomeChatMsg = {
-            id: assistantMsgId,
-            role: 'assistant',
-            text: assistantTextFirst,
-            followUps: data.quickActions?.length ? [...data.quickActions] : ASSISTANT_FOLLOWUPS,
-            streamLen: 0,
-          }
-          setSessions((prev) =>
-            prev.map((x) => {
-              if (x.id !== activeId) return x
-              return { ...x, updatedAt: Date.now(), messages: [...x.messages, amFirst] }
-            }),
-          )
-
           setBusyStage('generate')
           const data2 = await homeChatTurnAPI(
             {
@@ -1037,7 +1104,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         }
 
         setBusyStage('optimize')
-        const assistantText = buildAssistantTextFromTurn(data)
         setBusyStage('generate')
         const imageItems: HomeChatImageItem[] = Array.isArray(data.images)
           ? data.images.filter((x) => !!x?.url)
@@ -1049,22 +1115,28 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             : []
         if (data.previewToken) setPreviewToken(String(data.previewToken))
         else if (generateMode === 'final') setPreviewToken('')
-        const am: HomeChatMsg = {
-          id: `m_${Date.now()}_a`,
-          role: 'assistant',
-          text: assistantText,
-          images: imgs.length ? imgs : undefined,
-          imageItems: imageItems.length ? imageItems : undefined,
-          followUps:
-            data.quickActions && data.quickActions.length
-              ? [...data.quickActions, ...(data.previewToken ? ['确认高清生成'] : [])]
-              : ASSISTANT_FOLLOWUPS,
-          streamLen: 0,
-        }
         setSessions((prev) =>
           prev.map((x) => {
             if (x.id !== activeId) return x
-            return { ...x, updatedAt: Date.now(), messages: [...x.messages, am] }
+            return {
+              ...x,
+              updatedAt: Date.now(),
+              messages: x.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      text: assistantTextFinal,
+                      images: imgs.length ? imgs : undefined,
+                      imageItems: imageItems.length ? imageItems : undefined,
+                      streamLen: assistantTextFinal.length,
+                      followUps:
+                        data.quickActions && data.quickActions.length
+                          ? [...data.quickActions, ...(data.previewToken ? ['确认高清生成'] : [])]
+                          : ASSISTANT_FOLLOWUPS,
+                    }
+                  : m,
+              ),
+            }
           }),
         )
 
@@ -1095,7 +1167,21 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
       void onRefreshUser?.()
     } catch (e: any) {
-      if (e?.name === 'AbortError') return
+      if (e?.name === 'AbortError') {
+        if (assistantMsgId) {
+          setSessions((prev) =>
+            prev.map((x) => {
+              if (x.id !== activeId) return x
+              return {
+                ...x,
+                updatedAt: Date.now(),
+                messages: x.messages.filter((m) => m.id !== assistantMsgId),
+              }
+            }),
+          )
+        }
+        return
+      }
       const raw = String(e?.message || '未知错误')
       const actionable =
         /Failed to fetch|NetworkError|network/i.test(raw)
@@ -1103,18 +1189,41 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           : /timeout|timed out/i.test(raw)
             ? '请求超时，请稍后重试；建议先减少生成张数。'
             : raw
-      const am: HomeChatMsg = {
-        id: `m_${Date.now()}_err`,
-        role: 'assistant',
-        text: `请求失败：${actionable}`,
-        blocked: true,
-        followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
+      const errText = `请求失败：${actionable}`
+      if (assistantMsgId) {
+        setSessions((prev) =>
+          prev.map((x) => {
+            if (x.id !== activeId) return x
+            return {
+              ...x,
+              updatedAt: Date.now(),
+              messages: x.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      text: errText,
+                      blocked: true,
+                      followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
+                    }
+                  : m,
+              ),
+            }
+          }),
+        )
+      } else {
+        const am: HomeChatMsg = {
+          id: `m_${Date.now()}_err`,
+          role: 'assistant',
+          text: errText,
+          blocked: true,
+          followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
+        }
+        setSessions((prev) =>
+          prev.map((x) =>
+            x.id === activeId ? { ...x, updatedAt: Date.now(), messages: [...x.messages, am] } : x,
+          ),
+        )
       }
-      setSessions((prev) =>
-        prev.map((x) =>
-          x.id === activeId ? { ...x, updatedAt: Date.now(), messages: [...x.messages, am] } : x,
-        ),
-      )
     } finally {
       setBusy(false)
       setBusyStage('idle')

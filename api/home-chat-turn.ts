@@ -247,6 +247,64 @@ async function gpt4oChat(
   return extractAssistantText(data)
 }
 
+/** OpenAI 兼容流式：尽快把首 token 推到前端 */
+async function* streamGpt4oChat(
+  apiKey: string,
+  baseUrl: string,
+  messages: ChatMessage[],
+  temperature = 0.35,
+): AsyncGenerator<string, void, unknown> {
+  const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o',
+      temperature,
+      messages,
+      stream: true,
+    }),
+  })
+  if (!resp.ok) {
+    const errText = await resp.text()
+    let msg = `LLM请求失败(${resp.status})`
+    try {
+      const j = JSON.parse(errText)
+      msg = String((j as any)?.error?.message || (j as any)?.message || msg)
+    } catch {
+      msg = errText.slice(0, 500) || msg
+    }
+    throw new Error(msg)
+  }
+  if (!resp.body) throw new Error('上游未返回流式 body')
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder()
+  let carry = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    carry += decoder.decode(value, { stream: true })
+    let splitAt: number
+    while ((splitAt = carry.indexOf('\n\n')) !== -1) {
+      const evt = carry.slice(0, splitAt)
+      carry = carry.slice(splitAt + 2)
+      for (const rawLine of evt.split('\n')) {
+        const line = rawLine.trim()
+        if (!line.startsWith('data:')) continue
+        const payload = line.replace(/^data:\s?/, '').trim()
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const json = JSON.parse(payload)
+          const piece = json?.choices?.[0]?.delta?.content
+          if (typeof piece === 'string' && piece) yield piece
+        } catch {
+          // 单行非 JSON 时忽略
+        }
+      }
+    }
+  }
+}
+
 function mapResolutionLabel(label: string): string {
   const x = String(label || '').toUpperCase()
   if (x === '4K' || x === '4096') return '4096'
@@ -1012,12 +1070,83 @@ export default async function handler(req: any, res: any) {
 
     let analysisText = ''
     let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
+    const streamAnalysis = body.streamAnalysis === true
+    /** 单次请求内同时出图（非 split）仍走整包 JSON，避免与出图响应混流 */
+    const useStreamForAnalysis = streamAnalysis && !(needsImageGen && !splitPipeline)
+
     if (needsAnalysis) {
+      if (useStreamForAnalysis) {
+        try {
+          const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
+          const messages = historyToMessages(history, multimodal, supabaseUrl)
+
+          res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+          res.setHeader('Cache-Control', 'no-cache, no-transform')
+          res.setHeader('Connection', 'keep-alive')
+          res.setHeader('X-Accel-Buffering', 'no')
+
+          analysisText = ''
+          for await (const piece of streamGpt4oChat(apiKey, baseUrl, messages, 0.35)) {
+            analysisText += piece
+            res.write(`data: ${JSON.stringify({ type: 'delta', text: piece })}\n\n`)
+          }
+
+          if (!needsImageGen || generateMode === 'preview') {
+            opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
+            res.write(`data: ${JSON.stringify({ type: 'ops', opsPack })}\n\n`)
+          }
+
+          if (splitPipeline && needsImageGen) {
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'done',
+                success: true,
+                kind: 'analysis',
+                analysisText,
+                opsPack,
+                nextQuestion: nextQuestionFor(mediaType),
+                quickActions: quickActionsFor(mediaType),
+                deferredImageGen: true,
+              })}\n\n`,
+            )
+            res.end()
+            return
+          }
+
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'done',
+              success: true,
+              kind: 'analysis',
+              analysisText,
+              opsPack,
+              nextQuestion: nextQuestionFor(mediaType),
+              quickActions: quickActionsFor(mediaType),
+              deferredImageGen: false,
+            })}\n\n`,
+          )
+          res.end()
+          return
+        } catch (e: any) {
+          if (res.headersSent) {
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'error',
+                error: String(e?.message || '分析失败'),
+                code: 'ANALYSIS_FAILED',
+              })}\n\n`,
+            )
+            res.end()
+            return
+          }
+          return res.status(200).json({ success: false, error: e?.message || '分析失败', code: 'ANALYSIS_FAILED' })
+        }
+      }
+
       try {
         const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
         const messages = historyToMessages(history, multimodal, supabaseUrl)
         analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35)
-        // 热修复：图片生成链路下，文案包先降级为按需生成，避免单次函数超时
         if (!needsImageGen || generateMode === 'preview') {
           opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
         }
