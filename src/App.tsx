@@ -2348,7 +2348,16 @@ function App() {
         </header>
         <div className={mainNav === 'assets' ? 'pt-2 p-6' : mainNav === 'home' ? 'p-4' : 'p-6'}>
           {mainNav === 'home' ? (
-            <HomeChatModule onGoBenefits={gotoBenefits} onRefreshUser={refreshCurrentUser} />
+            <HomeChatModule
+              onGoBenefits={gotoBenefits}
+              onRefreshUser={refreshCurrentUser}
+              onNavigateToImageModule={(target) => {
+                if (target === 'imageGen') goImageSubNav('imageGen')
+                else if (target === 'ecommerce') goImageSubNav('ecommerce')
+                else if (target === 'upscale') goImageToolsTab('upscale')
+                else goImageToolsTab('translate')
+              }}
+            />
           ) : null}
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
           <div className={mainNav === 'image' && imageSubNav === 'imageGen' ? '' : 'hidden'}>

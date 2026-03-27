@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   AlertCircle,
   ChevronLeft,
@@ -10,6 +18,7 @@ import {
   Pin,
   Plus,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Upload,
   X,
@@ -254,12 +263,16 @@ function TypingDots() {
   )
 }
 
+export type HomeNavigateImageTarget = 'imageGen' | 'ecommerce' | 'upscale' | 'translate'
+
 type Props = {
   onGoBenefits: () => void
   onRefreshUser?: () => void | Promise<void>
+  /** 首页功能卡片：跳转至图片创作各子模块 */
+  onNavigateToImageModule?: (target: HomeNavigateImageTarget) => void
 }
 
-export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
+export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageModule }: Props) {
   const [sessions, setSessions] = useState<HomeChatSession[]>(() => loadSessions())
   const [activeId, setActiveId] = useState<string>(() => {
     try {
@@ -299,35 +312,46 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
+  /** 新建对话且尚未上传/发送：展示「AI创作」标题 + 上移输入区 + 功能卡片 */
+  const showLanding =
+    !!active && active.messages.length === 0 && !pendingUploads.length && !busy
+
   const hasThreadMedia = useMemo(() => {
     if (!active) return false
     if (active.media) return true
     return !!getLastMediaFromMessages(active.messages)
   }, [active])
 
-  useEffect(() => {
-    if (!sessions.length) {
-      const s = newSession()
-      setSessions([s])
-      setActiveId(s.id)
-      saveSessions([s])
-      try {
-        localStorage.setItem(ACTIVE_KEY, s.id)
-      } catch {
-        // ignore
+  /** 每次进入首页模块：新建一条空会话，原当前会话保留在历史列表中 */
+  useLayoutEffect(() => {
+    const s = newSession()
+    let trimmed = false
+    setSessions((prev) => {
+      let next = [s, ...prev]
+      if (next.length > MAX_SESSIONS) {
+        trimmed = true
+        const oldestFirst = [...next].sort((a, b) => a.updatedAt - b.updatedAt)
+        let over = next.length - MAX_SESSIONS
+        for (const row of oldestFirst) {
+          if (over <= 0) break
+          if (row.pinned) continue
+          next = next.filter((x) => x.id !== row.id)
+          over -= 1
+        }
       }
-      return
+      return next
+    })
+    if (trimmed) {
+      setToast('已达到 100 条历史会话上限，已自动删除最早未置顶会话')
+      window.setTimeout(() => setToast(''), 4000)
     }
-    if (!activeId || !sessions.some((s) => s.id === activeId)) {
-      const next = sessions[0]!
-      setActiveId(next.id)
-      try {
-        localStorage.setItem(ACTIVE_KEY, next.id)
-      } catch {
-        // ignore
-      }
+    setActiveId(s.id)
+    try {
+      localStorage.setItem(ACTIVE_KEY, s.id)
+    } catch {
+      // ignore
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     saveSessions(sessions)
@@ -342,8 +366,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }, [activeId])
 
   useEffect(() => {
+    if (showLanding) return
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [active?.messages.length, busy, pendingUploads.length, dragOver])
+  }, [active?.messages.length, busy, pendingUploads.length, dragOver, showLanding])
 
   useEffect(() => {
     if (!plusMenuOpen && !paramsOpen) return
@@ -883,11 +908,263 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
             </div>
           ) : null}
 
-          <div ref={chatScrollRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-5">
+          {showLanding ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-6">
+              <div className="mx-auto w-full max-w-3xl">
+                <h1 className="text-center text-2xl font-semibold tracking-tight text-white">AI创作</h1>
+                <p className="mt-2 text-center text-sm text-white/40">让创作随灵感而生</p>
+              </div>
+              <div className="mx-auto mt-6 w-full max-w-3xl">
+                {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
+                {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
+                <div
+                  ref={composerRef}
+                  className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
+                >
+                  <div className="flex items-end">
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      disabled={inputDisabled}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          if (canSend) void handleSend()
+                        }
+                      }}
+                      placeholder={
+                        !hasThreadMedia && !pendingReady
+                          ? '上传图片或视频，开始对话'
+                          : '请输入您的需求，支持图片分析、图片生成、视频分析'
+                      }
+                      rows={1}
+                      className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
+                    />
+                  </div>
 
-            {active?.messages.length === 0 && !pendingUploads.length && !busy ? (
-              <div className="min-h-[min(52vh,28rem)]" aria-hidden />
-            ) : null}
+                  <div className="mt-2 flex items-center gap-2 pt-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="relative shrink-0" ref={plusMenuRef}>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setParamsOpen(true)
+                            setPlusMenuOpen((v) => !v)
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/[0.06] hover:text-violet-100 active:scale-95 disabled:opacity-45"
+                          title="上传"
+                        >
+                          <ImagePlus className="pointer-events-none h-[17px] w-[17px] stroke-[2]" />
+                        </button>
+                        {plusMenuOpen ? (
+                          <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                              onClick={() => {
+                                setPlusMenuOpen(false)
+                                uploadInputRef.current?.click()
+                              }}
+                            >
+                              从本地上传
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                              onClick={() => openAssetPicker('both')}
+                            >
+                              从资产库选择
+                            </button>
+                          </div>
+                        ) : null}
+                        <input
+                          ref={uploadInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                          className="hidden"
+                          onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlusMenuOpen(false)
+                          setParamsOpen((v) => !v)
+                        }}
+                        className={`inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs transition ${
+                          paramsOpen
+                            ? 'bg-violet-500/20 text-violet-100'
+                            : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
+                        }`}
+                        title="参数设置"
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        参数
+                      </button>
+
+                      <div className="min-w-0 flex-1 overflow-x-auto">
+                        <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
+                          <span>{active?.params.resolution || '2K'}</span>
+                          <span className="text-white/25">/</span>
+                          <span>{active?.params.aspectRatio || '1:1'}</span>
+                          <span className="text-white/25">/</span>
+                          <span>{active?.params.style || '写实'}</span>
+                          <span className="text-white/25">/</span>
+                          <span>参考权重 {active?.params.refWeight?.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!canSend}
+                      onClick={() => void handleSend()}
+                      className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
+                    >
+                      发送
+                    </button>
+                  </div>
+
+                  {paramsOpen ? (
+                    <div className="mt-2 p-1">
+                      <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                          <span className="shrink-0 whitespace-nowrap">分辨率</span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.resolution || '2K'}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ resolution: e.target.value as any })}
+                          >
+                            <option value="2K">2K</option>
+                            <option value="4K">4K</option>
+                            <option value="HD">HD</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                          <span className="shrink-0 whitespace-nowrap">比例</span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.aspectRatio || '1:1'}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
+                          >
+                            <option value="1:1">1:1</option>
+                            <option value="16:9">16:9</option>
+                            <option value="9:16">9:16</option>
+                            <option value="4:3">4:3</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                          <span className="shrink-0 whitespace-nowrap">风格</span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.style || '写实'}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ style: e.target.value as any })}
+                          >
+                            <option value="写实">写实</option>
+                            <option value="动漫">动漫</option>
+                            <option value="国潮">国潮</option>
+                            <option value="手绘">手绘</option>
+                            <option value="赛博朋克">赛博朋克</option>
+                            <option value="水墨">水墨</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                          <span className="shrink-0 whitespace-nowrap tabular-nums">
+                            参考权重 {active?.params.refWeight?.toFixed(2)}
+                          </span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={active?.params.refWeight ?? 0.7}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
+                            className="min-w-0 flex-1"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 hidden grid sm:grid-cols-2 gap-2 text-xs text-white/80" aria-hidden>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={active?.params.syncToAssets !== false}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ syncToAssets: e.target.checked })}
+                    />
+                    生成图片自动同步至资产库
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={active?.params.optimizePrompt !== false}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ optimizePrompt: e.target.checked })}
+                    />
+                    自动优化提示词
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={active?.params.hdEnhance !== false}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ hdEnhance: e.target.checked })}
+                    />
+                    开启高清细节增强
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={active?.params.negativePrompt !== false}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ negativePrompt: e.target.checked })}
+                    />
+                    添加通用负面提示词
+                  </label>
+                </div>
+              </div>
+
+              <div className="mx-auto mt-6 w-full max-w-3xl">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {(
+                    [
+                      { id: 'imageGen' as const, label: 'AI生图' },
+                      { id: 'ecommerce' as const, label: '电商套图' },
+                      { id: 'upscale' as const, label: '高清放大' },
+                      { id: 'translate' as const, label: '图片翻译' },
+                    ] as const
+                  ).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onNavigateToImageModule?.(item.id)}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-white/12 bg-white/[0.04] p-3 text-left transition hover:border-violet-400/35 hover:bg-white/[0.07]"
+                    >
+                      <span className="text-sm font-medium text-white/90">{item.label}</span>
+                      <div
+                        className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-slate-600/40 to-slate-900/50"
+                        aria-hidden
+                      >
+                        <Sparkles className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-white/25" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+          <div ref={chatScrollRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-5">
 
             <div className="space-y-5">
             {active?.messages.map((m) => (
@@ -1285,6 +1562,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
             </label>
           </div>
         </div>
+            </>
+          )}
       </div>
     </div>
 
