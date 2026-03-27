@@ -1207,7 +1207,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               />
             </label>
           </div>
-          <div className="mt-3 grid sm:grid-cols-2 gap-2 text-xs text-white/80">
+          <div className="mt-3 hidden grid sm:grid-cols-2 gap-2 text-xs text-white/80" aria-hidden>
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
