@@ -1091,7 +1091,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     : '请输入您的需求，支持图片分析、图片生成、视频分析'
                 }
                 rows={3}
-                className="min-h-[5.25rem] min-w-0 flex-1 resize-none !border-transparent !bg-transparent px-2 py-2 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
+                className="home-chat-composer-textarea min-h-[5.25rem] min-w-0 flex-1 resize-none !border-transparent !bg-transparent px-2 py-2 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
               />
             </div>
 

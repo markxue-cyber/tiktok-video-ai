@@ -227,6 +227,14 @@
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18) !important;
 }
 
+/* Home chat: keep composer textarea fully frameless */
+.workbench-root textarea.home-chat-composer-textarea,
+.workbench-root textarea.home-chat-composer-textarea:focus {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 /* Side nav: selected button text should look more "tech / premium". */
 .workbench-root aside button.text-white {
   color: transparent !important;
