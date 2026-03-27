@@ -360,7 +360,7 @@ function AssistantBubble({
   className?: string
 }) {
   return (
-    <div className={`max-w-[min(85%,40rem)] px-1 py-1 text-sm leading-relaxed text-white/92 ${className}`}>
+    <div className={`max-w-[min(85%,40rem)] px-1 py-1 text-sm leading-relaxed ${className}`}>
       {children}
     </div>
   )
@@ -1735,12 +1735,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       ) : (
                         <>
                           {m.pendingAnalysis && !String(m.text || '').trim() ? (
-                            <div className="flex items-center gap-2.5 text-white/75">
+                            <div className="home-chat-typing-row flex items-center gap-2.5">
                               <TypingDots />
                               <span className="text-sm">正在输出商用分析...</span>
                             </div>
                           ) : (
-                            <div className="whitespace-pre-wrap">{displayAssistantText(m)}</div>
+                            <div className="home-chat-assistant-body whitespace-pre-wrap">
+                              {displayAssistantText(m)}
+                            </div>
                           )}
                           {m.images?.length ? (
                             <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
@@ -1755,7 +1757,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                 >
                                   <img src={u} alt="" className="h-full w-full object-cover" />
                                   {(meta?.ratio || meta?.variant || Number.isFinite(meta?.qcScore)) ? (
-                                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] text-white/90">
+                                    <span className="home-chat-thumb-caption absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px]">
                                       {[meta?.ratio, meta?.variant && meta.variant !== 'normal' ? meta.variant : '', Number.isFinite(meta?.qcScore) ? `QC ${meta!.qcScore}` : '']
                                         .filter(Boolean)
                                         .join(' · ')}
@@ -1768,7 +1770,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           ) : null}
                           {!m.pendingAnalysis && m.followUps?.length ? (
                             <div className="mt-3 border-t border-white/10 pt-3">
-                              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-white/35">
+                              <div className="home-chat-chip-label mb-1.5 text-[10px] font-medium uppercase tracking-wide">
                                 快捷指令
                               </div>
                               <div className="flex flex-wrap gap-2">
@@ -1825,7 +1827,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             {busy && busyStage !== 'analyze' ? (
               <div className="flex justify-start">
                 <AssistantBubble>
-                  <div className="flex items-center gap-2.5 text-white/75">
+                  <div className="home-chat-busy-row flex items-center gap-2.5">
                     <TypingDots />
                     <span className="text-sm">
                       {busyStage === 'identify'

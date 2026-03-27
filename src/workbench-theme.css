@@ -235,6 +235,22 @@
   box-shadow: none !important;
 }
 
+/* Home chat assistant: global [class*="text-white"] rule tones Tailwind white/* to ~72% (reads cream on violet).
+   Use class names that do NOT contain the substring "text-white" so analysis stays clean white. */
+.workbench-root .home-chat-assistant-body {
+  color: rgba(255, 255, 255, 0.96) !important;
+}
+.workbench-root .home-chat-typing-row,
+.workbench-root .home-chat-busy-row {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+.workbench-root .home-chat-chip-label {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+.workbench-root .home-chat-thumb-caption {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
 /* Side nav: selected button text should look more "tech / premium". */
 .workbench-root aside button.text-white {
   color: transparent !important;
