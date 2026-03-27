@@ -701,7 +701,10 @@ export default async function handler(req: any, res: any) {
 
     let needsAnalysis = intent.needsAnalysis !== false
     let needsImageGen = !!intent.needsImageGen
-    const imageCount = Math.max(1, Math.min(4, Math.floor(Number(intent.imageCount) || 1)))
+    const imageCount = Math.max(
+      1,
+      Math.min(4, Math.floor(Number(params.imageCount) || Math.floor(Number(intent.imageCount) || 1))),
+    )
 
     // 首页要求：用户上传媒体后默认先做结构化商用分析；生成诉求可与分析并行返回
     needsAnalysis = true

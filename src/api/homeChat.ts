@@ -41,6 +41,7 @@ export type HomeChatTurnPayload = {
   params: {
     resolution: string
     aspectRatio: string
+    imageCount?: number
     style: string
     refWeight: number
     optimizePrompt: boolean

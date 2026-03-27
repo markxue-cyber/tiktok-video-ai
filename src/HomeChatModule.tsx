@@ -74,7 +74,8 @@ export type HomeChatSession = {
   messages: HomeChatMsg[]
   params: {
     resolution: '2K' | '4K' | 'HD'
-    aspectRatio: '1:1' | '16:9' | '9:16' | '4:3'
+    aspectRatio: '1:1' | '3:4' | '9:16' | '16:9' | '4:3'
+    imageCount: 1 | 2 | 4
     style: '写实' | '动漫' | '国潮' | '手绘' | '赛博朋克' | '水墨'
     refWeight: number
     subjectLock: 'high' | 'medium'
@@ -102,7 +103,8 @@ type PendingUpload = {
 
 const defaultParams = (): HomeChatSession['params'] => ({
   resolution: '2K',
-  aspectRatio: '1:1',
+  aspectRatio: '3:4',
+  imageCount: 2,
   style: '写实',
   refWeight: 0.7,
   subjectLock: 'high',
@@ -623,7 +625,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       attachments: attachments.length ? attachments : undefined,
     }
 
-    const paramLine = `【${s.params.resolution} · ${s.params.aspectRatio} · ${s.params.style} · 参考权重 ${s.params.refWeight.toFixed(2)}】`
+    const paramLine = `【${s.params.aspectRatio} · ${s.params.imageCount}张 · ${
+      s.params.subjectLock === 'high' ? '高保真' : '标准保真'
+    }】`
 
     setSessions((prev) =>
       prev.map((x) => {
@@ -670,6 +674,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         params: {
           resolution: s.params.resolution,
           aspectRatio: s.params.aspectRatio,
+          imageCount: s.params.imageCount,
           style: s.params.style,
           refWeight: s.params.refWeight,
           subjectLock: s.params.subjectLock,
@@ -1084,21 +1089,39 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             ? 'bg-violet-500/20 text-violet-100'
                             : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
                         }`}
-                        title="参数设置"
+                        title="高级设置"
                       >
                         <SlidersHorizontal className="h-3.5 w-3.5" />
-                        参数
+                        高级
                       </button>
 
                       <div className="min-w-0 flex-1 overflow-x-auto">
                         <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
-                          <span>{active?.params.resolution || '2K'}</span>
-                          <span className="text-white/25">/</span>
-                          <span>{active?.params.aspectRatio || '1:1'}</span>
-                          <span className="text-white/25">/</span>
-                          <span>{active?.params.style || '写实'}</span>
-                          <span className="text-white/25">/</span>
-                          <span>参考权重 {active?.params.refWeight?.toFixed(2)}</span>
+                          <span>比例</span>
+                          <select
+                            className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                            value={active?.params.aspectRatio || '3:4'}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
+                          >
+                            <option value="1:1">1:1</option>
+                            <option value="3:4">3:4</option>
+                            <option value="9:16">9:16</option>
+                          </select>
+                          <span className="text-white/25">·</span>
+                          <span>张数</span>
+                          <select
+                            className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                            value={active?.params.imageCount ?? 2}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
+                          >
+                            <option value={1}>1</option>
+                            <option value={2}>2</option>
+                            <option value={4}>4</option>
+                          </select>
+                          <span className="text-white/25">·</span>
+                          <span>{active?.params.subjectLock === 'high' ? '高保真' : '标准保真'}</span>
                         </div>
                       </div>
                     </div>
@@ -1129,20 +1152,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           </select>
                         </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                          <span className="shrink-0 whitespace-nowrap">比例</span>
-                          <select
-                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                            value={active?.params.aspectRatio || '1:1'}
-                            disabled={paramsDisabled}
-                            onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
-                          >
-                            <option value="1:1">1:1</option>
-                            <option value="16:9">16:9</option>
-                            <option value="9:16">9:16</option>
-                            <option value="4:3">4:3</option>
-                          </select>
-                        </label>
-                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                           <span className="shrink-0 whitespace-nowrap">风格</span>
                           <select
                             className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
@@ -1156,6 +1165,18 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             <option value="手绘">手绘</option>
                             <option value="赛博朋克">赛博朋克</option>
                             <option value="水墨">水墨</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                          <span className="shrink-0 whitespace-nowrap">主体保真</span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.subjectLock || 'high'}
+                            disabled={paramsDisabled}
+                            onChange={(e) => updateParams({ subjectLock: e.target.value as any })}
+                          >
+                            <option value="high">高</option>
+                            <option value="medium">中</option>
                           </select>
                         </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
@@ -1290,8 +1311,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <div className="whitespace-pre-wrap">{m.text}</div>
                       {active ? (
                         <div className="mt-2 text-[11px] leading-snug text-zinc-400/95">
-                          {active.params.resolution} · {active.params.aspectRatio} · {active.params.style} · 参考权重{' '}
-                          {active.params.refWeight.toFixed(2)}
+                          {active.params.aspectRatio} · {active.params.imageCount}张 ·{' '}
+                          {active.params.subjectLock === 'high' ? '高保真' : '标准保真'}
                         </div>
                       ) : null}
                     </UserBubble>
@@ -1540,21 +1561,39 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     ? 'bg-violet-500/20 text-violet-100'
                     : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
                 }`}
-                title="参数设置"
+                title="高级设置"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
-                参数
+                高级
               </button>
 
               <div className="min-w-0 flex-1 overflow-x-auto">
                 <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
-                  <span>{active?.params.resolution || '2K'}</span>
-                  <span className="text-white/25">/</span>
-                  <span>{active?.params.aspectRatio || '1:1'}</span>
-                  <span className="text-white/25">/</span>
-                  <span>{active?.params.style || '写实'}</span>
-                  <span className="text-white/25">/</span>
-                  <span>参考权重 {active?.params.refWeight?.toFixed(2)}</span>
+                  <span>比例</span>
+                  <select
+                    className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                    value={active?.params.aspectRatio || '3:4'}
+                    disabled={paramsDisabled}
+                    onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
+                  >
+                    <option value="1:1">1:1</option>
+                    <option value="3:4">3:4</option>
+                    <option value="9:16">9:16</option>
+                  </select>
+                  <span className="text-white/25">·</span>
+                  <span>张数</span>
+                  <select
+                    className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                    value={active?.params.imageCount ?? 2}
+                    disabled={paramsDisabled}
+                    onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
+                  >
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={4}>4</option>
+                  </select>
+                  <span className="text-white/25">·</span>
+                  <span>{active?.params.subjectLock === 'high' ? '高保真' : '标准保真'}</span>
                 </div>
               </div>
               </div>
@@ -1585,20 +1624,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     </select>
                   </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                    <span className="shrink-0 whitespace-nowrap">比例</span>
-                    <select
-                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                      value={active?.params.aspectRatio || '1:1'}
-                      disabled={paramsDisabled}
-                      onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
-                    >
-                      <option value="1:1">1:1</option>
-                      <option value="16:9">16:9</option>
-                      <option value="9:16">9:16</option>
-                      <option value="4:3">4:3</option>
-                    </select>
-                  </label>
-                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                     <span className="shrink-0 whitespace-nowrap">风格</span>
                     <select
                       className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
@@ -1612,6 +1637,18 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <option value="手绘">手绘</option>
                       <option value="赛博朋克">赛博朋克</option>
                       <option value="水墨">水墨</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                    <span className="shrink-0 whitespace-nowrap">主体保真</span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.subjectLock || 'high'}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ subjectLock: e.target.value as any })}
+                    >
+                      <option value="high">高</option>
+                      <option value="medium">中</option>
                     </select>
                   </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
