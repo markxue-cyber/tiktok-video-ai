@@ -1073,7 +1073,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
           <div
             ref={composerRef}
-            className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#18203a]/68 via-[#121a31]/64 to-[#101626]/68 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_28px_rgba(7,10,25,0.22)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
+            className="group rounded-[1.35rem] border border-white/12 bg-[linear-gradient(135deg,rgba(80,105,190,0.12)_0%,rgba(63,84,160,0.1)_40%,rgba(30,42,86,0.1)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_30px_rgba(8,12,28,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
           >
             <div className="flex items-end">
               <textarea
