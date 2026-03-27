@@ -911,8 +911,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           {showLanding ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-6">
               <div className="mx-auto w-full max-w-3xl">
-                <h1 className="text-center text-2xl font-semibold tracking-tight text-white">AI创作</h1>
-                <p className="mt-2 text-center text-sm text-white/40">让创作随灵感而生</p>
+                <h1 className="text-center text-4xl font-semibold tracking-tight text-white">给你灵感，也给你爆款</h1>
               </div>
               <div className="mx-auto mt-6 w-full max-w-3xl">
                 {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
