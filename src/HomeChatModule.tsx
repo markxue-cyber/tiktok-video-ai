@@ -657,7 +657,15 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
       if (!data?.success) {
         const code = String(data?.code || '')
-        const msg = String(data?.error || '请求失败')
+        const msgRaw = String(data?.error || '请求失败')
+        const msg =
+          code === 'BAD_MEDIA'
+            ? '素材读取失败，请重新上传图片/视频后重试。'
+            : code === 'UPSTREAM_FAILED'
+              ? '模型服务繁忙，请稍后重试；建议先简化需求或减少生成张数。'
+              : code === 'RATE_LIMITED'
+                ? '请求过于频繁，请等待 10-20 秒后重试。'
+                : msgRaw
         if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
         if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()
         const am: HomeChatMsg = {
@@ -738,10 +746,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       void onRefreshUser?.()
     } catch (e: any) {
       if (e?.name === 'AbortError') return
+      const raw = String(e?.message || '未知错误')
+      const actionable =
+        /Failed to fetch|NetworkError|network/i.test(raw)
+          ? '网络连接不稳定，请检查网络后重试。'
+          : /timeout|timed out/i.test(raw)
+            ? '请求超时，请稍后重试；建议先减少生成张数。'
+            : raw
       const am: HomeChatMsg = {
         id: `m_${Date.now()}_err`,
         role: 'assistant',
-        text: `请求失败：${e?.message || '未知错误'}`,
+        text: `请求失败：${actionable}`,
         blocked: true,
       }
       setSessions((prev) =>
@@ -1331,7 +1346,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 <AssistantBubble>
                   <div className="flex items-center gap-2.5 text-white/75">
                     <TypingDots />
-                    <span className="text-sm">AI 正在回复</span>
+                    <span className="text-sm">正在识别商品主体并生成商用分析/图片...</span>
                   </div>
                 </AssistantBubble>
               </div>

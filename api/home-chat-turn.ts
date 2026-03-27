@@ -12,6 +12,31 @@ const DEFAULT_NEG =
   '模糊、低分辨率、变形、失真、水印、多余文字、过曝、欠曝、构图混乱、肢体畸形、画面杂乱'
 
 const RATE_ERR = '请求过于频繁，请稍后再试'
+const ECOM_ANALYSIS_FORMAT = [
+  '请严格按以下结构输出，中文，分点简洁，不写无关寒暄：',
+  '【商品主体识别】',
+  '- 商品品类：',
+  '- 主体颜色：',
+  '- 材质质感：',
+  '- 风格定位：',
+  '【商用视觉诊断】',
+  '- 构图优点：',
+  '- 构图问题：',
+  '- 可提炼视觉卖点（3-5条，可直接用于标题/卖点）：',
+  '【平台适配建议】',
+  '- 淘宝：',
+  '- 抖音：',
+  '- 小红书：',
+  '- 亚马逊：',
+  '【场景与人群】',
+  '- 适用场景：',
+  '- 目标人群：',
+  '若媒体为视频，再额外输出：',
+  '【视频关键帧与动态卖点】',
+  '- 关键帧1/2/3（时间点 + 画面内容）：',
+  '- 动态展示功能亮点：',
+  '要求：所有结论必须对电商运营可执行，避免空泛描述；看不清的内容明确标注“无法确认”。',
+].join('\n')
 
 type MediaType = 'image' | 'video'
 
@@ -191,6 +216,15 @@ function mapResolutionLabel(label: string): string {
   return '2048'
 }
 
+function normalizeAspectRatio(input: string): string {
+  const x = String(input || '').trim()
+  // 首页模块优先电商常用比例；若传入异常则回落到 1:1
+  if (x === '1:1' || x === '3:4' || x === '9:16') return x
+  if (x === '16:9') return '9:16'
+  if (x === '4:3') return '3:4'
+  return '1:1'
+}
+
 function styleKeywords(style: string): string {
   const s = String(style || '写实')
   const map: Record<string, string> = {
@@ -233,10 +267,13 @@ function historyToMessages(
   const sys: ChatMessage = {
     role: 'system',
     content: [
-      '你是 GPT-4o 多模态助手，负责图片/视频内容理解、脚本与画面分析。',
-      '规则：输出清晰中文；不要编造无法从画面确认的事实；不要发起或暗示视频生成/剪辑操作。',
-      '若用户需要出图，本接口其它阶段会处理；你本段只负责分析与文字建议。',
-    ].join('\n'),
+      '你是面向电商商家的商品素材分析助手（首页模块）。',
+      '语气要求：自然、简洁、专业，避免冗余。',
+      '上下文要求：自动继承历史轮次中的商品主体信息，除非用户明确要求换品，不要反复确认同一主体。',
+      '事实要求：仅基于可见信息下结论；不确定就明确写“无法确认”。',
+      '任务边界：本阶段只做理解分析与运营建议，不执行视频生成/剪辑指令。',
+      ECOM_ANALYSIS_FORMAT,
+    ].join('\n\n'),
   }
   out.push(sys)
   const tail = history.slice(-40)
@@ -521,11 +558,11 @@ export default async function handler(req: any, res: any) {
     let needsImageGen = !!intent.needsImageGen
     const imageCount = Math.max(1, Math.min(4, Math.floor(Number(intent.imageCount) || 1)))
 
-    if (!needsAnalysis && !needsImageGen) {
-      needsAnalysis = true
-    }
+    // 首页要求：用户上传媒体后默认先做结构化商用分析；生成诉求可与分析并行返回
+    needsAnalysis = true
+    if (!needsAnalysis && !needsImageGen) needsAnalysis = true
 
-    const aspectRatio = String(params.aspectRatio || '1:1')
+    const aspectRatio = normalizeAspectRatio(String(params.aspectRatio || '1:1'))
     const resolution = mapResolutionLabel(String(params.resolution || '2K'))
     const style = String(params.style || '写实')
     const refWeight = Number.isFinite(Number(params.refWeight)) ? Number(params.refWeight) : 0.7
@@ -555,8 +592,12 @@ export default async function handler(req: any, res: any) {
       if (optimizePrompt) {
         try {
           const op = await gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
-            '你是提示词工程师，将用户出图需求改写为适配 nano-banana-2 的中文+英文关键词提示。',
-            '必须保留用户核心主体与风格要求；补充光影、构图、材质与画面细节；不要引入违规内容。',
+            '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
+            '核心原则：严格保留商品主体结构/颜色/比例，不变形、不换款；仅按用户意图做局部修改。',
+            '若用户是“换场景/更亮一点/突出质感/改白底主图”等微调意图，只改指定部分，不重做无关元素。',
+            '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。',
+            `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
+            '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
             '输出 JSON：{"optimized":"..."}',
           ].join('\n'),
             JSON.stringify({
@@ -578,6 +619,8 @@ export default async function handler(req: any, res: any) {
         styleKeywords(style),
         `画幅比例 ${aspectRatio}`,
         hdEnhance ? 'high detail, sharp focus, clean texture' : '',
+        'ecommerce product photography, preserve product geometry and color fidelity',
+        'clean premium background, no extra text, no watermark, no irrelevant objects',
         `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
       ]
         .filter(Boolean)
@@ -628,12 +671,26 @@ export default async function handler(req: any, res: any) {
       analysisText,
     })
   } catch (e: any) {
-    const msg = String(e?.message || 'Unknown error')
+    const rawMsg = String(e?.message || 'Unknown error')
+    let msg = rawMsg
     let code = 'UNKNOWN'
-    const t = msg.toLowerCase()
-    if (t.includes('请先完成本产品内') || t.includes('付费订单')) code = 'PAYMENT_REQUIRED'
-    else if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
-    else if (msg.includes(RATE_ERR)) code = 'RATE_LIMITED'
+    const t = rawMsg.toLowerCase()
+    if (t.includes('请先完成本产品内') || t.includes('付费订单')) {
+      code = 'PAYMENT_REQUIRED'
+      msg = '当前套餐暂不支持继续生成，请先开通或升级后重试。'
+    } else if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) {
+      code = 'QUOTA_EXHAUSTED'
+      msg = '今日额度已用尽，建议升级套餐或明日再试。'
+    } else if (rawMsg.includes(RATE_ERR)) {
+      code = 'RATE_LIMITED'
+      msg = '操作过于频繁，请等待 10-20 秒后重试；可先减少同时生成张数。'
+    } else if (t.includes('非法 mediaurl') || t.includes('bad_media')) {
+      code = 'BAD_MEDIA'
+      msg = '素材地址无效，请重新上传到资产库后再发起分析或生成。'
+    } else if (t.includes('上游') || t.includes('llm请求失败') || t.includes('analysis_failed')) {
+      code = 'UPSTREAM_FAILED'
+      msg = '模型服务暂时繁忙，请稍后重试；如多次失败，建议简化需求后再提交。'
+    }
     return res.status(200).json({ success: false, error: msg, code })
   }
 }
