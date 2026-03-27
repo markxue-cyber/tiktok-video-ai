@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Download,
   Folder,
+  ImagePlus,
   Pencil,
   Pin,
   Plus,
@@ -1068,7 +1069,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
             <div className="flex items-end gap-2.5">
               <div className="isolate flex min-h-[5.25rem] min-w-0 flex-1 overflow-visible">
                 <div
-                  className="relative z-10 flex min-w-[2.75rem] shrink-0 flex-col justify-start border-r border-white/10 pb-2 pl-2 pr-2 pt-2.5"
+                  className="relative z-10 flex min-w-[4rem] shrink-0 flex-col items-center justify-start border-r border-white/10 p-2"
                   ref={plusMenuRef}
                 >
                   <button
@@ -1079,10 +1080,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                       setPlusMenuOpen((v) => !v)
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-violet-600 to-indigo-600 text-white shadow-[0_4px_14px_rgba(124,58,237,0.35)] transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:opacity-45"
+                    className="flex h-14 w-12 shrink-0 items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/[0.02] text-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-violet-300/55 hover:bg-violet-500/10 hover:text-violet-100 active:scale-95 disabled:opacity-45"
                     title="上传"
                   >
-                    <Plus className="pointer-events-none h-4 w-4 stroke-[2.25]" />
+                    <ImagePlus className="pointer-events-none h-6 w-6 stroke-[1.9]" />
                   </button>
                   {plusMenuOpen ? (
                     <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
