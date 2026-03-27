@@ -1067,11 +1067,37 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
           <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
             <div className="flex items-end gap-2.5">
-              <div className="isolate flex min-h-[5.25rem] min-w-0 flex-1 overflow-visible">
-                <div
-                  className="relative z-10 flex min-w-[4rem] shrink-0 flex-col items-center justify-start border-r border-white/10 p-2"
-                  ref={plusMenuRef}
-                >
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={inputDisabled}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (canSend) void handleSend()
+                  }
+                }}
+                placeholder={
+                  !hasThreadMedia && !pendingReady
+                    ? '上传图片或视频，开始对话'
+                    : '请输入您的需求，支持图片分析、图片生成、视频分析'
+                }
+                rows={3}
+                className="min-h-[5.25rem] min-w-0 flex-1 resize-none rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/28 focus:border-violet-400/25 focus:ring-1 focus:ring-violet-400/20 disabled:opacity-45"
+              />
+              <button
+                type="button"
+                disabled={!canSend}
+                onClick={() => void handleSend()}
+                className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
+              >
+                发送
+              </button>
+            </div>
+
+            <div className="mt-3 border-t border-white/10 pt-2.5">
+              <div className="flex items-start gap-2.5">
+                <div className="relative shrink-0" ref={plusMenuRef}>
                   <button
                     type="button"
                     disabled={busy}
@@ -1080,10 +1106,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                       setPlusMenuOpen((v) => !v)
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="flex h-14 w-12 shrink-0 items-center justify-center rounded-2xl border border-dashed border-white/30 bg-white/[0.02] text-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-violet-300/55 hover:bg-violet-500/10 hover:text-violet-100 active:scale-95 disabled:opacity-45"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-dashed border-white/30 bg-white/[0.02] text-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-violet-300/55 hover:bg-violet-500/10 hover:text-violet-100 active:scale-95 disabled:opacity-45"
                     title="上传"
                   >
-                    <ImagePlus className="pointer-events-none h-6 w-6 stroke-[1.9]" />
+                    <ImagePlus className="pointer-events-none h-[18px] w-[18px] stroke-[2]" />
                   </button>
                   {plusMenuOpen ? (
                     <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
@@ -1114,95 +1140,68 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
                   />
                 </div>
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  disabled={inputDisabled}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      if (canSend) void handleSend()
-                    }
-                  }}
-                  placeholder={
-                    !hasThreadMedia && !pendingReady
-                      ? '上传图片或视频，开始对话'
-                      : '请输入您的需求，支持图片分析、图片生成、视频分析'
-                  }
-                  rows={3}
-                  className="relative z-0 min-h-[5.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent py-3 pl-2 pr-3 text-sm leading-relaxed text-white/90 outline-none ring-0 placeholder:text-white/28 focus:ring-0 disabled:opacity-45"
-                />
+                <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                    <span className="shrink-0 whitespace-nowrap">分辨率</span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.resolution || '2K'}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ resolution: e.target.value as any })}
+                    >
+                      <option value="2K">2K</option>
+                      <option value="4K">4K</option>
+                      <option value="HD">HD</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                    <span className="shrink-0 whitespace-nowrap">比例</span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.aspectRatio || '1:1'}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
+                    >
+                      <option value="1:1">1:1</option>
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16</option>
+                      <option value="4:3">4:3</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                    <span className="shrink-0 whitespace-nowrap">风格</span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.style || '写实'}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ style: e.target.value as any })}
+                    >
+                      <option value="写实">写实</option>
+                      <option value="动漫">动漫</option>
+                      <option value="国潮">国潮</option>
+                      <option value="手绘">手绘</option>
+                      <option value="赛博朋克">赛博朋克</option>
+                      <option value="水墨">水墨</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                    <span className="shrink-0 whitespace-nowrap tabular-nums">
+                      参考权重 {active?.params.refWeight?.toFixed(2)}
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={active?.params.refWeight ?? 0.7}
+                      disabled={paramsDisabled}
+                      onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
+                      className="min-w-0 flex-1"
+                    />
+                  </label>
+                </div>
               </div>
-            <button
-              type="button"
-              disabled={!canSend}
-              onClick={() => void handleSend()}
-              className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
-            >
-              发送
-            </button>
-          </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-              <span className="shrink-0 whitespace-nowrap">分辨率</span>
-              <select
-                className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                value={active?.params.resolution || '2K'}
-                disabled={paramsDisabled}
-                onChange={(e) => updateParams({ resolution: e.target.value as any })}
-              >
-                <option value="2K">2K</option>
-                <option value="4K">4K</option>
-                <option value="HD">HD</option>
-              </select>
-            </label>
-            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-              <span className="shrink-0 whitespace-nowrap">比例</span>
-              <select
-                className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                value={active?.params.aspectRatio || '1:1'}
-                disabled={paramsDisabled}
-                onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
-              >
-                <option value="1:1">1:1</option>
-                <option value="16:9">16:9</option>
-                <option value="9:16">9:16</option>
-                <option value="4:3">4:3</option>
-              </select>
-            </label>
-            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-              <span className="shrink-0 whitespace-nowrap">风格</span>
-              <select
-                className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                value={active?.params.style || '写实'}
-                disabled={paramsDisabled}
-                onChange={(e) => updateParams({ style: e.target.value as any })}
-              >
-                <option value="写实">写实</option>
-                <option value="动漫">动漫</option>
-                <option value="国潮">国潮</option>
-                <option value="手绘">手绘</option>
-                <option value="赛博朋克">赛博朋克</option>
-                <option value="水墨">水墨</option>
-              </select>
-            </label>
-            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-              <span className="shrink-0 whitespace-nowrap tabular-nums">
-                参考权重 {active?.params.refWeight?.toFixed(2)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={active?.params.refWeight ?? 0.7}
-                disabled={paramsDisabled}
-                onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
-                className="min-w-0 flex-1"
-              />
-            </label>
+            </div>
           </div>
           <div className="mt-3 hidden grid sm:grid-cols-2 gap-2 text-xs text-white/80" aria-hidden>
             <label className="inline-flex items-center gap-2">
