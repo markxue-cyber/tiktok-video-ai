@@ -345,7 +345,7 @@ function UserBubble({
 }) {
   return (
     <div
-      className={`max-w-[min(85%,40rem)] rounded-3xl border border-white/12 bg-gradient-to-br from-violet-900/55 via-purple-900/45 to-fuchsia-900/40 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.35)] px-4 py-3 text-sm leading-relaxed text-white/95 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_40px_rgba(139,92,246,0.18)] ${className}`}
+      className={`home-chat-user-bubble max-w-[min(85%,40rem)] rounded-3xl border border-white/12 bg-gradient-to-br from-violet-900/55 via-purple-900/45 to-fuchsia-900/40 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.35)] px-4 py-3 text-sm leading-relaxed transition duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_40px_rgba(139,92,246,0.18)] ${className}`}
     >
       {children}
     </div>
@@ -1392,7 +1392,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     )
 
   return (
-    <div className="flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
+    <div className="home-chat-module-root flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
       <div className="flex h-full min-w-0 flex-1 flex-col min-h-0">
         <div
           className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(88,70,166,0.18)_0%,rgba(46,62,130,0.12)_28%,rgba(16,22,40,0.94)_62%,rgba(10,14,26,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
@@ -1427,7 +1427,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
                 <div
                   ref={composerRef}
-                  className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
+                  className="home-chat-composer-inner group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
                 >
                   <HomeComposerPendingStrip
                     items={pendingUploads}
@@ -1447,7 +1447,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       }}
                       placeholder={composerPlaceholder}
                       rows={1}
-                      className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0"
+                      className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
                     />
                   </div>
 
@@ -1720,9 +1720,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           ))}
                         </div>
                       ) : null}
-                      <div className="whitespace-pre-wrap">{m.text}</div>
+                      <div className="home-chat-user-body whitespace-pre-wrap">{m.text}</div>
                       {m.sendParams ? (
-                        <div className="mt-2 text-[11px] leading-snug text-zinc-400/95">
+                        <div className="home-chat-meta-row mt-2 text-[11px] leading-snug">
                           {m.sendParams.aspectRatio} · {m.sendParams.imageCount}张 ·{' '}
                           {m.sendParams.subjectLock === 'high' ? '高保真' : '标准保真'}
                         </div>
@@ -1731,7 +1731,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   ) : (
                     <AssistantBubble>
                       {m.blocked ? (
-                        <div className="whitespace-pre-wrap text-amber-100/95">{displayAssistantText(m)}</div>
+                        <div className="home-chat-assistant-blocked whitespace-pre-wrap">
+                          {displayAssistantText(m)}
+                        </div>
                       ) : (
                         <>
                           {m.pendingAnalysis && !String(m.text || '').trim() ? (
@@ -1769,7 +1771,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             </div>
                           ) : null}
                           {!m.pendingAnalysis && m.followUps?.length ? (
-                            <div className="mt-3 border-t border-white/10 pt-3">
+                            <div className="home-chat-followup-row mt-3 border-t border-white/10 pt-3">
                               <div className="home-chat-chip-label mb-1.5 text-[10px] font-medium uppercase tracking-wide">
                                 快捷指令
                               </div>
@@ -1782,8 +1784,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                       type="button"
                                       className={
                                         primary
-                                          ? 'rounded-lg border border-violet-400/45 bg-violet-500/22 px-3 py-1.5 text-xs font-medium text-violet-50/95 shadow-[0_0_0_1px_rgba(139,92,246,0.12)] transition hover:border-violet-300/55 hover:bg-violet-500/30'
-                                          : 'rounded-lg border border-white/12 bg-white/[0.05] px-2.5 py-1.5 text-[11px] text-white/72 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white/90'
+                                          ? 'rounded-lg border border-white/22 bg-white/[0.08] px-3 py-1.5 text-xs font-medium shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] transition hover:border-white/32 hover:bg-white/[0.12]'
+                                          : 'rounded-lg border border-white/12 bg-white/[0.05] px-2.5 py-1.5 text-[11px] transition hover:border-white/20 hover:bg-white/[0.08]'
                                       }
                                       onClick={() => {
                                         if (t === '确认高清生成') {
@@ -1810,12 +1812,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             ))}
 
             {showSuggestTags ? (
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="home-chat-suggest-row flex flex-wrap justify-end gap-2">
                 {suggestTags.map((t) => (
                   <button
                     key={t}
                     type="button"
-                    className="rounded-lg border border-violet-400/30 bg-violet-500/12 px-3 py-1.5 text-xs text-violet-100/90 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-white"
+                    className="rounded-lg border border-white/20 bg-white/[0.06] px-3 py-1.5 text-xs transition hover:border-white/30 hover:bg-white/[0.1]"
                     onClick={() => setInput(t)}
                   >
                     {t}
@@ -1852,7 +1854,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
           <div
             ref={composerRef}
-            className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
+            className="home-chat-composer-inner group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
           >
             <HomeComposerPendingStrip
               items={pendingUploads}
@@ -1872,7 +1874,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 }}
                 placeholder={composerPlaceholder}
                 rows={1}
-                className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0"
+                className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
               />
             </div>
 

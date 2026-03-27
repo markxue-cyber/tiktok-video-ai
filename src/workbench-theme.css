@@ -235,20 +235,83 @@
   box-shadow: none !important;
 }
 
-/* Home chat assistant: global [class*="text-white"] rule tones Tailwind white/* to ~72% (reads cream on violet).
-   Use class names that do NOT contain the substring "text-white" so analysis stays clean white. */
-.workbench-root .home-chat-assistant-body {
+/* Home chat: unified white copy (avoid gold/cream tints from global text-white/* overrides or WebKit fill). */
+.workbench-root .home-chat-user-bubble,
+.workbench-root .home-chat-user-bubble .home-chat-user-body,
+.workbench-root .home-chat-user-bubble .home-chat-user-body * {
   color: rgba(255, 255, 255, 0.96) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.96) !important;
 }
+
+.workbench-root .home-chat-meta-row {
+  color: rgba(255, 255, 255, 0.72) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.workbench-root .home-chat-assistant-body,
+.workbench-root .home-chat-assistant-body * {
+  color: rgba(255, 255, 255, 0.98) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.98) !important;
+}
+
+.workbench-root .home-chat-assistant-blocked,
+.workbench-root .home-chat-assistant-blocked * {
+  color: rgba(255, 255, 255, 0.94) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.94) !important;
+}
+
 .workbench-root .home-chat-typing-row,
-.workbench-root .home-chat-busy-row {
-  color: rgba(255, 255, 255, 0.9) !important;
+.workbench-root .home-chat-typing-row *,
+.workbench-root .home-chat-busy-row,
+.workbench-root .home-chat-busy-row * {
+  color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
 }
+
 .workbench-root .home-chat-chip-label {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.55) !important;
 }
+
 .workbench-root .home-chat-thumb-caption {
+  color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Composer: textarea + toolbar labels (no Tailwind text-white/* in class names to dodge global tone-down). */
+.workbench-root .home-chat-module-root .home-chat-composer-inner textarea.home-chat-composer-textarea {
+  color: rgba(255, 255, 255, 0.96) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+.workbench-root .home-chat-module-root .home-chat-composer-inner textarea.home-chat-composer-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.38) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.38) !important;
+}
+
+.workbench-root .home-chat-module-root .home-chat-composer-inner label,
+.workbench-root .home-chat-module-root .home-chat-composer-inner span,
+.workbench-root .home-chat-module-root .home-chat-composer-inner select,
+.workbench-root .home-chat-module-root .home-chat-composer-inner .tikgen-spec-select {
   color: rgba(255, 255, 255, 0.9) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.workbench-root .home-chat-module-root .home-chat-composer-inner button:not([class*='from-fuchsia']):not([class*='to-indigo']) {
+  color: rgba(255, 255, 255, 0.9) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.workbench-root .home-chat-module-root .home-chat-composer-inner button[class*='from-fuchsia'],
+.workbench-root .home-chat-module-root .home-chat-composer-inner button[class*='from-fuchsia'] span {
+  color: rgba(255, 255, 255, 1) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 1) !important;
+}
+
+.workbench-root .home-chat-module-root .home-chat-suggest-row button,
+.workbench-root .home-chat-module-root .home-chat-followup-row button {
+  color: rgba(255, 255, 255, 0.92) !important;
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.92) !important;
 }
 
 /* Side nav: selected button text should look more "tech / premium". */
