@@ -104,6 +104,76 @@ type PendingUpload = {
   fromAsset?: boolean
 }
 
+/** 输入框内左上角：待上传缩略图 + 删除 / 重试 */
+function HomeComposerPendingStrip({
+  items,
+  onRemove,
+  onRetry,
+}: {
+  items: PendingUpload[]
+  onRemove: (id: string) => void
+  onRetry: (id: string) => void
+}) {
+  if (!items.length) return null
+  return (
+    <div className="mb-2 flex flex-wrap gap-2">
+      {items.map((p) => (
+        <div
+          key={p.id}
+          title={p.name}
+          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-black/35 sm:h-[4.25rem] sm:w-[4.25rem]"
+        >
+          {p.status === 'done' && p.url ? (
+            p.type === 'image' ? (
+              <img src={p.url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <video src={p.url} className="h-full w-full object-cover" muted playsInline />
+            )
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Upload className="h-6 w-6 text-white/30" />
+            </div>
+          )}
+          {p.status === 'uploading' ? (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/15">
+              <div
+                className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-[width]"
+                style={{ width: `${Math.max(5, p.progress)}%` }}
+              />
+            </div>
+          ) : null}
+          {p.status === 'error' ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/65 p-1">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />
+              <button
+                type="button"
+                className="rounded bg-white/12 px-1.5 py-0.5 text-[10px] text-white/95 hover:bg-white/20"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRetry(p.id)
+                }}
+              >
+                重试
+              </button>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="absolute right-0.5 top-0.5 z-[1] flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white shadow transition hover:bg-black/85"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRemove(p.id)
+            }}
+            aria-label="移除"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const defaultParams = (): HomeChatSession['params'] => ({
   resolution: '2K',
   aspectRatio: '3:4',
@@ -329,9 +399,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
-  /** 新建对话且尚未上传/发送：展示「AI创作」标题 + 上移输入区 + 功能卡片 */
-  const showLanding =
-    !!active && active.messages.length === 0 && !pendingUploads.length && !busy
+  /** 新建对话且尚未发送首条消息：展示标题 + 上移输入区 + 功能卡片（待上传附件在输入框内展示，不切换布局） */
+  const showLanding = !!active && active.messages.length === 0 && !busy
 
   const hasThreadMedia = useMemo(() => {
     if (!active) return false
@@ -982,6 +1051,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   )
 
   const pendingReady = pendingUploads.some((p) => p.status === 'done' && p.url)
+  const composerPlaceholder = pendingReady
+    ? '说说你想怎样改文字、编辑或使用图片'
+    : pendingUploads.some((p) => p.status === 'uploading')
+      ? '媒体上传处理中…'
+      : !hasThreadMedia && !pendingReady
+        ? '上传图片或视频，开始对话'
+        : '请输入您的需求，支持图片分析、图片生成、视频分析'
   const canSend =
     !busy && (pendingReady || (!!input.trim() && hasThreadMedia))
 
@@ -1080,6 +1156,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   ref={composerRef}
                   className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
                 >
+                  <HomeComposerPendingStrip
+                    items={pendingUploads}
+                    onRemove={removePending}
+                    onRetry={retryPending}
+                  />
                   <div className="flex items-end">
                     <textarea
                       ref={inputRef}
@@ -1092,11 +1173,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           if (canSend) void handleSend()
                         }
                       }}
-                      placeholder={
-                        !hasThreadMedia && !pendingReady
-                          ? '上传图片或视频，开始对话'
-                          : '请输入您的需求，支持图片分析、图片生成、视频分析'
-                      }
+                      placeholder={composerPlaceholder}
                       rows={1}
                       className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
                     />
@@ -1451,64 +1528,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               </div>
             ))}
 
-            {pendingUploads.length > 0 ? (
-              <div className="flex flex-col items-end gap-2">
-                {pendingUploads.map((p) => (
-                  <UserBubble key={p.id}>
-                    <div className="flex items-start gap-3">
-                      <div className="w-24 h-20 rounded-xl border border-white/12 bg-black/40 overflow-hidden flex items-center justify-center shrink-0">
-                        {p.status === 'done' && p.url ? (
-                          p.type === 'image' ? (
-                            <img src={p.url} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <video src={p.url} className="h-full w-full object-cover" muted playsInline />
-                          )
-                        ) : (
-                          <Upload className="h-7 w-7 text-white/35" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{p.name}</div>
-                        <div className="text-[11px] text-white/40">{p.sizeLabel}</div>
-                        {p.status === 'uploading' ? (
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-                            <div
-                              className="h-full bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 transition-[width]"
-                              style={{ width: `${p.progress}%` }}
-                            />
-                          </div>
-                        ) : null}
-                        {p.status === 'error' ? (
-                          <div className="mt-2 space-y-2">
-                            <div className="flex items-start gap-2 text-xs text-red-300/95">
-                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400/95" aria-hidden />
-                              <span>{p.error}</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="rounded-lg border border-red-400/35 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100/95 transition hover:bg-red-500/18"
-                              onClick={() => retryPending(p.id)}
-                            >
-                              重新上传
-                            </button>
-                          </div>
-                        ) : null}
-                        {p.status === 'done' ? (
-                          <button
-                            type="button"
-                            className="mt-2 text-[11px] text-white/45 hover:text-white/70"
-                            onClick={() => removePending(p.id)}
-                          >
-                            移除
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </UserBubble>
-                ))}
-              </div>
-            ) : null}
-
             {showSuggestTags ? (
               <div className="flex flex-wrap justify-end gap-2">
                 {suggestTags.map((t) => (
@@ -1556,6 +1575,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             ref={composerRef}
             className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
           >
+            <HomeComposerPendingStrip
+              items={pendingUploads}
+              onRemove={removePending}
+              onRetry={retryPending}
+            />
             <div className="flex items-end">
               <textarea
                 ref={inputRef}
@@ -1568,11 +1592,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     if (canSend) void handleSend()
                   }
                 }}
-                placeholder={
-                  !hasThreadMedia && !pendingReady
-                    ? '上传图片或视频，开始对话'
-                    : '请输入您的需求，支持图片分析、图片生成、视频分析'
-                }
+                placeholder={composerPlaceholder}
                 rows={1}
                 className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
               />
