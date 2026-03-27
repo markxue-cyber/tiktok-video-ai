@@ -863,7 +863,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-4 overflow-hidden">
       <div className="flex h-full min-w-0 flex-1 flex-col min-h-0">
         <div
-          className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#0c0e16_0%,#080a10_55%,#06070c_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+          className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(88,70,166,0.18)_0%,rgba(46,62,130,0.12)_28%,rgba(16,22,40,0.94)_62%,rgba(10,14,26,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
           onDragEnter={(e) => {
             e.preventDefault()
             setDragOver(true)
@@ -1067,13 +1067,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
         </div>
 
-        <div className="shrink-0 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-3 pt-2.5 backdrop-blur-xl">
+        <div className="shrink-0 bg-transparent px-4 pb-3 pt-2.5">
           {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
           {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
           <div
             ref={composerRef}
-            className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(13,16,25,0.92)_0%,rgba(9,11,18,0.96)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_26px_rgba(0,0,0,0.22)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
+            className="group rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,38,0.82)_0%,rgba(10,14,28,0.88)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_22px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/30 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.1)] focus-within:border-violet-400/30 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.1)]"
           >
             <div className="flex items-end">
               <textarea
