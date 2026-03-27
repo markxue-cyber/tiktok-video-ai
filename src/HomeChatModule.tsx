@@ -858,7 +858,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-3 overflow-hidden">
+    <div className="flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
       <div className="flex h-full min-w-0 flex-1 flex-col min-h-0">
         <div
           className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(88,70,166,0.18)_0%,rgba(46,62,130,0.12)_28%,rgba(16,22,40,0.94)_62%,rgba(10,14,26,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
@@ -1289,7 +1289,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     </div>
 
       <aside
-        className={`sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[width,padding] duration-200 ${
+        className={`sticky top-[7.5rem] flex h-[calc(100vh-6.75rem)] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[width,padding] duration-200 ${
           sidebarCollapsed ? 'w-[58px] px-2 py-3' : 'w-[292px]'
         }`}
       >
