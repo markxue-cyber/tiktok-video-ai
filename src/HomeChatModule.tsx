@@ -290,6 +290,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const [paramsOpen, setParamsOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const composerRef = useRef<HTMLDivElement | null>(null)
   const plusMenuRef = useRef<HTMLDivElement | null>(null)
@@ -1072,7 +1073,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
           <div
             ref={composerRef}
-            className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
+            className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#18203a]/68 via-[#121a31]/64 to-[#101626]/68 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_28px_rgba(7,10,25,0.22)] backdrop-blur-xl transition-[border-color,box-shadow,background] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
           >
             <div className="flex items-end">
               <textarea
@@ -1288,89 +1289,106 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       </div>
     </div>
 
-      <aside className="sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] w-[320px] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      <aside
+        className={`sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[width,padding] duration-200 ${
+          sidebarCollapsed ? 'w-[68px] px-2 py-3' : 'w-[320px]'
+        }`}
+      >
         <button
           type="button"
-          onClick={newChat}
-          className="mb-4 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
+          onClick={() => setSidebarCollapsed((v) => !v)}
+          className="mb-3 inline-flex h-9 w-9 shrink-0 items-center justify-center self-end rounded-lg border border-white/12 bg-white/[0.04] text-white/75 transition hover:border-violet-400/35 hover:text-violet-200"
+          title={sidebarCollapsed ? '展开历史对话' : '收起历史对话'}
         >
-          <span className="inline-flex items-center justify-center gap-2">
-            <Plus className="h-4 w-4" /> 新建对话
-          </span>
+          {sidebarCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
-        <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
-        <input
-          value={sessionSearch}
-          onChange={(e) => setSessionSearch(e.target.value)}
-          placeholder="搜索标题或时间"
-          className="mb-3 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md placeholder:text-white/30 outline-none focus:border-violet-400/35 focus:ring-1 focus:ring-violet-400/20"
-        />
-        <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-          {filteredSessions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-white/40">暂无历史对话，点击「新建对话」开始创作</div>
-          ) : (
-            filteredSessions.map((s) => (
-              <div
-                key={s.id}
-                className={`cursor-pointer rounded-2xl border p-3 backdrop-blur-md transition ${
-                  s.id === activeId
-                    ? 'border-violet-400/45 bg-gradient-to-br from-violet-900/35 via-[#1a1d28]/90 to-[#14161f]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
-                    : 'border-white/10 bg-gradient-to-br from-[#1a1d28]/75 via-[#14161f]/80 to-[#10121a]/85 hover:border-violet-400/35 hover:bg-gradient-to-br hover:from-violet-900/25 hover:via-[#1a1d28]/90 hover:to-[#14161f]/95'
-                }`}
-                onClick={() => setActiveId(s.id)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-white/90">{s.title}</div>
-                    <div className="mt-1 text-[11px] text-white/40">{new Date(s.createdAt).toLocaleString()}</div>
+
+        {sidebarCollapsed ? null : (
+          <>
+            <button
+              type="button"
+              onClick={newChat}
+              className="mb-4 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
+            >
+              <span className="inline-flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" /> 新建对话
+              </span>
+            </button>
+            <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
+            <input
+              value={sessionSearch}
+              onChange={(e) => setSessionSearch(e.target.value)}
+              placeholder="搜索标题或时间"
+              className="mb-3 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md placeholder:text-white/30 outline-none focus:border-violet-400/35 focus:ring-1 focus:ring-violet-400/20"
+            />
+            <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+              {filteredSessions.length === 0 ? (
+                <div className="py-8 text-center text-xs text-white/40">暂无历史对话，点击「新建对话」开始创作</div>
+              ) : (
+                filteredSessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className={`cursor-pointer rounded-2xl border p-3 backdrop-blur-md transition ${
+                      s.id === activeId
+                        ? 'border-violet-400/45 bg-gradient-to-br from-violet-900/35 via-[#1a1d28]/90 to-[#14161f]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+                        : 'border-white/10 bg-gradient-to-br from-[#1a1d28]/75 via-[#14161f]/80 to-[#10121a]/85 hover:border-violet-400/35 hover:bg-gradient-to-br hover:from-violet-900/25 hover:via-[#1a1d28]/90 hover:to-[#14161f]/95'
+                    }`}
+                    onClick={() => setActiveId(s.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-white/90">{s.title}</div>
+                        <div className="mt-1 text-[11px] text-white/40">{new Date(s.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
+                          title="置顶"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            togglePin(s.id)
+                          }}
+                        >
+                          <Pin className={`h-3.5 w-3.5 ${s.pinned ? 'text-amber-200' : ''}`} />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
+                          title="重命名"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            renameSession(s.id)
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
+                          title="删除"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteSession(s.id)
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      type="button"
-                      className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
-                      title="置顶"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        togglePin(s.id)
-                      }}
-                    >
-                      <Pin className={`h-3.5 w-3.5 ${s.pinned ? 'text-amber-200' : ''}`} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
-                      title="重命名"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        renameSession(s.id)
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
-                      title="删除"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteSession(s.id)
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={clearAll}
-          className="mt-3 shrink-0 rounded-xl border border-white/12 py-2 text-sm text-white/70 transition hover:border-white/18 hover:bg-white/[0.04]"
-        >
-          清空全部历史
-        </button>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={clearAll}
+              className="mt-3 shrink-0 rounded-xl border border-white/12 py-2 text-sm text-white/70 transition hover:border-white/18 hover:bg-white/[0.04]"
+            >
+              清空全部历史
+            </button>
+          </>
+        )}
       </aside>
 
       {showAssetPicker ? (
