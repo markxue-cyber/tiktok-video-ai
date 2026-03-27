@@ -4421,10 +4421,8 @@ function ImageGenerator({
   /** 图片生成（简版）：主提示词输入，不参与爆款风格链路 */
   const [simpleDirectPrompt, setSimpleDirectPrompt] = useState('')
   const [simplePromptPolishBusy, setSimplePromptPolishBusy] = useState(false)
-  /** 简版批量出图：切换 Tab / 卸载时中止未完成的 fetch，避免后台继续占并发 */
+  /** 简版批量出图：仅用于当前批次取消控制，不在切页时主动中断 */
   const imageGenSimpleBatchAbortRef = useRef<AbortController | null>(null)
-  /** 记录简版面板是否曾处于可见，用于仅在「可见→不可见」时 abort，避免 effect cleanup 误杀（如 React Strict Mode 重挂载） */
-  const prevSimpleImageGenVisibleRef = useRef<boolean | null>(null)
   const [model, setModel] = useState('nano-banana-2')
   const [size, setSize] = useState<ImageAspect>('1:1')
   const [resolution, setResolution] = useState<ImageRes>('2048')
@@ -4762,17 +4760,6 @@ function ImageGenerator({
   useEffect(() => {
     sceneRunBoardRef.current = sceneRunBoard
   }, [sceneRunBoard])
-
-  /** 简版：仅在面板从可见变为不可见时中止出图（切走子导航/离开图片模块），不在每次 effect cleanup 中止 */
-  useEffect(() => {
-    if (!isSimpleImageGen) return
-    const prev = prevSimpleImageGenVisibleRef.current
-    prevSimpleImageGenVisibleRef.current = visible
-    if (prev === true && visible === false) {
-      imageGenSimpleBatchAbortRef.current?.abort()
-      imageGenSimpleBatchAbortRef.current = null
-    }
-  }, [isSimpleImageGen, visible])
 
   /** 简版：每张出图完成后再次尝试写入资产库（与槽位内归档互补，保证列表及时刷新） */
   useEffect(() => {
@@ -6508,7 +6495,10 @@ function ImageGenerator({
     })
   }
 
-  const runBatchGenerateForBoard = async (snap: SceneRunBoard | null) => {
+  const runBatchGenerateForBoard = async (
+    snap: SceneRunBoard | null,
+    opts?: { resumeInProgress?: boolean },
+  ) => {
     if (!canGenerate) {
       setGenErrorText('请先完成本产品内付费（购买套餐）后再生成图片')
       setGenErrorCode('PAYMENT_REQUIRED')
@@ -6521,7 +6511,13 @@ function ImageGenerator({
     const targetEntries = isSimpleImageGen ? selEntries.slice(0, imageGenerateCount) : selEntries
     const indices: number[] = []
     targetEntries.forEach(({ s, i }) => {
-      if (s.status === 'pending' || s.status === 'failed') indices.push(i)
+      if (
+        s.status === 'pending' ||
+        s.status === 'failed' ||
+        (opts?.resumeInProgress && s.status === 'generating')
+      ) {
+        indices.push(i)
+      }
     })
     if (!indices.length) return
 
@@ -6617,6 +6613,18 @@ function ImageGenerator({
     }
     await runBatchGenerateForBoard(sceneRunBoardRef.current)
   }
+
+  /** 刷新恢复：若看板存在 generating 槽位，自动续跑，不因刷新中断任务流程 */
+  useEffect(() => {
+    if (!imageGenPersistenceReady) return
+    if (!canGenerate) return
+    const board = sceneRunBoardRef.current
+    if (!board) return
+    if (sceneBatchDepthRef.current > 0) return
+    const hasGenerating = board.slots.some((s) => s.selected && s.status === 'generating')
+    if (!hasGenerating) return
+    void runBatchGenerateForBoard(board, { resumeInProgress: true })
+  }, [imageGenPersistenceReady, canGenerate, sceneRunBoard?.id])
 
   const downloadUrlsStaggered = (items: { url: string; name: string }[]) => {
     items.forEach((item, i) => {
