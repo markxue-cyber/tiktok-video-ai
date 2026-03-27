@@ -34,6 +34,8 @@ const MAX_SESSIONS = 100
 const MAX_STORED_MESSAGES = 200
 const API_HISTORY_MAX = 40
 const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
+/** 首页输入框本地上传：单次多选上限，且待上传队列总数不超过该值 */
+const MAX_HOME_CHAT_UPLOAD_QUEUE = 6
 
 export type HomeChatAttachment = {
   id: string
@@ -496,77 +498,102 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     return () => window.clearInterval(timer)
   }
 
-  const validateAndUploadFile = async (file: File | null) => {
-    if (!file) return
+  const validateAndUploadFiles = async (fileList: FileList | File[] | null) => {
+    if (!fileList || fileList.length === 0) return
     setError('')
-    const mime = String(file.type || '').toLowerCase()
-    const isImg = mime === 'image/jpeg' || mime === 'image/png' || mime === 'image/webp'
-    const isVid = mime === 'video/mp4' || mime === 'video/quicktime'
-    if (!isImg && !isVid) {
-      setError('仅支持 JPG/PNG/WebP 图片或 MP4/MOV 视频')
+    const files = Array.from(fileList)
+    const room = Math.max(0, MAX_HOME_CHAT_UPLOAD_QUEUE - pendingUploads.length)
+    if (room === 0) {
+      setError(`待上传队列已满（最多 ${MAX_HOME_CHAT_UPLOAD_QUEUE} 个），请先发送或删除后再添加`)
       return
     }
-    if (isImg && file.size > 20 * 1024 * 1024) {
-      setError('图片单文件需 ≤ 20MB')
-      return
+    const take = Math.min(files.length, MAX_HOME_CHAT_UPLOAD_QUEUE, room)
+    const capped = files.slice(0, take)
+    if (files.length > take) {
+      setToast(
+        `单次最多选择 ${MAX_HOME_CHAT_UPLOAD_QUEUE} 个文件，且队列总共不超过 ${MAX_HOME_CHAT_UPLOAD_QUEUE} 个；已按顺序添加前若干项`,
+      )
+      window.setTimeout(() => setToast(''), 4500)
     }
-    if (isVid) {
-      if (file.size > 500 * 1024 * 1024) {
-        setError('视频单文件需 ≤ 500MB')
-        return
-      }
+
+    const uploadValidatedAsset = async (file: File, kind: 'image' | 'video') => {
+      const pid =
+        typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
+          ? globalThis.crypto.randomUUID()
+          : `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      setPendingUploads((prev) => [
+        ...prev,
+        {
+          id: pid,
+          status: 'uploading',
+          progress: 5,
+          name: file.name,
+          sizeLabel: formatBytes(file.size),
+          type: kind,
+        },
+      ])
+      const stopProg = simulateProgress(pid)
       try {
-        const dur = await getVideoDurationSec(file)
-        if (dur > 600) {
-          setError('视频时长需 ≤ 10 分钟')
-          return
-        }
-      } catch {
-        setError('无法读取视频时长，请换一段视频重试')
-        return
+        const dataUrl = await fileToDataUrl(file)
+        const created = await createAssetAPI({
+          source: 'user_upload',
+          type: kind,
+          url: dataUrl,
+          name: file.name,
+          metadata: { from: 'home_chat_upload', mime: file.type, size: file.size },
+        })
+        const url = String(created?.asset?.url || '').trim()
+        if (!url) throw new Error('上传失败')
+        stopProg()
+        setPendingUploads((prev) =>
+          prev.map((p) =>
+            p.id === pid ? { ...p, status: 'done', progress: 100, url, type: kind } : p,
+          ),
+        )
+      } catch (e: any) {
+        stopProg()
+        setPendingUploads((prev) =>
+          prev.map((p) =>
+            p.id === pid ? { ...p, status: 'error', progress: 0, error: e?.message || '上传失败' } : p,
+          ),
+        )
       }
     }
-    const pid =
-      typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
-        ? globalThis.crypto.randomUUID()
-        : `p_${Date.now()}`
-    setPendingUploads((prev) => [
-      ...prev,
-      {
-        id: pid,
-        status: 'uploading',
-        progress: 5,
-        name: file.name,
-        sizeLabel: formatBytes(file.size),
-        type: isVid ? 'video' : 'image',
-      },
-    ])
-    const stopProg = simulateProgress(pid)
-    try {
-      const dataUrl = await fileToDataUrl(file)
-      const kind: 'image' | 'video' = isVid ? 'video' : 'image'
-      const created = await createAssetAPI({
-        source: 'user_upload',
-        type: kind,
-        url: dataUrl,
-        name: file.name,
-        metadata: { from: 'home_chat_upload', mime: file.type, size: file.size },
-      })
-      const url = String(created?.asset?.url || '').trim()
-      if (!url) throw new Error('上传失败')
-      stopProg()
-      setPendingUploads((prev) =>
-        prev.map((p) =>
-          p.id === pid ? { ...p, status: 'done', progress: 100, url, type: kind } : p,
-        ),
-      )
-    } catch (e: any) {
-      stopProg()
-      setPendingUploads((prev) =>
-        prev.map((p) =>
-          p.id === pid ? { ...p, status: 'error', progress: 0, error: e?.message || '上传失败' } : p,
-        ),
-      )
+
+    for (const file of capped) {
+      const mime = String(file.type || '').toLowerCase()
+      const isImg = mime === 'image/jpeg' || mime === 'image/png' || mime === 'image/webp'
+      const isVid = mime === 'video/mp4' || mime === 'video/quicktime'
+      if (!isImg && !isVid) {
+        setToast('已跳过不支持的格式（仅 JPG/PNG/WebP 或 MP4/MOV）')
+        window.setTimeout(() => setToast(''), 3500)
+        continue
+      }
+      if (isImg && file.size > 20 * 1024 * 1024) {
+        setToast(`已跳过过大图片：${file.name}（单张需 ≤ 20MB）`)
+        window.setTimeout(() => setToast(''), 3500)
+        continue
+      }
+      if (isVid) {
+        if (file.size > 500 * 1024 * 1024) {
+          setToast(`已跳过大体积视频：${file.name}（单个需 ≤ 500MB）`)
+          window.setTimeout(() => setToast(''), 3500)
+          continue
+        }
+        try {
+          const dur = await getVideoDurationSec(file)
+          if (dur > 600) {
+            setToast(`已跳过过长视频：${file.name}（需 ≤ 10 分钟）`)
+            window.setTimeout(() => setToast(''), 3500)
+            continue
+          }
+        } catch {
+          setToast(`无法读取视频时长，已跳过：${file.name}`)
+          window.setTimeout(() => setToast(''), 3500)
+          continue
+        }
+      }
+      await uploadValidatedAsset(file, isVid ? 'video' : 'image')
     }
   }
 
@@ -959,8 +986,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const onDropFiles = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    const f = e.dataTransfer?.files?.[0]
-    void validateAndUploadFile(f || null)
+    const dt = e.dataTransfer?.files
+    if (!dt?.length) return
+    void validateAndUploadFiles(dt)
   }
 
   const displayAssistantText = (m: HomeChatMsg) => {
@@ -1076,9 +1104,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                         <input
                           ref={uploadInputRef}
                           type="file"
+                          multiple
                           accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
                           className="hidden"
-                          onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
+                          onChange={(e) => {
+                            void validateAndUploadFiles(e.target.files)
+                            e.target.value = ''
+                          }}
                         />
                       </div>
 
@@ -1548,9 +1580,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 <input
                   ref={uploadInputRef}
                   type="file"
+                  multiple
                   accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
                   className="hidden"
-                  onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    void validateAndUploadFiles(e.target.files)
+                    e.target.value = ''
+                  }}
                 />
               </div>
 
