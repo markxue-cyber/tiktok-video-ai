@@ -859,8 +859,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }
 
   return (
-    <div className="flex gap-6 min-h-[calc(100vh-7.5rem)]">
-      <div className="flex-1 min-w-0 flex flex-col min-h-0">
+    <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-6 overflow-hidden">
+      <div className="flex h-full min-w-0 flex-1 flex-col min-h-0">
         <div
           className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#0c0e16_0%,#080a10_55%,#06070c_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
           onDragEnter={(e) => {
@@ -1066,7 +1066,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
         </div>
 
-        <div className="shrink-0 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-4 pt-3 backdrop-blur-xl">
+        <div className="shrink-0 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-3 pt-2.5 backdrop-blur-xl">
           {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
           {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
@@ -1090,8 +1090,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     ? '上传图片或视频，开始对话'
                     : '请输入您的需求，支持图片分析、图片生成、视频分析'
                 }
-                rows={3}
-                className="home-chat-composer-textarea min-h-[5.25rem] min-w-0 flex-1 resize-none !border-transparent !bg-transparent px-2 py-2 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
+                rows={2}
+                className="home-chat-composer-textarea min-h-[3.5rem] min-w-0 flex-1 resize-none !border-transparent !bg-transparent px-2 py-1.5 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
               />
             </div>
 
@@ -1288,7 +1288,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       </div>
     </div>
 
-      <aside className="flex max-h-[calc(100vh-7.5rem)] w-[380px] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      <aside className="sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] w-[380px] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         <button
           type="button"
           onClick={newChat}
