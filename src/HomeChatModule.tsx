@@ -1135,11 +1135,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-            <label className="text-white/60 text-xs">
-              分辨率
+          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+              <span className="shrink-0 whitespace-nowrap">分辨率</span>
               <select
-                className="mt-1 w-full tikgen-spec-select rounded-lg bg-black/35 py-2 px-2 text-white/90"
+                className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                 value={active?.params.resolution || '2K'}
                 disabled={paramsDisabled}
                 onChange={(e) => updateParams({ resolution: e.target.value as any })}
@@ -1149,10 +1149,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 <option value="HD">HD</option>
               </select>
             </label>
-            <label className="text-white/60 text-xs">
-              比例
+            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+              <span className="shrink-0 whitespace-nowrap">比例</span>
               <select
-                className="mt-1 w-full tikgen-spec-select rounded-lg bg-black/35 py-2 px-2 text-white/90"
+                className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                 value={active?.params.aspectRatio || '1:1'}
                 disabled={paramsDisabled}
                 onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
@@ -1163,10 +1163,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 <option value="4:3">4:3</option>
               </select>
             </label>
-            <label className="text-white/60 text-xs">
-              风格
+            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+              <span className="shrink-0 whitespace-nowrap">风格</span>
               <select
-                className="mt-1 w-full tikgen-spec-select rounded-lg bg-black/35 py-2 px-2 text-white/90"
+                className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                 value={active?.params.style || '写实'}
                 disabled={paramsDisabled}
                 onChange={(e) => updateParams({ style: e.target.value as any })}
@@ -1179,8 +1179,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 <option value="水墨">水墨</option>
               </select>
             </label>
-            <label className="text-white/60 text-xs">
-              参考权重 {active?.params.refWeight?.toFixed(2)}
+            <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+              <span className="shrink-0 whitespace-nowrap tabular-nums">
+                参考权重 {active?.params.refWeight?.toFixed(2)}
+              </span>
               <input
                 type="range"
                 min={0}
@@ -1189,7 +1191,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 value={active?.params.refWeight ?? 0.7}
                 disabled={paramsDisabled}
                 onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
-                className="mt-2 w-full"
+                className="min-w-0 flex-1"
               />
             </label>
           </div>
