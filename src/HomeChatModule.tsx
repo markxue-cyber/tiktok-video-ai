@@ -9,6 +9,7 @@ import {
 } from 'react'
 import {
   AlertCircle,
+  Check,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -303,6 +304,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetList, setAssetList] = useState<AssetItem[]>([])
+  /** 资产库弹窗内多选（id 集合） */
+  const [assetPickerSelectedIds, setAssetPickerSelectedIds] = useState<Set<string>>(() => new Set())
   const [assetPickType, setAssetPickType] = useState<'image' | 'video' | 'both'>('both')
   const [preview, setPreview] = useState<{
     urls: string[]
@@ -457,29 +460,65 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
   const openAssetPicker = (t: 'image' | 'video' | 'both') => {
     setAssetPickType(t)
+    setAssetPickerSelectedIds(new Set())
     setShowAssetPicker(true)
     setPlusMenuOpen(false)
   }
 
-  const pickAsset = (a: AssetItem) => {
-    const id =
+  const toggleAssetPickerItem = (a: AssetItem) => {
+    setAssetPickerSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(a.id)) {
+        next.delete(a.id)
+        return next
+      }
+      const room = Math.max(0, MAX_HOME_CHAT_UPLOAD_QUEUE - pendingUploads.length)
+      if (next.size >= room) {
+        setToast(
+          room === 0
+            ? `待上传队列已满（最多 ${MAX_HOME_CHAT_UPLOAD_QUEUE} 个），请先发送或删除后再添加`
+            : `最多再选 ${room} 个（队列总共不超过 ${MAX_HOME_CHAT_UPLOAD_QUEUE} 个）`,
+        )
+        window.setTimeout(() => setToast(''), 3500)
+        return prev
+      }
+      next.add(a.id)
+      return next
+    })
+  }
+
+  const confirmAssetPickerSelection = () => {
+    if (assetPickerSelectedIds.size === 0) {
+      setToast('请先选择至少一项')
+      window.setTimeout(() => setToast(''), 2500)
+      return
+    }
+    const selected = assetList.filter((a) => assetPickerSelectedIds.has(a.id))
+    const room = Math.max(0, MAX_HOME_CHAT_UPLOAD_QUEUE - pendingUploads.length)
+    const toAdd = selected.slice(0, room)
+    if (selected.length > toAdd.length) {
+      setToast(`待上传队列仅余 ${room} 个空位，已添加前 ${toAdd.length} 项`)
+      window.setTimeout(() => setToast(''), 4000)
+    }
+    const makeId = () =>
       typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
         ? globalThis.crypto.randomUUID()
-        : `p_${Date.now()}`
+        : `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
     setPendingUploads((prev) => [
       ...prev,
-      {
-        id,
-        status: 'done',
+      ...toAdd.map((a) => ({
+        id: makeId(),
+        status: 'done' as const,
         progress: 100,
         name: a.name || (a.type === 'video' ? '视频' : '图片'),
         sizeLabel: '',
         type: a.type,
         url: a.url,
         fromAsset: true,
-      },
+      })),
     ])
     setShowAssetPicker(false)
+    setAssetPickerSelectedIds(new Set())
     setSessions((prev) =>
       prev.map((s) => (s.id === activeId ? { ...s, updatedAt: Date.now(), media: null } : s)),
     )
@@ -1862,9 +1901,21 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       {showAssetPicker ? (
         <div className="fixed inset-0 z-[80] bg-black/55 flex items-center justify-center p-4">
           <div className="w-full max-w-4xl max-h-[88vh] overflow-hidden bg-white rounded-2xl border shadow-2xl flex flex-col">
-            <div className="px-5 py-4 border-b flex items-center justify-between">
-              <div className="text-lg font-semibold">从资产库选择</div>
-              <button type="button" onClick={() => setShowAssetPicker(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
+            <div className="px-5 py-4 border-b flex items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold">从资产库选择</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  点击缩略图多选，与本地多选共享队列上限（最多 {MAX_HOME_CHAT_UPLOAD_QUEUE} 个）
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAssetPicker(false)
+                  setAssetPickerSelectedIds(new Set())
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1872,14 +1923,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <button
                 type="button"
                 className={`px-3 py-1.5 rounded-lg text-sm border ${assetTab === 'user_upload' ? 'bg-gray-900 text-white' : ''}`}
-                onClick={() => setAssetTab('user_upload')}
+                onClick={() => {
+                  setAssetTab('user_upload')
+                  setAssetPickerSelectedIds(new Set())
+                }}
               >
                 本地上传
               </button>
               <button
                 type="button"
                 className={`px-3 py-1.5 rounded-lg text-sm border ${assetTab === 'ai_generated' ? 'bg-gray-900 text-white' : ''}`}
-                onClick={() => setAssetTab('ai_generated')}
+                onClick={() => {
+                  setAssetTab('ai_generated')
+                  setAssetPickerSelectedIds(new Set())
+                }}
               >
                 AI 生成
               </button>
@@ -1889,23 +1946,66 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 <div className="text-sm text-gray-500">加载中...</div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                  {assetList.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      className="rounded-xl border overflow-hidden hover:border-violet-400"
-                      onClick={() => pickAsset(a)}
-                    >
-                      {a.type === 'image' ? (
-                        <img src={a.url} alt="" className="w-full h-28 object-cover bg-black" />
-                      ) : (
-                        <video src={a.url} className="w-full h-28 object-cover bg-black" muted playsInline />
-                      )}
-                      <div className="p-2 text-xs text-gray-700 truncate">{a.name || a.type}</div>
-                    </button>
-                  ))}
+                  {assetList.map((a) => {
+                    const selected = assetPickerSelectedIds.has(a.id)
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => toggleAssetPickerItem(a)}
+                        className={`relative rounded-xl border overflow-hidden text-left transition ${
+                          selected
+                            ? 'border-violet-500 ring-2 ring-violet-400/50 shadow-md'
+                            : 'border-gray-200 hover:border-violet-400'
+                        }`}
+                      >
+                        {selected ? (
+                          <span className="absolute right-2 top-2 z-[1] flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-white shadow">
+                            <Check className="h-3.5 w-3.5 stroke-[3]" />
+                          </span>
+                        ) : null}
+                        {a.type === 'image' ? (
+                          <img src={a.url} alt="" className="w-full h-28 object-cover bg-black" />
+                        ) : (
+                          <video src={a.url} className="w-full h-28 object-cover bg-black" muted playsInline />
+                        )}
+                        <div className="p-2 text-xs text-gray-700 truncate">{a.name || a.type}</div>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
+            </div>
+            <div className="px-5 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-gray-50/80">
+              <p className="text-xs text-gray-600">
+                已选 <span className="font-medium text-gray-900">{assetPickerSelectedIds.size}</span> 项
+                <span className="text-gray-500">
+                  {' '}
+                  · 还可加入队列{' '}
+                  {Math.max(0, MAX_HOME_CHAT_UPLOAD_QUEUE - pendingUploads.length)} 个（共不超过{' '}
+                  {MAX_HOME_CHAT_UPLOAD_QUEUE} 个）
+                </span>
+              </p>
+              <div className="flex items-center gap-2 justify-end shrink-0">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg text-sm border border-gray-200 bg-white hover:bg-gray-50"
+                  onClick={() => {
+                    setShowAssetPicker(false)
+                    setAssetPickerSelectedIds(new Set())
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={assetPickerSelectedIds.size === 0}
+                  className="px-4 py-2 rounded-lg text-sm bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => void confirmAssetPickerSelection()}
+                >
+                  添加选中
+                </button>
+              </div>
             </div>
           </div>
         </div>
