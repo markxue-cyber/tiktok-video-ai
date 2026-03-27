@@ -624,6 +624,281 @@ async function runLightQc(
   }
 }
 
+type ParsedHomeParams = {
+  aspectRatio: string
+  resolution: string
+  style: string
+  refWeight: number
+  optimizePrompt: boolean
+  hdEnhance: boolean
+  useNeg: boolean
+  subjectLock: 'high' | 'medium'
+  multiRatio: boolean
+  ratioList: string[]
+  abVariant: boolean
+  qcEnabled: boolean
+  imageCount: number
+}
+
+function parseHomeParams(params: any, intentImageCount?: number): ParsedHomeParams {
+  const aspectRatio = normalizeAspectRatio(String(params.aspectRatio || '1:1'))
+  const resolution = mapResolutionLabel(String(params.resolution || '2K'))
+  const style = String(params.style || '写实')
+  const refWeight = Number.isFinite(Number(params.refWeight)) ? Number(params.refWeight) : 0.7
+  const optimizePrompt = params.optimizePrompt !== false
+  const hdEnhance = params.hdEnhance !== false
+  const useNeg = params.negativePrompt !== false
+  const subjectLock = String(params.subjectLock || 'high').toLowerCase() === 'medium' ? 'medium' : 'high'
+  const multiRatio = params.multiRatio === true
+  const ratioList = multiRatio ? normalizeAspectRatios(params.targetRatios) : [aspectRatio]
+  const abVariant = params.abVariant === true
+  const qcEnabled = params.qcEnabled !== false
+  const imageCount = Math.max(
+    1,
+    Math.min(4, Math.floor(Number(params.imageCount) || Math.floor(Number(intentImageCount ?? 1)))),
+  )
+  return {
+    aspectRatio,
+    resolution,
+    style,
+    refWeight,
+    optimizePrompt,
+    hdEnhance,
+    useNeg,
+    subjectLock,
+    multiRatio,
+    ratioList,
+    abVariant,
+    qcEnabled,
+    imageCount,
+  }
+}
+
+type ImageGenCtx = {
+  req: any
+  res: any
+  startedAt: number
+  userId: string
+  apiKey: string
+  baseUrl: string
+  mediaType: MediaType
+  mediaUrl: string
+  userMessage: string
+  analysisText: string
+  generateMode: GenerateMode
+  previewToken: string
+} & ParsedHomeParams
+
+async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> {
+  const {
+    req,
+    res,
+    startedAt,
+    userId,
+    apiKey,
+    baseUrl,
+    mediaType,
+    mediaUrl,
+    userMessage,
+    analysisText,
+    generateMode,
+    previewToken,
+    aspectRatio,
+    resolution,
+    style,
+    refWeight,
+    optimizePrompt,
+    hdEnhance,
+    useNeg,
+    subjectLock,
+    multiRatio,
+    ratioList,
+    abVariant,
+    qcEnabled,
+    imageCount,
+  } = ctx
+
+  if (!allowImageGenPerMinute(userId)) {
+    res.status(200).json({ success: false, error: RATE_ERR, code: 'RATE_LIMITED' })
+    return
+  }
+
+  let optimizedPrompt = userMessage
+  let finalPrompt = userMessage
+
+  if (optimizePrompt) {
+    try {
+      const op = await gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
+        '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
+        '核心原则：严格保留商品主体结构/颜色/比例，不变形、不换款；仅按用户意图做局部修改。',
+        '若用户是“换场景/更亮一点/突出质感/改白底主图”等微调意图，只改指定部分，不重做无关元素。',
+        '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。',
+        `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
+        '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
+        '输出 JSON：{"optimized":"..."}',
+      ].join('\n'),
+        JSON.stringify({
+          baseAnalysis: analysisText.slice(0, 2000),
+          userMessage,
+          style: styleKeywords(style),
+          aspectRatio,
+          refWeight,
+        }),
+      )
+      optimizedPrompt = String(op?.optimized || userMessage).trim() || userMessage
+    } catch {
+      optimizedPrompt = userMessage
+    }
+  }
+
+  const negBase = useNeg ? DEFAULT_NEG : ''
+  const preserveLine =
+    subjectLock === 'high'
+      ? '严格锁定商品主体结构、颜色与比例，仅对背景与光影做改动，不可换款/变形'
+      : '尽量保持商品主体结构、颜色与比例，允许轻微构图变化'
+
+  const extra = [
+    styleKeywords(style),
+    `画幅比例 ${aspectRatio}`,
+    hdEnhance ? 'high detail, sharp focus, clean texture' : '',
+    'ecommerce product photography, preserve product geometry and color fidelity',
+    'clean premium background, no extra text, no watermark, no irrelevant objects',
+    preserveLine,
+    `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
+  ]
+    .filter(Boolean)
+    .join('；')
+
+  finalPrompt = [optimizedPrompt, extra].join('\n\n')
+
+  if (generateMode === 'preview') {
+    const previewId = putPreviewDraft({
+      userId,
+      mediaType,
+      mediaUrl,
+      optimizedPrompt,
+      finalPrompt,
+      createdAt: Date.now(),
+      style,
+      aspectRatio,
+      resolution,
+    })
+    const idem = `home-preview-${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const prev = await runNanoBananaGeneration({
+      req,
+      idempotencyKey: idem,
+      apiKey,
+      baseUrl,
+      userId,
+      prompt: `${finalPrompt}\n（预览图，仅用于确认方向）`,
+      negative: useNeg ? DEFAULT_NEG : '',
+      aspectRatio,
+      resolution,
+      refImage: mediaType === 'image' ? mediaUrl : undefined,
+      imageCount: 1,
+      model: 'nano-banana-2',
+    })
+    const previewImage = { url: prev.imageUrl, ratio: aspectRatio, variant: 'preview', qcScore: 80, qcIssues: [] as string[] }
+    res.status(200).json({
+      success: true,
+      kind: 'mixed',
+      analysisText: analysisText || undefined,
+      optimizedPrompt,
+      imageUrls: [prev.imageUrl],
+      images: [previewImage],
+      previewToken: previewId,
+      nextQuestion: '预览方向已生成，是否按该方向生成高清正式图？',
+      quickActions: quickActionsFor(mediaType),
+      opsPack: undefined,
+      meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview' },
+    })
+    return
+  }
+
+  const draft = previewToken ? getPreviewDraft(previewToken, userId) : null
+  const finalPromptToUse = draft?.finalPrompt || finalPrompt
+  const mediaTypeToUse = draft?.mediaType || mediaType
+  const mediaUrlToUse = draft?.mediaUrl || mediaUrl
+  const styleToUse = draft?.style || style
+  const resolutionToUse = draft?.resolution || resolution
+
+  const ratioListSafe = ratioList.slice(0, 2)
+  const variants = abVariant ? (['conservative', 'aggressive'] as const) : (['normal'] as const)
+  const variantsSafe = variants.slice(0, 2)
+  const imageCountSafe = Math.max(1, Math.min(imageCount, 2))
+  const maxJobs = 4
+  const images: Array<{ url: string; ratio: string; variant: string; qcScore: number; qcIssues: string[] }> = []
+  const baseIdem = String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() || `home-${Date.now()}`
+  for (const ratio of ratioListSafe) {
+    for (const variant of variantsSafe) {
+      for (let i = 0; i < imageCountSafe; i++) {
+        if (images.length >= maxJobs) break
+        if (Date.now() - startedAt > 18_000) {
+          break
+        }
+        const idem = `${baseIdem}:homeimg:${ratio}:${variant}:${i}:${Date.now()}_${Math.random().toString(16).slice(2)}`
+        const variantHint =
+          variant === 'conservative'
+            ? '保守商业版：更稳健、主图可用性优先'
+            : variant === 'aggressive'
+              ? '增强吸引版：氛围更强、视觉冲击更高'
+              : '标准商业版'
+        const r = await runNanoBananaGeneration({
+          req,
+          idempotencyKey: idem,
+          apiKey,
+          baseUrl,
+          userId,
+          prompt:
+            i === 0
+              ? `${finalPromptToUse}\n${variantHint}\n输出比例 ${ratio}`
+              : `${finalPromptToUse}\n${variantHint}\n输出比例 ${ratio}\n（变体 ${i + 1}/${imageCount}，保持同一风格与主体）`,
+          negative: negBase,
+          aspectRatio: ratio,
+          resolution: resolutionToUse,
+          refImage: mediaTypeToUse === 'image' ? mediaUrlToUse : undefined,
+          imageCount: 1,
+          model: 'nano-banana-2',
+        })
+        let qc: QcResult = { score: 80, issues: [] }
+        if (qcEnabled && images.length < 1 && Date.now() - startedAt < 16_000) {
+          qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
+        }
+        images.push({
+          url: r.imageUrl,
+          ratio,
+          variant,
+          qcScore: qc.score,
+          qcIssues: qc.issues,
+        })
+      }
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    kind: 'mixed',
+    analysisText: analysisText || undefined,
+    optimizedPrompt: draft?.optimizedPrompt || optimizedPrompt,
+    imageUrls: images.map((x) => x.url),
+    images,
+    nextQuestion: nextQuestionFor(mediaTypeToUse),
+    quickActions: quickActionsFor(mediaTypeToUse),
+    opsPack: undefined,
+    meta: {
+      aspectRatio: ratioList.length === 1 ? ratioList[0] : ratioList,
+      resolution: resolutionToUse,
+      style: styleToUse,
+      refWeight,
+      imageCount: imageCountSafe,
+      mode: 'final',
+      subjectLock,
+      multiRatio: multiRatio && ratioListSafe.length > 1,
+      abVariant: abVariant && variantsSafe.length > 1,
+    },
+  })
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
@@ -666,6 +941,31 @@ export default async function handler(req: any, res: any) {
       })
     }
 
+    const generateOnly = body.generateOnly === true
+    if (generateOnly) {
+      const analysisTextOnly = String(body.analysisText || '').trim()
+      if (!analysisTextOnly) {
+        return res.status(200).json({ success: false, error: '缺少 analysisText', code: 'BAD_REQUEST' })
+      }
+      const parsedGen = parseHomeParams(params)
+      await runImageGenerationAfterAnalysis({
+        req,
+        res,
+        startedAt,
+        userId,
+        apiKey,
+        baseUrl,
+        mediaType,
+        mediaUrl,
+        userMessage,
+        analysisText: analysisTextOnly,
+        generateMode,
+        previewToken,
+        ...parsedGen,
+      })
+      return
+    }
+
     // --- 意图识别（快速 JSON）---
     const intentSystem = [
       '你是意图分类器。根据用户上传媒体类型与用户问题，输出 JSON。',
@@ -702,27 +1002,13 @@ export default async function handler(req: any, res: any) {
 
     let needsAnalysis = intent.needsAnalysis !== false
     let needsImageGen = !!intent.needsImageGen
-    const imageCount = Math.max(
-      1,
-      Math.min(4, Math.floor(Number(params.imageCount) || Math.floor(Number(intent.imageCount) || 1))),
-    )
+    const splitPipeline = body.splitPipeline === true
 
     // 首页要求：用户上传媒体后默认先做结构化商用分析；生成诉求可与分析并行返回
     needsAnalysis = true
     if (!needsAnalysis && !needsImageGen) needsAnalysis = true
 
-    const aspectRatio = normalizeAspectRatio(String(params.aspectRatio || '1:1'))
-    const resolution = mapResolutionLabel(String(params.resolution || '2K'))
-    const style = String(params.style || '写实')
-    const refWeight = Number.isFinite(Number(params.refWeight)) ? Number(params.refWeight) : 0.7
-    const optimizePrompt = params.optimizePrompt !== false
-    const hdEnhance = params.hdEnhance !== false
-    const useNeg = params.negativePrompt !== false
-    const subjectLock = String(params.subjectLock || 'high').toLowerCase() === 'medium' ? 'medium' : 'high'
-    const multiRatio = params.multiRatio === true
-    const ratioList = multiRatio ? normalizeAspectRatios(params.targetRatios) : [aspectRatio]
-    const abVariant = params.abVariant === true
-    const qcEnabled = params.qcEnabled !== false
+    const parsed = parseHomeParams(params, intent.imageCount)
 
     let analysisText = ''
     let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
@@ -740,186 +1026,36 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    let optimizedPrompt = userMessage
-    let finalPrompt = userMessage
-
-    if (needsImageGen) {
-      if (!allowImageGenPerMinute(userId)) {
-        return res.status(200).json({ success: false, error: RATE_ERR, code: 'RATE_LIMITED' })
-      }
-
-      if (optimizePrompt) {
-        try {
-          const op = await gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
-            '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
-            '核心原则：严格保留商品主体结构/颜色/比例，不变形、不换款；仅按用户意图做局部修改。',
-            '若用户是“换场景/更亮一点/突出质感/改白底主图”等微调意图，只改指定部分，不重做无关元素。',
-            '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。',
-            `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
-            '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
-            '输出 JSON：{"optimized":"..."}',
-          ].join('\n'),
-            JSON.stringify({
-              baseAnalysis: analysisText.slice(0, 2000),
-              userMessage,
-              style: styleKeywords(style),
-              aspectRatio,
-              refWeight,
-            }),
-          )
-          optimizedPrompt = String(op?.optimized || userMessage).trim() || userMessage
-        } catch {
-          optimizedPrompt = userMessage
-        }
-      }
-
-      const negBase = useNeg ? DEFAULT_NEG : ''
-      const preserveLine =
-        subjectLock === 'high'
-          ? '严格锁定商品主体结构、颜色与比例，仅对背景与光影做改动，不可换款/变形'
-          : '尽量保持商品主体结构、颜色与比例，允许轻微构图变化'
-
-      const extra = [
-        styleKeywords(style),
-        `画幅比例 ${aspectRatio}`,
-        hdEnhance ? 'high detail, sharp focus, clean texture' : '',
-        'ecommerce product photography, preserve product geometry and color fidelity',
-        'clean premium background, no extra text, no watermark, no irrelevant objects',
-        preserveLine,
-        `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
-      ]
-        .filter(Boolean)
-        .join('；')
-
-      finalPrompt = [optimizedPrompt, extra].join('\n\n')
-
-      if (generateMode === 'preview') {
-        const previewId = putPreviewDraft({
-          userId,
-          mediaType,
-          mediaUrl,
-          optimizedPrompt,
-          finalPrompt,
-          createdAt: Date.now(),
-          style,
-          aspectRatio,
-          resolution,
-        })
-        const idem = `home-preview-${Date.now()}_${Math.random().toString(16).slice(2)}`
-        const prev = await runNanoBananaGeneration({
-          req,
-          idempotencyKey: idem,
-          apiKey,
-          baseUrl,
-          userId,
-          prompt: `${finalPrompt}\n（预览图，仅用于确认方向）`,
-          negative: useNeg ? DEFAULT_NEG : '',
-          aspectRatio,
-          resolution,
-          refImage: mediaType === 'image' ? mediaUrl : undefined,
-          imageCount: 1,
-          model: 'nano-banana-2',
-        })
-        const previewImage = { url: prev.imageUrl, ratio: aspectRatio, variant: 'preview', qcScore: 80, qcIssues: [] as string[] }
-        return res.status(200).json({
-          success: true,
-          kind: 'mixed',
-          analysisText: analysisText || undefined,
-          optimizedPrompt,
-          imageUrls: [prev.imageUrl],
-          images: [previewImage],
-          previewToken: previewId,
-          nextQuestion: '预览方向已生成，是否按该方向生成高清正式图？',
-          quickActions: quickActionsFor(mediaType),
-          opsPack,
-          meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview' },
-        })
-      }
-
-      const draft = previewToken ? getPreviewDraft(previewToken, userId) : null
-      const finalPromptToUse = draft?.finalPrompt || finalPrompt
-      const mediaTypeToUse = draft?.mediaType || mediaType
-      const mediaUrlToUse = draft?.mediaUrl || mediaUrl
-      const styleToUse = draft?.style || style
-      const resolutionToUse = draft?.resolution || resolution
-
-      // 热修复：限制一次请求的组合规模，避免 serverless 超时
-      const ratioListSafe = ratioList.slice(0, 2)
-      const variants = abVariant ? (['conservative', 'aggressive'] as const) : (['normal'] as const)
-      const variantsSafe = variants.slice(0, 2)
-      const imageCountSafe = Math.max(1, Math.min(imageCount, 2))
-      const maxJobs = 4
-      const images: Array<{ url: string; ratio: string; variant: string; qcScore: number; qcIssues: string[] }> = []
-      const baseIdem = String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() || `home-${Date.now()}`
-      for (const ratio of ratioListSafe) {
-        for (const variant of variantsSafe) {
-          for (let i = 0; i < imageCountSafe; i++) {
-            if (images.length >= maxJobs) break
-            if (Date.now() - startedAt > 18_000) {
-              break
-            }
-            const idem = `${baseIdem}:homeimg:${ratio}:${variant}:${i}:${Date.now()}_${Math.random().toString(16).slice(2)}`
-            const variantHint =
-              variant === 'conservative'
-                ? '保守商业版：更稳健、主图可用性优先'
-                : variant === 'aggressive'
-                  ? '增强吸引版：氛围更强、视觉冲击更高'
-                  : '标准商业版'
-            const r = await runNanoBananaGeneration({
-              req,
-              idempotencyKey: idem,
-              apiKey,
-              baseUrl,
-              userId,
-              prompt:
-                i === 0
-                  ? `${finalPromptToUse}\n${variantHint}\n输出比例 ${ratio}`
-                  : `${finalPromptToUse}\n${variantHint}\n输出比例 ${ratio}\n（变体 ${i + 1}/${imageCount}，保持同一风格与主体）`,
-              negative: negBase,
-              aspectRatio: ratio,
-              resolution: resolutionToUse,
-              refImage: mediaTypeToUse === 'image' ? mediaUrlToUse : undefined,
-              imageCount: 1,
-              model: 'nano-banana-2',
-            })
-            let qc: QcResult = { score: 80, issues: [] }
-            // 热修复：同步质检最多做 1 张，剩余降级默认分
-            if (qcEnabled && images.length < 1 && Date.now() - startedAt < 16_000) {
-              qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
-            }
-            images.push({
-              url: r.imageUrl,
-              ratio,
-              variant,
-              qcScore: qc.score,
-              qcIssues: qc.issues,
-            })
-          }
-        }
-      }
-
+    // 分两段：先返回分析，再由前端单独请求出图，缩短首包等待
+    if (splitPipeline && needsImageGen) {
       return res.status(200).json({
         success: true,
-        kind: 'mixed',
-        analysisText: analysisText || undefined,
-        optimizedPrompt: draft?.optimizedPrompt || optimizedPrompt,
-        imageUrls: images.map((x) => x.url),
-        images,
-        nextQuestion: nextQuestionFor(mediaTypeToUse),
-        quickActions: quickActionsFor(mediaTypeToUse),
+        kind: 'analysis',
+        analysisText,
         opsPack,
-        meta: {
-          aspectRatio: ratioList.length === 1 ? ratioList[0] : ratioList,
-          resolution: resolutionToUse,
-          style: styleToUse,
-          refWeight,
-          imageCount: imageCountSafe,
-          mode: 'final',
-          subjectLock,
-          multiRatio: multiRatio && ratioListSafe.length > 1,
-          abVariant: abVariant && variantsSafe.length > 1,
-        },
+        nextQuestion: nextQuestionFor(mediaType),
+        quickActions: quickActionsFor(mediaType),
+        deferredImageGen: true,
       })
+    }
+
+    if (needsImageGen) {
+      await runImageGenerationAfterAnalysis({
+        req,
+        res,
+        startedAt,
+        userId,
+        apiKey,
+        baseUrl,
+        mediaType,
+        mediaUrl,
+        userMessage,
+        analysisText,
+        generateMode,
+        previewToken,
+        ...parsed,
+      })
+      return
     }
 
     return res.status(200).json({

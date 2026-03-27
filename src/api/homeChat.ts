@@ -35,6 +35,11 @@ export type HomeChatTurnPayload = {
   mediaType: 'image' | 'video'
   mediaUrl: string
   userMessage: string
+  /** 先分析后出图：首轮仅返回分析，需配合 generateOnly 第二轮 */
+  splitPipeline?: boolean
+  /** 第二轮：仅执行出图（须带 analysisText） */
+  generateOnly?: boolean
+  analysisText?: string
   generateMode?: 'preview' | 'final'
   previewToken?: string
   history: { role: 'user' | 'assistant'; text: string }[]
@@ -68,6 +73,8 @@ export type HomeChatImageItem = {
 export type HomeChatTurnResult = {
   success: boolean
   kind?: 'analysis' | 'mixed' | 'blocked' | 'mock'
+  /** 服务端将出图放到第二轮，首轮可先展示分析 */
+  deferredImageGen?: boolean
   code?: string
   error?: string
   message?: string
@@ -86,7 +93,10 @@ export type HomeChatTurnResult = {
   meta?: Record<string, unknown>
 }
 
-export async function homeChatTurnAPI(body: HomeChatTurnPayload): Promise<HomeChatTurnResult> {
+export async function homeChatTurnAPI(
+  body: HomeChatTurnPayload,
+  init?: { signal?: AbortSignal },
+): Promise<HomeChatTurnResult> {
   const token = localStorage.getItem('tikgen.accessToken') || ''
   if (!token) throw new Error('请先登录')
 
@@ -105,6 +115,7 @@ export async function homeChatTurnAPI(body: HomeChatTurnPayload): Promise<HomeCh
         'X-Confirm-Billable': 'true',
       },
       body: JSON.stringify(body),
+      signal: init?.signal,
     })
     return readJsonOrText(resp)
   }

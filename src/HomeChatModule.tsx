@@ -26,7 +26,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
-import { homeChatTurnAPI, type HomeChatImageItem } from './api/homeChat'
+import { homeChatTurnAPI, type HomeChatImageItem, type HomeChatTurnResult } from './api/homeChat'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 
 const STORAGE_KEY = 'tikgen.homeChat.sessions.v1'
@@ -37,6 +37,27 @@ const API_HISTORY_MAX = 40
 const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 /** 首页输入框本地上传：单次多选上限，且待上传队列总数不超过该值 */
 const MAX_HOME_CHAT_UPLOAD_QUEUE = 6
+
+function buildAssistantTextFromTurn(data: HomeChatTurnResult): string {
+  const parts: string[] = []
+  if (data.analysisText) parts.push(String(data.analysisText))
+  if (data.optimizedPrompt) parts.push(`【优化后提示词】\n${String(data.optimizedPrompt)}`)
+  if (data.opsPack) {
+    const titles = (data.opsPack.titles || []).filter(Boolean).map((t) => `- ${t}`).join('\n')
+    const points = (data.opsPack.sellingPoints || []).filter(Boolean).map((t) => `- ${t}`).join('\n')
+    const lead = String(data.opsPack.detailLead || '').trim()
+    const block = [
+      titles ? `【可直接使用标题】\n${titles}` : '',
+      points ? `【可直接使用卖点】\n${points}` : '',
+      lead ? `【详情页开场文案】\n${lead}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    if (block) parts.push(block)
+  }
+  if (data.nextQuestion) parts.push(`【下一步建议】\n${String(data.nextQuestion)}`)
+  return parts.filter(Boolean).join('\n\n') || '（无文本回复）'
+}
 
 export type HomeChatAttachment = {
   id: string
@@ -798,32 +819,51 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           : 'preview'
         : 'final'
       if (generateMode === 'preview') setPreviewToken('')
-      setBusyStage('analyze')
-      const data = await homeChatTurnAPI({
-        mediaType: primary.type,
-        mediaUrl: primary.url,
-        userMessage: `${paramLine}\n${sendText}`,
+
+      const conn = typeof navigator !== 'undefined' ? (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection : undefined
+      const softNetwork =
+        !!conn &&
+        (conn.saveData === true || /2g|slow-2g/i.test(String(conn.effectiveType || '')))
+      const ep = softNetwork
+        ? { ...s.params, multiRatio: false as const, abVariant: false as const, qcEnabled: false as const }
+        : s.params
+      if (softNetwork) {
+        setToast('当前网络较慢，已自动关闭多比例、A/B 与轻量质检以加快出图')
+        window.setTimeout(() => setToast(''), 4500)
+      }
+
+      const paramsPayload = {
+        resolution: ep.resolution,
+        aspectRatio: ep.aspectRatio,
+        imageCount: ep.imageCount,
+        style: ep.style,
+        refWeight: ep.refWeight,
+        subjectLock: ep.subjectLock,
+        multiRatio: ep.multiRatio,
+        targetRatios: ep.multiRatio ? ['1:1', '3:4', '9:16'] : [ep.aspectRatio],
+        abVariant: ep.abVariant,
+        qcEnabled: ep.qcEnabled,
         generateMode,
         previewToken: generateMode === 'final' ? previewToken : '',
-        history: hist.slice(-API_HISTORY_MAX),
-        params: {
-          resolution: s.params.resolution,
-          aspectRatio: s.params.aspectRatio,
-          imageCount: s.params.imageCount,
-          style: s.params.style,
-          refWeight: s.params.refWeight,
-          subjectLock: s.params.subjectLock,
-          multiRatio: s.params.multiRatio,
-          targetRatios: s.params.multiRatio ? ['1:1', '3:4', '9:16'] : [s.params.aspectRatio],
-          abVariant: s.params.abVariant,
-          qcEnabled: s.params.qcEnabled,
+        optimizePrompt: ep.optimizePrompt,
+        hdEnhance: ep.hdEnhance,
+        negativePrompt: ep.negativePrompt,
+      }
+
+      setBusyStage('analyze')
+      const data = await homeChatTurnAPI(
+        {
+          mediaType: primary.type,
+          mediaUrl: primary.url,
+          userMessage: `${paramLine}\n${sendText}`,
           generateMode,
           previewToken: generateMode === 'final' ? previewToken : '',
-          optimizePrompt: s.params.optimizePrompt,
-          hdEnhance: s.params.hdEnhance,
-          negativePrompt: s.params.negativePrompt,
+          history: hist.slice(-API_HISTORY_MAX),
+          splitPipeline: true,
+          params: paramsPayload,
         },
-      })
+        { signal: abortRef.current?.signal },
+      )
 
       if (!data?.success) {
         const code = String(data?.code || '')
@@ -874,25 +914,130 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       }
 
       if (data.kind === 'analysis' || data.kind === 'mixed') {
-        const parts: string[] = []
-        setBusyStage('optimize')
-        if (data.analysisText) parts.push(String(data.analysisText))
-        if (data.optimizedPrompt) parts.push(`【优化后提示词】\n${String(data.optimizedPrompt)}`)
-        if (data.opsPack) {
-          const titles = (data.opsPack.titles || []).filter(Boolean).map((t) => `- ${t}`).join('\n')
-          const points = (data.opsPack.sellingPoints || []).filter(Boolean).map((t) => `- ${t}`).join('\n')
-          const lead = String(data.opsPack.detailLead || '').trim()
-          const block = [
-            titles ? `【可直接使用标题】\n${titles}` : '',
-            points ? `【可直接使用卖点】\n${points}` : '',
-            lead ? `【详情页开场文案】\n${lead}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n\n')
-          if (block) parts.push(block)
+        /** 首轮仅分析，出图在第二轮请求，先展示文字再补图 */
+        if (data.deferredImageGen && data.analysisText) {
+          const assistantMsgId = `m_${Date.now()}_a`
+          setBusyStage('optimize')
+          const assistantTextFirst = buildAssistantTextFromTurn(data)
+          const amFirst: HomeChatMsg = {
+            id: assistantMsgId,
+            role: 'assistant',
+            text: assistantTextFirst,
+            followUps: data.quickActions?.length ? [...data.quickActions] : ASSISTANT_FOLLOWUPS,
+            streamLen: 0,
+          }
+          setSessions((prev) =>
+            prev.map((x) => {
+              if (x.id !== activeId) return x
+              return { ...x, updatedAt: Date.now(), messages: [...x.messages, amFirst] }
+            }),
+          )
+
+          setBusyStage('generate')
+          const data2 = await homeChatTurnAPI(
+            {
+              generateOnly: true,
+              analysisText: data.analysisText,
+              mediaType: primary.type,
+              mediaUrl: primary.url,
+              userMessage: `${paramLine}\n${sendText}`,
+              generateMode,
+              previewToken: generateMode === 'final' ? previewToken : '',
+              history: hist.slice(-API_HISTORY_MAX),
+              params: paramsPayload,
+            },
+            { signal: abortRef.current?.signal },
+          )
+
+          if (!data2?.success) {
+            const code = String(data2?.code || '')
+            const msgRaw = String(data2?.error || '出图失败')
+            const msg =
+              code === 'UPSTREAM_TIMEOUT'
+                ? '出图超时，请稍后重试或先生成预览图。'
+                : code === 'RATE_LIMITED'
+                  ? '操作过于频繁，请稍后再试。'
+                  : msgRaw
+            setSessions((prev) =>
+              prev.map((session) => {
+                if (session.id !== activeId) return session
+                const msgs = session.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, text: `${m.text}\n\n【出图未完成】${msg}`, blocked: true }
+                    : m,
+                )
+                return { ...session, updatedAt: Date.now(), messages: msgs }
+              }),
+            )
+            return
+          }
+
+          setBusyStage('optimize')
+          const imageItems: HomeChatImageItem[] = Array.isArray(data2.images)
+            ? data2.images.filter((x) => !!x?.url)
+            : []
+          const imgs: string[] = imageItems.length
+            ? imageItems.map((x) => x.url)
+            : Array.isArray(data2.imageUrls)
+              ? data2.imageUrls.filter(Boolean)
+              : []
+          if (data2.previewToken) setPreviewToken(String(data2.previewToken))
+          else if (generateMode === 'final') setPreviewToken('')
+
+          const extraOpt = data2.optimizedPrompt
+            ? `\n\n【优化后提示词】\n${String(data2.optimizedPrompt)}`
+            : ''
+          setSessions((prev) =>
+            prev.map((session) => {
+              if (session.id !== activeId) return session
+              const msgs = session.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? {
+                      ...m,
+                      text: `${m.text}${extraOpt}`,
+                      images: imgs.length ? imgs : undefined,
+                      imageItems: imageItems.length ? imageItems : undefined,
+                      followUps:
+                        data2.quickActions && data2.quickActions.length
+                          ? [...data2.quickActions, ...(data2.previewToken ? ['确认高清生成'] : [])]
+                          : m.followUps,
+                    }
+                  : m,
+              )
+              return { ...session, updatedAt: Date.now(), messages: msgs }
+            }),
+          )
+
+          if (imgs.length && s.params.syncToAssets) {
+            const sid = s.id
+            let idx = 0
+            const d = new Date()
+            const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+            for (const url of imgs) {
+              idx += 1
+              const name = `对话生成_${ymd}_${idx}.png`
+              void archiveAiMediaOnce({
+                url,
+                type: 'image',
+                name,
+                metadata: {
+                  source_label: '对话生成 - 首页模块',
+                  session_id: sid,
+                  aspect_ratio: s.params.aspectRatio,
+                  style: s.params.style,
+                  resolution: s.params.resolution,
+                  prompt: sendText,
+                },
+              })
+            }
+          }
+
+          void onRefreshUser?.()
+          return
         }
-        if (data.nextQuestion) parts.push(`【下一步建议】\n${String(data.nextQuestion)}`)
-        const assistantText = parts.filter(Boolean).join('\n\n') || '（无文本回复）'
+
+        setBusyStage('optimize')
+        const assistantText = buildAssistantTextFromTurn(data)
         setBusyStage('generate')
         const imageItems: HomeChatImageItem[] = Array.isArray(data.images)
           ? data.images.filter((x) => !!x?.url)
