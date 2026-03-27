@@ -1058,11 +1058,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       : !hasThreadMedia && !pendingReady
         ? '上传图片或视频，开始对话'
         : '请输入您的需求，支持图片分析、图片生成、视频分析'
+  /** 发送仍须等上一轮结束，避免并发打断；输入与高级参数在思考中仍可编辑 */
   const canSend =
     !busy && (pendingReady || (!!input.trim() && hasThreadMedia))
-
-  const inputDisabled = busy
-  const paramsDisabled = busy
 
   const lastUserWithMedia = useMemo(() => {
     if (!active?.messages.length) return null
@@ -1083,7 +1081,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         : ['帮我分析这张图', '生成同款风格图片', '提取图中商品信息']
 
   const showSuggestTags =
-    (pendingReady || !!lastUserWithMedia || pendingUploads.length > 0) && !busy
+    pendingReady || !!lastUserWithMedia || pendingUploads.length > 0
 
   const updateParams = (patch: Partial<HomeChatSession['params']>) => {
     if (!activeId) return
@@ -1166,7 +1164,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       ref={inputRef}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      disabled={inputDisabled}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault()
@@ -1175,7 +1172,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       }}
                       placeholder={composerPlaceholder}
                       rows={1}
-                      className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
+                      className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0"
                     />
                   </div>
 
@@ -1184,7 +1181,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <div className="relative shrink-0" ref={plusMenuRef}>
                         <button
                           type="button"
-                          disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation()
                             setParamsOpen(true)
@@ -1253,7 +1249,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
                             value={active?.params.aspectRatio || '3:4'}
-                            disabled={paramsDisabled}
                             onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
                           >
                             <option value="1:1">1:1</option>
@@ -1265,7 +1260,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
                             value={active?.params.imageCount ?? 2}
-                            disabled={paramsDisabled}
                             onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
                           >
                             <option value={1}>1</option>
@@ -1295,7 +1289,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <select
                             className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                             value={active?.params.resolution || '2K'}
-                            disabled={paramsDisabled}
                             onChange={(e) => updateParams({ resolution: e.target.value as any })}
                           >
                             <option value="2K">2K</option>
@@ -1308,7 +1301,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <select
                             className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                             value={active?.params.style || '写实'}
-                            disabled={paramsDisabled}
                             onChange={(e) => updateParams({ style: e.target.value as any })}
                           >
                             <option value="写实">写实</option>
@@ -1324,7 +1316,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <select
                             className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                             value={active?.params.subjectLock || 'high'}
-                            disabled={paramsDisabled}
                             onChange={(e) => updateParams({ subjectLock: e.target.value as any })}
                           >
                             <option value="high">高</option>
@@ -1341,7 +1332,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             max={1}
                             step={0.05}
                             value={active?.params.refWeight ?? 0.7}
-                            disabled={paramsDisabled}
                             onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
                             className="min-w-0 flex-1"
                           />
@@ -1355,7 +1345,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <input
                       type="checkbox"
                       checked={active?.params.syncToAssets !== false}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ syncToAssets: e.target.checked })}
                     />
                     生成图片自动同步至资产库
@@ -1364,7 +1353,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <input
                       type="checkbox"
                       checked={active?.params.optimizePrompt !== false}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ optimizePrompt: e.target.checked })}
                     />
                     自动优化提示词
@@ -1373,7 +1361,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <input
                       type="checkbox"
                       checked={active?.params.hdEnhance !== false}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ hdEnhance: e.target.checked })}
                     />
                     开启高清细节增强
@@ -1382,7 +1369,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <input
                       type="checkbox"
                       checked={active?.params.negativePrompt !== false}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ negativePrompt: e.target.checked })}
                     />
                     添加通用负面提示词
@@ -1585,7 +1571,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                disabled={inputDisabled}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
@@ -1594,7 +1579,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 }}
                 placeholder={composerPlaceholder}
                 rows={1}
-                className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0 disabled:opacity-45"
+                className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed text-white/90 outline-none !shadow-none ring-0 placeholder:text-white/28 focus:!border-transparent focus:!shadow-none focus:ring-0"
               />
             </div>
 
@@ -1603,7 +1588,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <div className="relative shrink-0" ref={plusMenuRef}>
                 <button
                   type="button"
-                  disabled={busy}
                   onClick={(e) => {
                     e.stopPropagation()
                     setParamsOpen(true)
@@ -1672,7 +1656,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   <select
                     className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
                     value={active?.params.aspectRatio || '3:4'}
-                    disabled={paramsDisabled}
                     onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
                   >
                     <option value="1:1">1:1</option>
@@ -1684,7 +1667,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   <select
                     className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
                     value={active?.params.imageCount ?? 2}
-                    disabled={paramsDisabled}
                     onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
                   >
                     <option value={1}>1</option>
@@ -1714,7 +1696,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <select
                       className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                       value={active?.params.resolution || '2K'}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ resolution: e.target.value as any })}
                     >
                       <option value="2K">2K</option>
@@ -1727,7 +1708,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <select
                       className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                       value={active?.params.style || '写实'}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ style: e.target.value as any })}
                     >
                       <option value="写实">写实</option>
@@ -1743,7 +1723,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <select
                       className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                       value={active?.params.subjectLock || 'high'}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ subjectLock: e.target.value as any })}
                     >
                       <option value="high">高</option>
@@ -1760,7 +1739,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       max={1}
                       step={0.05}
                       value={active?.params.refWeight ?? 0.7}
-                      disabled={paramsDisabled}
                       onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
                       className="min-w-0 flex-1"
                     />
@@ -1774,7 +1752,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <input
                 type="checkbox"
                 checked={active?.params.syncToAssets !== false}
-                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ syncToAssets: e.target.checked })}
               />
               生成图片自动同步至资产库
@@ -1783,7 +1760,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <input
                 type="checkbox"
                 checked={active?.params.optimizePrompt !== false}
-                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ optimizePrompt: e.target.checked })}
               />
               自动优化提示词
@@ -1792,7 +1768,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <input
                 type="checkbox"
                 checked={active?.params.hdEnhance !== false}
-                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ hdEnhance: e.target.checked })}
               />
               开启高清细节增强
@@ -1801,7 +1776,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               <input
                 type="checkbox"
                 checked={active?.params.negativePrompt !== false}
-                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ negativePrompt: e.target.checked })}
               />
               添加通用负面提示词
