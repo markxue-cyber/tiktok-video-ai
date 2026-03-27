@@ -1328,7 +1328,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setParamsOpen(true)
                             setPlusMenuOpen((v) => !v)
                           }}
                           onPointerDown={(e) => e.stopPropagation()}
@@ -1735,7 +1734,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    setParamsOpen(true)
                     setPlusMenuOpen((v) => !v)
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
