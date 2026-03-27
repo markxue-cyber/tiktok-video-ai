@@ -1,5 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Folder, Home, Pencil, Pin, Plus, RefreshCw, Send, Trash2, Upload, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Folder,
+  Pencil,
+  Pin,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+  Upload,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react'
 import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
 import { homeChatTurnAPI } from './api/homeChat'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
@@ -9,47 +24,27 @@ const ACTIVE_KEY = 'tikgen.homeChat.activeId.v1'
 const MAX_SESSIONS = 100
 const MAX_STORED_MESSAGES = 200
 const API_HISTORY_MAX = 40
+const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('读取文件失败'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function formatBytes(n: number) {
-  if (!Number.isFinite(n) || n <= 0) return ''
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
-
-function getVideoDurationSec(file: File): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const el = document.createElement('video')
-    el.preload = 'metadata'
-    const url = URL.createObjectURL(file)
-    el.onloadedmetadata = () => {
-      const d = Number(el.duration)
-      URL.revokeObjectURL(url)
-      resolve(Number.isFinite(d) ? d : 0)
-    }
-    el.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('无法读取视频信息'))
-    }
-    el.src = url
-  })
+export type HomeChatAttachment = {
+  id: string
+  type: 'image' | 'video'
+  url: string
+  name: string
+  sizeLabel?: string
+  fromAsset?: boolean
 }
 
 export type HomeChatMsg = {
   id: string
   role: 'user' | 'assistant'
   text: string
+  attachments?: HomeChatAttachment[]
   images?: string[]
   blocked?: boolean
+  followUps?: string[]
+  /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
+  streamLen?: number
 }
 
 export type HomeChatSession = {
@@ -58,7 +53,8 @@ export type HomeChatSession = {
   updatedAt: number
   title: string
   pinned?: boolean
-  media: null | {
+  /** 兼容旧版：仅用于迁移与会话筛选兜底 */
+  media?: null | {
     type: 'image' | 'video'
     url: string
     name: string
@@ -76,6 +72,18 @@ export type HomeChatSession = {
     hdEnhance: boolean
     negativePrompt: boolean
   }
+}
+
+type PendingUpload = {
+  id: string
+  status: 'uploading' | 'done' | 'error'
+  progress: number
+  name: string
+  sizeLabel: string
+  type: 'image' | 'video'
+  url?: string
+  error?: string
+  fromAsset?: boolean
 }
 
 const defaultParams = (): HomeChatSession['params'] => ({
@@ -135,7 +143,114 @@ function sessionTitleFrom(firstUserText: string, mediaType: 'image' | 'video') {
 
 function buildHistoryForApi(messages: HomeChatMsg[]): { role: 'user' | 'assistant'; text: string }[] {
   const tail = messages.slice(-API_HISTORY_MAX)
-  return tail.map((m) => ({ role: m.role, text: m.text }))
+  return tail.map((m) => ({
+    role: m.role,
+    text:
+      m.role === 'user' && m.attachments?.length
+        ? `[附件×${m.attachments.length}] ${m.text}`
+        : m.text,
+  }))
+}
+
+function getLastMediaFromMessages(messages: HomeChatMsg[]): { type: 'image' | 'video'; url: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m?.role !== 'user' || !m.attachments?.length) continue
+    const v = m.attachments.find((a) => a.type === 'video')
+    if (v) return { type: 'video', url: v.url }
+    const im = m.attachments.find((a) => a.type === 'image')
+    if (im) return { type: 'image', url: im.url }
+  }
+  return null
+}
+
+function sessionHasVideo(s: HomeChatSession): boolean {
+  if (s.media?.type === 'video') return true
+  return s.messages.some((m) => m.role === 'user' && m.attachments?.some((a) => a.type === 'video'))
+}
+
+function sessionHasImageContext(s: HomeChatSession): boolean {
+  if (s.media?.type === 'image') return true
+  return s.messages.some((m) => m.role === 'user' && m.attachments?.some((a) => a.type === 'image'))
+}
+
+function pickPrimaryMedia(
+  attachments: HomeChatAttachment[],
+  fallback: { type: 'image' | 'video'; url: string } | null,
+): { type: 'image' | 'video'; url: string } | null {
+  if (attachments.length) {
+    const v = attachments.find((a) => a.type === 'video')
+    if (v) return { type: 'video', url: v.url }
+    const im = attachments.find((a) => a.type === 'image')
+    if (im) return { type: 'image', url: im.url }
+  }
+  return fallback
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('读取文件失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function formatBytes(n: number) {
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function getVideoDurationSec(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('video')
+    el.preload = 'metadata'
+    const url = URL.createObjectURL(file)
+    el.onloadedmetadata = () => {
+      const d = Number(el.duration)
+      URL.revokeObjectURL(url)
+      resolve(Number.isFinite(d) ? d : 0)
+    }
+    el.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('无法读取视频信息'))
+    }
+    el.src = url
+  })
+}
+
+const ASSISTANT_FOLLOWUPS = ['能再详细说明一下吗？', '请列出可执行要点', '还有需要注意的吗？']
+
+function UserBubble({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`max-w-[85%] rounded-2xl border border-white/15 bg-gradient-to-br from-pink-500/40 via-purple-600/35 to-violet-700/35 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] px-4 py-3 text-sm leading-relaxed text-white/95 ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+function AssistantBubble({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={`max-w-[85%] rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] px-4 py-3 text-sm leading-relaxed text-white/90 ${className}`}
+    >
+      {children}
+    </div>
+  )
 }
 
 type Props = {
@@ -163,13 +278,29 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const [assetBusy, setAssetBusy] = useState(false)
   const [assetList, setAssetList] = useState<AssetItem[]>([])
   const [assetPickType, setAssetPickType] = useState<'image' | 'video' | 'both'>('both')
-  const [preview, setPreview] = useState<{ url: string; type: 'image' | 'video'; title?: string } | null>(null)
-  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [preview, setPreview] = useState<{
+    urls: string[]
+    index: number
+    type: 'image' | 'video'
+    title?: string
+    scale: number
+  } | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
+  const plusMenuRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const chatScrollRef = useRef<HTMLDivElement | null>(null)
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
+
+  const hasThreadMedia = useMemo(() => {
+    if (!active) return false
+    if (active.media) return true
+    return !!getLastMediaFromMessages(active.messages)
+  }, [active])
 
   useEffect(() => {
     if (!sessions.length) {
@@ -209,7 +340,48 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [active?.messages.length, busy])
+  }, [active?.messages.length, busy, pendingUploads.length, dragOver])
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!plusMenuRef.current) return
+      if (!plusMenuRef.current.contains(e.target as Node)) setPlusMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  useEffect(() => {
+    if (!preview) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreview(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [preview])
+
+  /** 流式展示：逐字显示最后一条助手消息 */
+  useEffect(() => {
+    if (!active?.messages.length) return
+    const last = active.messages[active.messages.length - 1]
+    if (last.role !== 'assistant' || last.blocked) return
+    const full = String(last.text || '')
+    if (!full.length) return
+    const len = last.streamLen ?? 0
+    if (len >= full.length) return
+    const t = window.setTimeout(() => {
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== activeId) return s
+          const msgs = s.messages.map((m) =>
+            m.id === last.id ? { ...m, streamLen: Math.min(full.length, (m.streamLen ?? 0) + Math.max(2, Math.ceil(full.length / 80))) } : m,
+          )
+          return { ...s, messages: msgs }
+        }),
+      )
+    }, 18)
+    return () => window.clearTimeout(t)
+  }, [active?.messages, activeId])
 
   const loadAssets = useCallback(async () => {
     setAssetBusy(true)
@@ -233,27 +405,44 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const openAssetPicker = (t: 'image' | 'video' | 'both') => {
     setAssetPickType(t)
     setShowAssetPicker(true)
+    setPlusMenuOpen(false)
   }
 
   const pickAsset = (a: AssetItem) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeId
-          ? {
-              ...s,
-              updatedAt: Date.now(),
-              media: {
-                type: a.type,
-                url: a.url,
-                name: a.name || (a.type === 'video' ? '视频' : '图片'),
-                sizeLabel: '',
-                fromAsset: true,
-              },
-            }
-          : s,
-      ),
-    )
+    const id =
+      typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `p_${Date.now()}`
+    setPendingUploads((prev) => [
+      ...prev,
+      {
+        id,
+        status: 'done',
+        progress: 100,
+        name: a.name || (a.type === 'video' ? '视频' : '图片'),
+        sizeLabel: '',
+        type: a.type,
+        url: a.url,
+        fromAsset: true,
+      },
+    ])
     setShowAssetPicker(false)
+    setSessions((prev) =>
+      prev.map((s) => (s.id === activeId ? { ...s, updatedAt: Date.now(), media: null } : s)),
+    )
+  }
+
+  const simulateProgress = (id: string) => {
+    const timer = window.setInterval(() => {
+      setPendingUploads((prev) =>
+        prev.map((p) => {
+          if (p.id !== id || p.status !== 'uploading') return p
+          const next = Math.min(95, p.progress + 8 + Math.random() * 7)
+          return { ...p, progress: next }
+        }),
+      )
+    }, 160)
+    return () => window.clearInterval(timer)
   }
 
   const validateAndUploadFile = async (file: File | null) => {
@@ -286,7 +475,22 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
         return
       }
     }
-    setBusy(true)
+    const pid =
+      typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `p_${Date.now()}`
+    setPendingUploads((prev) => [
+      ...prev,
+      {
+        id: pid,
+        status: 'uploading',
+        progress: 5,
+        name: file.name,
+        sizeLabel: formatBytes(file.size),
+        type: isVid ? 'video' : 'image',
+      },
+    ])
+    const stopProg = simulateProgress(pid)
     try {
       const dataUrl = await fileToDataUrl(file)
       const kind: 'image' | 'video' = isVid ? 'video' : 'image'
@@ -299,43 +503,63 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       })
       const url = String(created?.asset?.url || '').trim()
       if (!url) throw new Error('上传失败')
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === activeId
-            ? {
-                ...s,
-                updatedAt: Date.now(),
-                media: {
-                  type: kind,
-                  url,
-                  name: file.name,
-                  sizeLabel: formatBytes(file.size),
-                  fromAsset: false,
-                },
-              }
-            : s,
+      stopProg()
+      setPendingUploads((prev) =>
+        prev.map((p) =>
+          p.id === pid ? { ...p, status: 'done', progress: 100, url, type: kind } : p,
         ),
       )
     } catch (e: any) {
-      setError(e?.message || '上传失败')
-    } finally {
-      setBusy(false)
+      stopProg()
+      setPendingUploads((prev) =>
+        prev.map((p) =>
+          p.id === pid ? { ...p, status: 'error', progress: 0, error: e?.message || '上传失败' } : p,
+        ),
+      )
     }
   }
 
-  const clearMedia = () => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === activeId ? { ...s, updatedAt: Date.now(), media: null } : s)),
-    )
-    setInput('')
+  const removePending = (id: string) => {
+    setPendingUploads((prev) => prev.filter((p) => p.id !== id))
+  }
+
+  const retryPending = (id: string) => {
+    uploadInputRef.current?.click()
+    setPendingUploads((prev) => prev.filter((p) => p.id !== id))
   }
 
   const handleSend = async () => {
     const s = sessions.find((x) => x.id === activeId)
-    if (!s?.media) return
-    const text = input.trim()
-    if (!text) return
-    if (busy) return
+    if (!s || busy) return
+    const trimmed = input.trim()
+    const pendingDone = pendingUploads.filter((p) => p.status === 'done' && p.url)
+    const legacyMedia = s.media
+    const lastMedia = getLastMediaFromMessages(s.messages)
+    const fallbackMedia = lastMedia || (legacyMedia ? { type: legacyMedia.type, url: legacyMedia.url } : null)
+
+    const attachments: HomeChatAttachment[] = pendingDone.map((p) => ({
+      id: p.id,
+      type: p.type,
+      url: p.url!,
+      name: p.name,
+      sizeLabel: p.sizeLabel,
+      fromAsset: !!p.fromAsset,
+    }))
+
+    const primary = pickPrimaryMedia(attachments, fallbackMedia)
+    if (!primary) {
+      setError('请先上传图片或视频，再发起对话')
+      return
+    }
+    if (!pendingDone.length && !trimmed) {
+      setError('请输入有效内容，或上传图片/视频')
+      return
+    }
+    if (!pendingDone.length && trimmed && !hasThreadMedia) {
+      setError('请先上传图片或视频，再发起对话')
+      return
+    }
+    const sendText = trimmed || DEFAULT_SEND_TEXT
 
     let hist = buildHistoryForApi(s.messages)
     if (hist.length > API_HISTORY_MAX) {
@@ -346,30 +570,41 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     const userMsg: HomeChatMsg = {
       id: `m_${Date.now()}_u`,
       role: 'user',
-      text,
+      text: sendText,
+      attachments: attachments.length ? attachments : undefined,
     }
+
+    const paramLine = `【${s.params.resolution} · ${s.params.aspectRatio} · ${s.params.style} · 参考权重 ${s.params.refWeight.toFixed(2)}】`
+
     setSessions((prev) =>
       prev.map((x) => {
         if (x.id !== activeId) return x
         const nextMsgs = [...x.messages, userMsg].slice(-MAX_STORED_MESSAGES)
         const title =
-          x.messages.length === 0 ? sessionTitleFrom(text, x.media!.type) : x.title
-        return { ...x, title, updatedAt: Date.now(), messages: nextMsgs }
+          x.messages.length === 0 ? sessionTitleFrom(sendText, primary.type) : x.title
+        return {
+          ...x,
+          title,
+          updatedAt: Date.now(),
+          messages: nextMsgs,
+          media: null,
+        }
       }),
     )
+    setPendingUploads([])
     setInput('')
     setBusy(true)
     setError('')
     abortRef.current?.abort()
     abortRef.current = new AbortController()
 
-    hist = [...hist, { role: 'user' as const, text }]
+    hist = [...hist, { role: 'user' as const, text: `[附件] ${sendText}` }]
 
     try {
       const data = await homeChatTurnAPI({
-        mediaType: s.media.type,
-        mediaUrl: s.media.url,
-        userMessage: text,
+        mediaType: primary.type,
+        mediaUrl: primary.url,
+        userMessage: `${paramLine}\n${sendText}`,
         history: hist.slice(-API_HISTORY_MAX),
         params: {
           resolution: s.params.resolution,
@@ -385,13 +620,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       if (!data?.success) {
         const code = String(data?.code || '')
         const msg = String(data?.error || '请求失败')
-        if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) {
-          onGoBenefits()
+        if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
+        if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()
+        const am: HomeChatMsg = {
+          id: `m_${Date.now()}_e`,
+          role: 'assistant',
+          text: msg,
+          blocked: true,
         }
-        if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) {
-          onGoBenefits()
-        }
-        throw new Error(msg)
+        setSessions((prev) =>
+          prev.map((x) =>
+            x.id === activeId ? { ...x, updatedAt: Date.now(), messages: [...x.messages, am] } : x,
+          ),
+        )
+        return
       }
 
       if (data.kind === 'blocked') {
@@ -420,6 +662,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           role: 'assistant',
           text: assistantText,
           images: imgs.length ? imgs : undefined,
+          followUps: ASSISTANT_FOLLOWUPS,
+          streamLen: 0,
         }
         setSessions((prev) =>
           prev.map((x) => {
@@ -446,7 +690,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 aspect_ratio: s.params.aspectRatio,
                 style: s.params.style,
                 resolution: s.params.resolution,
-                prompt: text,
+                prompt: sendText,
               },
             })
           }
@@ -456,7 +700,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       void onRefreshUser?.()
     } catch (e: any) {
       if (e?.name === 'AbortError') return
-      setError(e?.message || '发送失败')
+      const am: HomeChatMsg = {
+        id: `m_${Date.now()}_err`,
+        role: 'assistant',
+        text: `请求失败：${e?.message || '未知错误'}`,
+        blocked: true,
+      }
+      setSessions((prev) =>
+        prev.map((x) =>
+          x.id === activeId ? { ...x, updatedAt: Date.now(), messages: [...x.messages, am] } : x,
+        ),
+      )
     } finally {
       setBusy(false)
     }
@@ -468,6 +722,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       abortRef.current?.abort()
       setBusy(false)
     }
+    setPendingUploads([])
     const s = newSession()
     setSessions((prev) => {
       let next = [s, ...prev]
@@ -508,6 +763,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
   const clearAll = () => {
     if (!window.confirm('确认清空全部历史会话？')) return
+    setPendingUploads([])
     const s = newSession()
     setSessions([s])
     setActiveId(s.id)
@@ -532,8 +788,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     return sessions
       .filter((s) => {
         if (sessionFilter === 'all') return true
-        if (sessionFilter === 'video_analysis') return s.media?.type === 'video'
-        return s.media?.type === 'image' || !s.media
+        if (sessionFilter === 'video_analysis') return sessionHasVideo(s)
+        return sessionHasImageContext(s) || !sessionHasVideo(s)
       })
       .filter((s) => {
         if (!kw) return true
@@ -545,13 +801,33 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt)
   }, [sessions, sessionFilter, sessionSearch])
 
-  const mediaReady = !!active?.media
-  const canSend = mediaReady && !!input.trim() && !busy
+  const pendingReady = pendingUploads.some((p) => p.status === 'done' && p.url)
+  const canSend =
+    !busy && (pendingReady || (!!input.trim() && hasThreadMedia))
+
+  const inputDisabled = busy
+  const paramsDisabled = busy
+
+  const lastUserWithMedia = useMemo(() => {
+    if (!active?.messages.length) return null
+    for (let i = active.messages.length - 1; i >= 0; i--) {
+      const m = active.messages[i]
+      if (m.role === 'user' && m.attachments?.length) return m
+    }
+    return null
+  }, [active?.messages])
 
   const suggestTags =
-    active?.media?.type === 'video'
-      ? ['拆解视频脚本', '分析拍摄手法', '提取完整台词']
-      : ['帮我分析这张图', '生成同款风格图片', '提取图中商品信息']
+    pendingReady || pendingUploads.some((p) => p.status === 'done')
+      ? pendingUploads.find((p) => p.type === 'video')
+        ? ['拆解视频脚本', '分析拍摄手法', '提取完整台词']
+        : ['帮我分析这张图', '生成同款风格图片', '提取图中商品信息']
+      : lastUserWithMedia?.attachments?.some((a) => a.type === 'video')
+        ? ['拆解视频脚本', '分析拍摄手法', '提取完整台词']
+        : ['帮我分析这张图', '生成同款风格图片', '提取图中商品信息']
+
+  const showSuggestTags =
+    (pendingReady || !!lastUserWithMedia || pendingUploads.length > 0) && !busy
 
   const updateParams = (patch: Partial<HomeChatSession['params']>) => {
     if (!activeId) return
@@ -560,117 +836,203 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     )
   }
 
+  const openPreview = (url: string, type: 'image' | 'video', title?: string, allUrls?: string[]) => {
+    const urls = allUrls?.length ? allUrls : [url]
+    const idx = Math.max(0, urls.indexOf(url))
+    setPreview({ urls, index: idx, type, title, scale: 1 })
+  }
+
+  const onDropFiles = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const f = e.dataTransfer?.files?.[0]
+    void validateAndUploadFile(f || null)
+  }
+
+  const displayAssistantText = (m: HomeChatMsg) => {
+    if (m.role !== 'assistant') return m.text
+    const full = m.text
+    const n = m.streamLen ?? full.length
+    return full.slice(0, n)
+  }
+
   return (
     <div className="flex gap-6 min-h-[calc(100vh-7.5rem)]">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        {!mediaReady ? (
-          <div className="tikgen-panel rounded-2xl p-8 flex-1 flex flex-col items-center justify-center">
-            <div className="text-white/90 text-lg font-semibold mb-2 flex items-center gap-2">
-              <Home className="w-5 h-5" />
-              上传图片或视频开始对话
+        <div
+          ref={chatScrollRef}
+          className={`tikgen-panel rounded-2xl flex-1 min-h-0 overflow-y-auto mb-3 p-4 relative transition-[box-shadow] duration-150 ${
+            dragOver ? 'ring-2 ring-violet-400/55 ring-offset-2 ring-offset-[#0a0c14]' : ''
+          }`}
+          onDragEnter={(e) => {
+            e.preventDefault()
+            setDragOver(true)
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragOver(true)
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault()
+            if (e.currentTarget.contains(e.relatedTarget as Node)) return
+            setDragOver(false)
+          }}
+          onDrop={onDropFiles}
+        >
+          {active?.messages.length === 0 && !pendingUploads.length && !busy ? (
+            <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-4">
+              <p className="text-sm text-white/40 mb-1">拖拽文件到此处或点击输入框左侧「+」上传</p>
+              <p className="text-xs text-white/30">支持图片 JPG/PNG/WebP（≤20MB）、视频 MP4/MOV（≤500MB，≤10 分钟）</p>
             </div>
-            <p className="text-sm text-white/50 mb-6 text-center max-w-md">
-              支持图片：JPG/PNG/WebP（单文件≤20MB）；支持视频：MP4/MOV（单文件≤500MB，时长≤10 分钟）
-            </p>
-            <div
-              className="tikgen-ref-dropzone rounded-xl p-6 w-full max-w-xl cursor-pointer"
-              onDragOver={(e) => {
-                e.preventDefault()
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                void validateAndUploadFile(e.dataTransfer?.files?.[0] || null)
-              }}
-              onClick={() => uploadInputRef.current?.click()}
-            >
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                className="hidden"
-                onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
-              />
-              <div className="flex flex-col items-center gap-3 py-6">
-                <Upload className="w-10 h-10 text-white/35" />
-                <div className="text-sm font-medium text-white/75">点击或拖拽上传图片 / 视频</div>
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07]"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      uploadInputRef.current?.click()
-                    }}
-                  >
-                    选择文件
-                  </button>
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] inline-flex items-center gap-1"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openAssetPicker('both')
-                    }}
-                  >
-                    <Folder className="w-3.5 h-3.5 text-white/45" />
-                    从资产库选择
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="tikgen-panel rounded-2xl p-4 mb-4">
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  className="shrink-0 rounded-xl overflow-hidden border border-white/12 bg-black/40 w-28 h-20 flex items-center justify-center"
-                  onClick={() =>
-                    active?.media &&
-                    setPreview({ url: active.media.url, type: active.media.type, title: active.media.name })
-                  }
-                >
-                  {active?.media?.type === 'image' ? (
-                    <img src={active.media.url} alt="" className="w-full h-full object-contain" />
+          ) : null}
+
+          <div className="space-y-4">
+            {active?.messages.map((m) => (
+              <div key={m.id}>
+                <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {m.role === 'user' ? (
+                    <UserBubble>
+                      {m.attachments?.length ? (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {m.attachments.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              className="relative w-28 h-24 rounded-xl overflow-hidden border border-white/15 bg-black/50 ring-1 ring-inset ring-white/10"
+                              onClick={() =>
+                                openPreview(
+                                  a.url,
+                                  a.type,
+                                  a.name,
+                                  a.type === 'image'
+                                    ? m.attachments!.filter((x) => x.type === 'image').map((x) => x.url)
+                                    : undefined,
+                                )
+                              }
+                            >
+                              {a.type === 'image' ? (
+                                <img src={a.url} alt="" className="w-full h-full object-contain" />
+                              ) : (
+                                <video src={a.url} className="w-full h-full object-contain" muted playsInline />
+                              )}
+                              {a.fromAsset ? (
+                                <span className="absolute bottom-1 right-1 text-[10px] px-1 rounded bg-black/55 text-violet-200/95">
+                                  资产库
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="text-[11px] text-white/55 mb-1">
+                        {active
+                          ? `【${active.params.resolution} · ${active.params.aspectRatio} · ${active.params.style} · 参考权重 ${active.params.refWeight.toFixed(2)}】`
+                          : null}
+                      </div>
+                      <div className="whitespace-pre-wrap">{m.text}</div>
+                    </UserBubble>
                   ) : (
-                    <video src={active.media!.url} className="w-full h-full object-contain" muted playsInline />
+                    <AssistantBubble>
+                      {m.blocked ? (
+                        <div className="text-amber-100/95 whitespace-pre-wrap">{displayAssistantText(m)}</div>
+                      ) : (
+                        <>
+                          <div className="whitespace-pre-wrap">{displayAssistantText(m)}</div>
+                          {m.images?.length ? (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {m.images.map((u, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/12 bg-black/40"
+                                  onClick={() => openPreview(u, 'image', `生成 ${i + 1}`, m.images)}
+                                >
+                                  <img src={u} alt="" className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </AssistantBubble>
                   )}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white/90 font-medium truncate">{active?.media?.name}</div>
-                  <div className="text-xs text-white/45 mt-1">
-                    {active?.media?.sizeLabel}
-                    {active?.media?.fromAsset ? (
-                      <span className="ml-2 text-violet-200/90">来自资产库</span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="text-xs px-2 py-1 rounded-lg border border-white/12 text-white/75 hover:bg-white/[0.06]"
-                      onClick={() => uploadInputRef.current?.click()}
-                    >
-                      更换媒体
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs px-2 py-1 rounded-lg border border-red-400/25 text-red-200 hover:bg-red-500/10"
-                      onClick={clearMedia}
-                    >
-                      删除媒体
-                    </button>
-                  </div>
                 </div>
+                {m.role === 'assistant' && m.followUps?.length ? (
+                  <div className="flex justify-start mt-2 pl-1">
+                    <div className="flex flex-wrap gap-2">
+                      {m.followUps.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className="px-3 py-1.5 rounded-full text-xs border border-white/12 bg-white/[0.04] text-white/80 hover:bg-white/[0.08]"
+                          onClick={() => setInput(t)}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                className="hidden"
-                onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
-              />
-              <div className="mt-4 flex flex-wrap gap-2">
+            ))}
+
+            {pendingUploads.length > 0 ? (
+              <div className="flex flex-col items-end gap-2">
+                {pendingUploads.map((p) => (
+                  <UserBubble key={p.id}>
+                    <div className="flex items-start gap-3">
+                      <div className="w-24 h-20 rounded-xl border border-white/12 bg-black/40 overflow-hidden flex items-center justify-center shrink-0">
+                        {p.status === 'done' && p.url ? (
+                          p.type === 'image' ? (
+                            <img src={p.url} alt="" className="w-full h-full object-contain" />
+                          ) : (
+                            <video src={p.url} className="w-full h-full object-contain" muted playsInline />
+                          )
+                        ) : (
+                          <Upload className="w-7 h-7 text-white/35" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        <div className="text-[11px] text-white/40">{p.sizeLabel}</div>
+                        {p.status === 'uploading' ? (
+                          <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-[width]"
+                              style={{ width: `${p.progress}%` }}
+                            />
+                          </div>
+                        ) : null}
+                        {p.status === 'error' ? (
+                          <div className="mt-2 space-y-2">
+                            <div className="text-xs text-red-300/95">{p.error}</div>
+                            <button
+                              type="button"
+                              className="text-xs px-2 py-1 rounded-lg border border-white/15 text-white/80 hover:bg-white/[0.08]"
+                              onClick={() => retryPending(p.id)}
+                            >
+                              重新上传
+                            </button>
+                          </div>
+                        ) : null}
+                        {p.status === 'done' ? (
+                          <button
+                            type="button"
+                            className="mt-2 text-[11px] text-white/45 hover:text-white/70"
+                            onClick={() => removePending(p.id)}
+                          >
+                            移除
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </UserBubble>
+                ))}
+              </div>
+            ) : null}
+
+            {showSuggestTags ? (
+              <div className="flex flex-wrap gap-2 justify-end">
                 {suggestTags.map((t) => (
                   <button
                     key={t}
@@ -682,65 +1044,70 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                   </button>
                 ))}
               </div>
-            </div>
+            ) : null}
 
-            <div className="tikgen-panel rounded-2xl p-4 flex-1 min-h-0 overflow-y-auto mb-4">
-              {active?.messages.length === 0 && !busy ? (
-                <div className="h-40 flex items-center justify-center text-white/35 text-sm">开始输入你的问题</div>
-              ) : null}
-              <div className="space-y-4">
-                {active?.messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                        m.role === 'user'
-                          ? 'bg-gradient-to-r from-pink-500/90 to-purple-600/90 text-white'
-                          : m.blocked
-                            ? 'bg-amber-500/15 border border-amber-400/30 text-amber-50'
-                            : 'bg-white/[0.06] border border-white/10 text-white/90'
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap">{m.text}</div>
-                      {m.images?.length ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {m.images.map((u, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              className="relative w-24 h-24 rounded-lg overflow-hidden border border-white/12"
-                              onClick={() => setPreview({ url: u, type: 'image', title: `生成 ${i + 1}` })}
-                            >
-                              <img src={u} alt="" className="w-full h-full object-cover" />
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
+            {busy ? (
+              <div className="flex justify-start">
+                <AssistantBubble>
+                  <div className="flex items-center gap-2 text-white/70">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    AI 正在思考…
                   </div>
-                ))}
-                {busy ? (
-                  <div className="flex justify-start">
-                    <div className="bg-white/[0.06] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white/70 flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      AI 正在思考…
-                    </div>
-                  </div>
-                ) : null}
-                <div ref={listEndRef} />
+                </AssistantBubble>
               </div>
-            </div>
-          </>
-        )}
+            ) : null}
+            <div ref={listEndRef} />
+          </div>
+        </div>
 
-        {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
         {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
+        {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
         <div className="tikgen-panel rounded-2xl p-4 shrink-0">
-          <div className="flex gap-3 items-end">
+          <div className="flex gap-2 items-end">
+            <div className="relative shrink-0" ref={plusMenuRef}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setPlusMenuOpen((v) => !v)}
+                className="w-11 h-11 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-md flex items-center justify-center disabled:opacity-45 hover:brightness-110 hover:shadow-lg transition-all"
+                title="上传"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+              {plusMenuOpen ? (
+                <div className="absolute bottom-full left-0 mb-2 z-[60] min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] shadow-xl py-1.5">
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm text-white/90 hover:bg-white/[0.06]"
+                    onClick={() => {
+                      setPlusMenuOpen(false)
+                      uploadInputRef.current?.click()
+                    }}
+                  >
+                    从本地上传
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm text-white/90 hover:bg-white/[0.06]"
+                    onClick={() => openAssetPicker('both')}
+                  >
+                    从资产库选择
+                  </button>
+                </div>
+              ) : null}
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                className="hidden"
+                onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
+              />
+            </div>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              disabled={!mediaReady || busy}
+              disabled={inputDisabled}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -748,7 +1115,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 }
               }}
               placeholder={
-                !mediaReady
+                !hasThreadMedia && !pendingReady
                   ? '请先上传图片或视频，再发起对话'
                   : '请输入您的需求，支持图片分析、图片生成、视频分析'
               }
@@ -774,7 +1141,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <select
                 className="mt-1 w-full tikgen-spec-select rounded-lg bg-black/35 py-2 px-2 text-white/90"
                 value={active?.params.resolution || '2K'}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ resolution: e.target.value as any })}
               >
                 <option value="2K">2K</option>
@@ -787,7 +1154,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <select
                 className="mt-1 w-full tikgen-spec-select rounded-lg bg-black/35 py-2 px-2 text-white/90"
                 value={active?.params.aspectRatio || '1:1'}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
               >
                 <option value="1:1">1:1</option>
@@ -801,7 +1168,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <select
                 className="mt-1 w-full tikgen-spec-select rounded-lg bg-black/35 py-2 px-2 text-white/90"
                 value={active?.params.style || '写实'}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ style: e.target.value as any })}
               >
                 <option value="写实">写实</option>
@@ -820,7 +1187,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                 max={1}
                 step={0.05}
                 value={active?.params.refWeight ?? 0.7}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
                 className="mt-2 w-full"
               />
@@ -831,7 +1198,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <input
                 type="checkbox"
                 checked={active?.params.syncToAssets !== false}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ syncToAssets: e.target.checked })}
               />
               生成图片自动同步至资产库
@@ -840,7 +1207,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <input
                 type="checkbox"
                 checked={active?.params.optimizePrompt !== false}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ optimizePrompt: e.target.checked })}
               />
               自动优化提示词
@@ -849,7 +1216,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <input
                 type="checkbox"
                 checked={active?.params.hdEnhance !== false}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ hdEnhance: e.target.checked })}
               />
               开启高清细节增强
@@ -858,7 +1225,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <input
                 type="checkbox"
                 checked={active?.params.negativePrompt !== false}
-                disabled={!mediaReady}
+                disabled={paramsDisabled}
                 onChange={(e) => updateParams({ negativePrompt: e.target.checked })}
               />
               添加通用负面提示词
@@ -1021,19 +1388,104 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           className="fixed inset-0 z-[90] bg-black/80 flex items-center justify-center p-4"
           onClick={() => setPreview(null)}
         >
-          <div className="max-w-5xl w-full max-h-[90vh] relative" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="absolute -top-10 right-0 px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20"
-              onClick={() => setPreview(null)}
-            >
-              关闭
-            </button>
-            {preview.type === 'image' ? (
-              <img src={preview.url} alt="" className="w-full max-h-[85vh] object-contain rounded-xl bg-black" />
-            ) : (
-              <video src={preview.url} className="w-full max-h-[85vh] rounded-xl bg-black" controls autoPlay playsInline />
-            )}
+          <div className="max-w-5xl w-full max-h-[92vh] relative flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+              <div className="text-xs text-white/70 truncate">{preview.title}</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {preview.type === 'image' && preview.urls.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="text-white/80 p-1.5 rounded-lg hover:bg-white/10"
+                      onClick={() => setPreview((p) => (p ? { ...p, index: (p.index + p.urls.length - 1) % p.urls.length } : p))}
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="text-white/80 p-1.5 rounded-lg hover:bg-white/10"
+                      onClick={() => setPreview((p) => (p ? { ...p, index: (p.index + 1) % p.urls.length } : p))}
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </>
+                ) : null}
+                {preview.type === 'image' ? (
+                  <>
+                    <button
+                      type="button"
+                      className="text-white/80 p-1.5 rounded-lg hover:bg-white/10"
+                      onClick={() => setPreview((p) => (p ? { ...p, scale: Math.min(3, p.scale + 0.25) } : p))}
+                    >
+                      <ZoomIn className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="text-white/80 p-1.5 rounded-lg hover:bg-white/10"
+                      onClick={() => setPreview((p) => (p ? { ...p, scale: Math.max(0.5, p.scale - 0.25) } : p))}
+                    >
+                      <ZoomOut className="w-5 h-5" />
+                    </button>
+                  </>
+                ) : null}
+                <a
+                  href={preview.urls[preview.index]}
+                  download
+                  className="inline-flex items-center gap-1 text-xs text-white/85 px-2 py-1.5 rounded-lg border border-white/15 hover:bg-white/10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Download className="w-4 h-4" /> 下载
+                </a>
+                {preview.type === 'image' ? (
+                  <button
+                    type="button"
+                    className="text-xs text-white/85 px-2 py-1.5 rounded-lg border border-white/15 hover:bg-white/10"
+                    onClick={async () => {
+                      const u = preview.urls[preview.index]
+                      try {
+                        await createAssetAPI({
+                          source: 'user_upload',
+                          type: 'image',
+                          url: u,
+                          name: preview.title || 'image.png',
+                          metadata: { from: 'home_chat_preview_save' },
+                        })
+                        alert('已存入资产库')
+                      } catch (e: any) {
+                        alert(e?.message || '存入失败')
+                      }
+                    }}
+                  >
+                    存入资产库
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20"
+                  onClick={() => setPreview(null)}
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto rounded-xl bg-black/50 flex items-center justify-center min-h-[200px]">
+              {preview.type === 'image' ? (
+                <img
+                  src={preview.urls[preview.index]}
+                  alt=""
+                  style={{ transform: `scale(${preview.scale})` }}
+                  className="max-h-[78vh] max-w-full object-contain transition-transform duration-150"
+                />
+              ) : (
+                <video
+                  src={preview.urls[preview.index]}
+                  className="w-full max-h-[78vh] rounded-xl bg-black"
+                  controls
+                  autoPlay
+                  playsInline
+                />
+              )}
+            </div>
           </div>
         </div>
       ) : null}
