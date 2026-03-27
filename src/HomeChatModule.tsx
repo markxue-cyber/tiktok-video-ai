@@ -82,6 +82,8 @@ export type HomeChatMsg = {
   imageItems?: HomeChatImageItem[]
   blocked?: boolean
   followUps?: string[]
+  /** 首轮流式：首字未到时在气泡内展示加载态，勿与快捷指令同时出现 */
+  pendingAnalysis?: boolean
   /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
   streamLen?: number
 }
@@ -870,7 +872,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 id: assistantMsgId!,
                 role: 'assistant' as const,
                 text: '',
-                followUps: ASSISTANT_FOLLOWUPS,
+                pendingAnalysis: true,
               },
             ],
           }
@@ -891,6 +893,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         {
           signal: abortRef.current?.signal,
           onDelta: (chunk) => {
+            if (!chunk) return
             setSessions((prev) =>
               prev.map((session) => {
                 if (session.id !== activeId) return session
@@ -903,6 +906,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           ...m,
                           text: (m.text || '') + chunk,
                           streamLen: (m.text || '').length + chunk.length,
+                          pendingAnalysis: false,
                         }
                       : m,
                   ),
@@ -942,6 +946,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       ...m,
                       text: msg,
                       blocked: true,
+                      pendingAnalysis: false,
                       followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
                     }
                   : m,
@@ -965,6 +970,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       ...m,
                       text: String(data.message || ''),
                       blocked: true,
+                      pendingAnalysis: false,
                       followUps: ['仅分析素材', '提炼可用卖点', '重新描述我的需求'],
                     }
                   : m,
@@ -989,6 +995,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       ...m,
                       text: assistantTextFinal,
                       streamLen: assistantTextFinal.length,
+                      pendingAnalysis: false,
                       followUps: data.quickActions?.length ? [...data.quickActions] : ASSISTANT_FOLLOWUPS,
                     }
                   : m,
@@ -1129,6 +1136,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       images: imgs.length ? imgs : undefined,
                       imageItems: imageItems.length ? imageItems : undefined,
                       streamLen: assistantTextFinal.length,
+                      pendingAnalysis: false,
                       followUps:
                         data.quickActions && data.quickActions.length
                           ? [...data.quickActions, ...(data.previewToken ? ['确认高清生成'] : [])]
@@ -1203,6 +1211,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       ...m,
                       text: errText,
                       blocked: true,
+                      pendingAnalysis: false,
                       followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
                     }
                   : m,
@@ -1716,7 +1725,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                         <div className="whitespace-pre-wrap text-amber-100/95">{displayAssistantText(m)}</div>
                       ) : (
                         <>
-                          <div className="whitespace-pre-wrap">{displayAssistantText(m)}</div>
+                          {m.pendingAnalysis && !String(m.text || '').trim() ? (
+                            <div className="flex items-center gap-2.5 text-white/75">
+                              <TypingDots />
+                              <span className="text-sm">正在输出商用分析...</span>
+                            </div>
+                          ) : (
+                            <div className="whitespace-pre-wrap">{displayAssistantText(m)}</div>
+                          )}
                           {m.images?.length ? (
                             <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
                               {m.images.map((u, i) => {
@@ -1741,7 +1757,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                               })}
                             </div>
                           ) : null}
-                          {m.followUps?.length ? (
+                          {!m.pendingAnalysis && m.followUps?.length ? (
                             <div className="mt-3 border-t border-white/10 pt-3">
                               <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-white/35">
                                 快捷指令
@@ -1797,7 +1813,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               </div>
             ) : null}
 
-            {busy ? (
+            {busy && busyStage !== 'analyze' ? (
               <div className="flex justify-start">
                 <AssistantBubble>
                   <div className="flex items-center gap-2.5 text-white/75">
@@ -1805,13 +1821,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <span className="text-sm">
                       {busyStage === 'identify'
                         ? '正在识别商品主体...'
-                        : busyStage === 'analyze'
-                          ? '正在输出商用分析...'
-                          : busyStage === 'optimize'
-                            ? '正在优化提示词...'
-                            : busyStage === 'generate'
-                              ? '正在生成图片...'
-                              : 'AI 正在处理...'}
+                        : busyStage === 'optimize'
+                          ? '正在优化提示词...'
+                          : busyStage === 'generate'
+                            ? '正在生成图片...'
+                            : 'AI 正在处理...'}
                     </span>
                   </div>
                 </AssistantBubble>
