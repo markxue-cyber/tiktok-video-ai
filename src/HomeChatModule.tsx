@@ -698,8 +698,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             ? '素材读取失败，请重新上传图片/视频后重试。'
             : code === 'UPSTREAM_FAILED'
               ? '模型服务繁忙，请稍后重试；建议先简化需求或减少生成张数。'
+              : code === 'UPSTREAM_TIMEOUT'
+                ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
               : code === 'RATE_LIMITED'
                 ? '请求过于频繁，请等待 10-20 秒后重试。'
+                : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
+                  ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
                 : msgRaw
         if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
         if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()

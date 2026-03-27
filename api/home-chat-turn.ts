@@ -628,6 +628,7 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {
+    const startedAt = Date.now()
     const apiKey = process.env.XIAO_DOU_BAO_API_KEY
     const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const supabaseUrl = process.env.SUPABASE_URL || ''
@@ -730,7 +731,10 @@ export default async function handler(req: any, res: any) {
         const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
         const messages = historyToMessages(history, multimodal, supabaseUrl)
         analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35)
-        opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
+        // 热修复：图片生成链路下，文案包先降级为按需生成，避免单次函数超时
+        if (!needsImageGen || generateMode === 'preview') {
+          opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
+        }
       } catch (e: any) {
         return res.status(200).json({ success: false, error: e?.message || '分析失败', code: 'ANALYSIS_FAILED' })
       }
@@ -839,12 +843,21 @@ export default async function handler(req: any, res: any) {
       const styleToUse = draft?.style || style
       const resolutionToUse = draft?.resolution || resolution
 
+      // 热修复：限制一次请求的组合规模，避免 serverless 超时
+      const ratioListSafe = ratioList.slice(0, 2)
       const variants = abVariant ? (['conservative', 'aggressive'] as const) : (['normal'] as const)
+      const variantsSafe = variants.slice(0, 2)
+      const imageCountSafe = Math.max(1, Math.min(imageCount, 2))
+      const maxJobs = 4
       const images: Array<{ url: string; ratio: string; variant: string; qcScore: number; qcIssues: string[] }> = []
       const baseIdem = String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() || `home-${Date.now()}`
-      for (const ratio of ratioList) {
-        for (const variant of variants) {
-          for (let i = 0; i < imageCount; i++) {
+      for (const ratio of ratioListSafe) {
+        for (const variant of variantsSafe) {
+          for (let i = 0; i < imageCountSafe; i++) {
+            if (images.length >= maxJobs) break
+            if (Date.now() - startedAt > 18_000) {
+              break
+            }
             const idem = `${baseIdem}:homeimg:${ratio}:${variant}:${i}:${Date.now()}_${Math.random().toString(16).slice(2)}`
             const variantHint =
               variant === 'conservative'
@@ -870,7 +883,8 @@ export default async function handler(req: any, res: any) {
               model: 'nano-banana-2',
             })
             let qc: QcResult = { score: 80, issues: [] }
-            if (qcEnabled && images.length < 6) {
+            // 热修复：同步质检最多做 1 张，剩余降级默认分
+            if (qcEnabled && images.length < 1 && Date.now() - startedAt < 16_000) {
               qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
             }
             images.push({
@@ -899,11 +913,11 @@ export default async function handler(req: any, res: any) {
           resolution: resolutionToUse,
           style: styleToUse,
           refWeight,
-          imageCount,
+          imageCount: imageCountSafe,
           mode: 'final',
           subjectLock,
-          multiRatio,
-          abVariant,
+          multiRatio: multiRatio && ratioListSafe.length > 1,
+          abVariant: abVariant && variantsSafe.length > 1,
         },
       })
     }
@@ -933,6 +947,13 @@ export default async function handler(req: any, res: any) {
     } else if (t.includes('非法 mediaurl') || t.includes('bad_media')) {
       code = 'BAD_MEDIA'
       msg = '素材地址无效，请重新上传到资产库后再发起分析或生成。'
+    } else if (
+      t.includes('function_invocation_timeout') ||
+      t.includes('timeout') ||
+      t.includes('timed out')
+    ) {
+      code = 'UPSTREAM_TIMEOUT'
+      msg = '请求超时，请先用 1 张预览图确认方向，或关闭多比例/A-B 后重试。'
     } else if (t.includes('上游') || t.includes('llm请求失败') || t.includes('analysis_failed')) {
       code = 'UPSTREAM_FAILED'
       msg = '模型服务暂时繁忙，请稍后重试；如多次失败，建议简化需求后再提交。'
