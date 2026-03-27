@@ -1976,7 +1976,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 </div>
               )}
             </div>
-            <div className="px-5 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-gray-50/80">
+            <div className="px-5 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-gray-600">
                 已选 <span className="font-medium text-gray-900">{assetPickerSelectedIds.size}</span> 项
                 <span className="text-gray-500">
