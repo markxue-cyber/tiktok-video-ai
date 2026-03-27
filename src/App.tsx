@@ -51,7 +51,9 @@ import {
   Trash2,
   LayoutGrid,
   Layers,
+  Home,
 } from 'lucide-react'
+import { HomeChatModule } from './HomeChatModule'
 import { checkVideoStatus, generateVideoAPI } from './api/video'
 import {
   beautifyScript,
@@ -1125,11 +1127,21 @@ function normalizeVideoSubNavId(v: string | null | undefined): VideoSubNavId {
 }
 
 function workspaceParamFromNav(
-  mainNav: 'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer',
+  mainNav:
+    | 'home'
+    | 'image'
+    | 'video'
+    | 'creativePlaza'
+    | 'templates'
+    | 'tasks'
+    | 'assets'
+    | 'benefits'
+    | 'developer',
   imageSubNav: ImageSubNavId,
   imageToolsTab: ImageToolsTabId,
   videoSubNav: VideoSubNavId,
 ): string | null {
+  if (mainNav === 'home') return 'home.chat'
   if (mainNav === 'image' && imageSubNav === 'imageGen') return 'image.imageGen'
   if (mainNav === 'image' && imageSubNav === 'ecommerce') return 'image.ecommerce'
   if (mainNav === 'image' && imageSubNav === 'tools') return `image.tools.${imageToolsTab}`
@@ -1179,8 +1191,36 @@ function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [authResendBusy, setAuthResendBusy] = useState(false)
   const [mainNav, setMainNav] = useState<
-    'image' | 'video' | 'creativePlaza' | 'templates' | 'tasks' | 'assets' | 'benefits' | 'developer'
-  >('image')
+    | 'home'
+    | 'image'
+    | 'video'
+    | 'creativePlaza'
+    | 'templates'
+    | 'tasks'
+    | 'assets'
+    | 'benefits'
+    | 'developer'
+  >(() => {
+    try {
+      const v = sessionStorage.getItem('tikgen.sess.mainNav')
+      if (
+        v === 'home' ||
+        v === 'image' ||
+        v === 'video' ||
+        v === 'creativePlaza' ||
+        v === 'templates' ||
+        v === 'tasks' ||
+        v === 'assets' ||
+        v === 'benefits' ||
+        v === 'developer'
+      ) {
+        return v as any
+      }
+    } catch {
+      // ignore
+    }
+    return 'image'
+  })
   const [imageSubNav, setImageSubNav] = useState<ImageSubNavId>(() => {
     try {
       const v = sessionStorage.getItem('tikgen.sess.imageSubNav')
@@ -1254,6 +1294,14 @@ function App() {
     }
   }, [videoSubNav])
 
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('tikgen.sess.mainNav', mainNav)
+    } catch {
+      // ignore
+    }
+  }, [mainNav])
+
   /** 深链：?workspace=image.tools.upscale | image.generate | video.generate | video.upscale（兼容 video.tools.*、video.analyze）（先于 URL 同步执行，避免竞态） */
   useLayoutEffect(() => {
     if (page !== 'home' || typeof window === 'undefined') return
@@ -1262,6 +1310,14 @@ function App() {
       const w = sp.get('workspace')?.trim()
       if (!w) return
       const parts = w.split('.').filter(Boolean)
+      if (parts[0] === 'home' && parts[1] === 'chat') {
+        setMainNav('home')
+        sp.delete('workspace')
+        const rest = sp.toString()
+        const nextUrl = `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash || ''}`
+        window.history.replaceState(null, '', nextUrl)
+        return
+      }
       if (parts[0] === 'image') {
         if (parts[1] === 'imageGen') {
           setMainNav('image')
@@ -1542,6 +1598,7 @@ function App() {
   }, [page])
 
   const currentPageLabel = useMemo(() => {
+    if (mainNav === 'home') return '首页'
     if (mainNav === 'image') {
       if (imageSubNav === 'imageGen') return '图片生成'
       if (imageSubNav === 'ecommerce') return '电商套图'
@@ -1953,6 +2010,13 @@ function App() {
             <>
               <NavPrimary
                 collapsed
+                icon={<Home className="w-5 h-5" />}
+                label="首页"
+                active={mainNav === 'home'}
+                onClick={() => setMainNav('home')}
+              />
+              <NavPrimary
+                collapsed
                 icon={<Sparkles className="w-5 h-5" />}
                 label="图片生成"
                 active={mainNav === 'image' && imageSubNav === 'imageGen'}
@@ -2025,6 +2089,13 @@ function App() {
             </>
           ) : (
             <>
+              <NavPrimary
+                collapsed={false}
+                icon={<Home className="w-5 h-5" />}
+                label="首页"
+                active={mainNav === 'home'}
+                onClick={() => setMainNav('home')}
+              />
               <NavPrimary
                 collapsed={false}
                 icon={<Image className="w-5 h-5" />}
@@ -2129,6 +2200,7 @@ function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">
+                {mainNav === 'home' && '首页'}
                 {mainNav === 'image' && imageSubNav === 'imageGen' && '图片生成'}
                 {mainNav === 'image' && imageSubNav === 'ecommerce' && '电商套图'}
                 {mainNav === 'image' && imageSubNav === 'tools' && imageToolsTab === 'removeBg' && '图片工具 · 去除背景'}
@@ -2274,7 +2346,10 @@ function App() {
             </div>
           </div>
         </header>
-        <div className={`p-6 ${mainNav === 'assets' ? 'pt-2' : ''}`}>
+        <div className={mainNav === 'assets' ? 'pt-2 p-6' : mainNav === 'home' ? 'p-4' : 'p-6'}>
+          {mainNav === 'home' ? (
+            <HomeChatModule onGoBenefits={gotoBenefits} onRefreshUser={refreshCurrentUser} />
+          ) : null}
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
           <div className={mainNav === 'image' && imageSubNav === 'imageGen' ? '' : 'hidden'}>
             <ImageGenerator
