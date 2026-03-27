@@ -7,6 +7,8 @@ import {
   Folder,
   ImagePlus,
   Pencil,
+  PanelRightClose,
+  PanelRightOpen,
   Pin,
   Plus,
   SlidersHorizontal,
@@ -1297,10 +1299,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
         <button
           type="button"
           onClick={() => setSidebarCollapsed((v) => !v)}
-          className="mb-3 inline-flex h-9 w-9 shrink-0 items-center justify-center self-end rounded-lg border border-white/12 bg-white/[0.04] text-white/75 transition hover:border-violet-400/35 hover:text-violet-200"
+          className="mb-3 inline-flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-lg border border-white/12 bg-white/[0.04] text-white/75 transition hover:border-violet-400/35 hover:text-violet-200"
           title={sidebarCollapsed ? '展开历史对话' : '收起历史对话'}
         >
-          {sidebarCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {sidebarCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
         </button>
 
         {sidebarCollapsed ? null : (
