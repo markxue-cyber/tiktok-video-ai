@@ -343,13 +343,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }, [active?.messages.length, busy, pendingUploads.length, dragOver])
 
   useEffect(() => {
+    if (!plusMenuOpen) return
     const onDoc = (e: MouseEvent) => {
       if (!plusMenuRef.current) return
       if (!plusMenuRef.current.contains(e.target as Node)) setPlusMenuOpen(false)
     }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
+    document.addEventListener('click', onDoc)
+    return () => document.removeEventListener('click', onDoc)
+  }, [plusMenuOpen])
 
   useEffect(() => {
     if (!preview) return
@@ -1065,16 +1066,23 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
 
           <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
             <div className="flex items-end gap-2.5">
-              <div className="flex min-h-[5.25rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow] focus-within:border-violet-400/30 focus-within:ring-1 focus-within:ring-violet-400/20">
-                <div className="relative flex shrink-0 flex-col justify-start pb-2 pl-2 pt-2.5" ref={plusMenuRef}>
+              <div className="isolate flex min-h-[5.25rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,box-shadow] focus-within:border-violet-400/30 focus-within:ring-1 focus-within:ring-violet-400/20">
+                <div
+                  className="relative z-10 flex min-w-[2.75rem] shrink-0 flex-col justify-start border-r border-white/10 pb-2 pl-2 pr-2 pt-2.5"
+                  ref={plusMenuRef}
+                >
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => setPlusMenuOpen((v) => !v)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPlusMenuOpen((v) => !v)
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-violet-600 to-indigo-600 text-white shadow-[0_4px_14px_rgba(124,58,237,0.35)] transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:opacity-45"
                     title="上传"
                   >
-                    <Plus className="h-4 w-4 stroke-[2.25]" />
+                    <Plus className="pointer-events-none h-4 w-4 stroke-[2.25]" />
                   </button>
                   {plusMenuOpen ? (
                     <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
@@ -1121,7 +1129,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                       : '请输入您的需求，支持图片分析、图片生成、视频分析'
                   }
                   rows={3}
-                  className="min-h-[5.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent py-3 pr-3 pl-1 text-sm leading-relaxed text-white/90 outline-none ring-0 placeholder:text-white/28 focus:ring-0 disabled:opacity-45"
+                  className="relative z-0 min-h-[5.25rem] min-w-0 flex-1 resize-none border-0 bg-transparent py-3 pl-2 pr-3 text-sm leading-relaxed text-white/90 outline-none ring-0 placeholder:text-white/28 focus:ring-0 disabled:opacity-45"
                 />
               </div>
             <button
