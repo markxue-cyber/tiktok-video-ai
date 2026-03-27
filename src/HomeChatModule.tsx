@@ -238,9 +238,7 @@ function AssistantBubble({
   className?: string
 }) {
   return (
-    <div
-      className={`max-w-[min(85%,40rem)] rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1d28]/95 via-[#14161f]/95 to-[#0e1018]/95 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] px-4 py-3 text-sm leading-relaxed text-white/92 ${className}`}
-    >
+    <div className={`max-w-[min(85%,40rem)] px-1 py-1 text-sm leading-relaxed text-white/92 ${className}`}>
       {children}
     </div>
   )
