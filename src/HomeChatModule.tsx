@@ -9,6 +9,7 @@ import {
   Pencil,
   Pin,
   Plus,
+  SlidersHorizontal,
   Trash2,
   Upload,
   X,
@@ -288,7 +289,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [paramsOpen, setParamsOpen] = useState(false)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
+  const composerRef = useRef<HTMLDivElement | null>(null)
   const plusMenuRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
@@ -344,14 +347,16 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }, [active?.messages.length, busy, pendingUploads.length, dragOver])
 
   useEffect(() => {
-    if (!plusMenuOpen) return
+    if (!plusMenuOpen && !paramsOpen) return
     const onDoc = (e: MouseEvent) => {
-      if (!plusMenuRef.current) return
-      if (!plusMenuRef.current.contains(e.target as Node)) setPlusMenuOpen(false)
+      if (!composerRef.current) return
+      if (composerRef.current.contains(e.target as Node)) return
+      setPlusMenuOpen(false)
+      setParamsOpen(false)
     }
     document.addEventListener('click', onDoc)
     return () => document.removeEventListener('click', onDoc)
-  }, [plusMenuOpen])
+  }, [plusMenuOpen, paramsOpen])
 
   useEffect(() => {
     if (!preview) return
@@ -1065,7 +1070,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
           {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
-          <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
+          <div
+            ref={composerRef}
+            className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)] focus-within:border-violet-400/35 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]"
+          >
             <div className="flex items-end gap-2.5">
               <textarea
                 value={input}
@@ -1095,52 +1103,102 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               </button>
             </div>
 
-            <div className="mt-2 pt-1">
-              <div className="flex items-start gap-2.5">
-                <div className="relative shrink-0" ref={plusMenuRef}>
+            <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2">
+              <div className="relative shrink-0" ref={plusMenuRef}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setParamsOpen(true)
+                    setPlusMenuOpen((v) => !v)
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/[0.06] hover:text-violet-100 active:scale-95 disabled:opacity-45"
+                  title="上传"
+                >
+                  <ImagePlus className="pointer-events-none h-[17px] w-[17px] stroke-[2]" />
+                </button>
+                {plusMenuOpen ? (
+                  <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                      onClick={() => {
+                        setPlusMenuOpen(false)
+                        uploadInputRef.current?.click()
+                      }}
+                    >
+                      从本地上传
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                      onClick={() => openAssetPicker('both')}
+                    >
+                      从资产库选择
+                    </button>
+                  </div>
+                ) : null}
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                  className="hidden"
+                  onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPlusMenuOpen(false)
+                  setParamsOpen((v) => !v)
+                }}
+                className={`inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs transition ${
+                  paramsOpen
+                    ? 'bg-violet-500/20 text-violet-100'
+                    : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
+                }`}
+                title="参数设置"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                参数
+              </button>
+
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                <div className="flex min-w-max items-center gap-1.5 pr-1">
                   <button
                     type="button"
-                    disabled={busy}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setPlusMenuOpen((v) => !v)
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/[0.06] hover:text-violet-100 active:scale-95 disabled:opacity-45"
-                    title="上传"
+                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
                   >
-                    <ImagePlus className="pointer-events-none h-[17px] w-[17px] stroke-[2]" />
+                    {active?.params.resolution || '2K'}
                   </button>
-                  {plusMenuOpen ? (
-                    <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
-                      <button
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                        onClick={() => {
-                          setPlusMenuOpen(false)
-                          uploadInputRef.current?.click()
-                        }}
-                      >
-                        从本地上传
-                      </button>
-                      <button
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                        onClick={() => openAssetPicker('both')}
-                      >
-                        从资产库选择
-                      </button>
-                    </div>
-                  ) : null}
-                  <input
-                    ref={uploadInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                    className="hidden"
-                    onChange={(e) => void validateAndUploadFile(e.target.files?.[0] || null)}
-                  />
+                  <button
+                    type="button"
+                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
+                  >
+                    {active?.params.aspectRatio || '1:1'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
+                  >
+                    {active?.params.style || '写实'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100/90"
+                  >
+                    参考权重 {active?.params.refWeight?.toFixed(2)}
+                  </button>
                 </div>
-                <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              </div>
+            </div>
+
+            {paramsOpen ? (
+              <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
+                <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                     <span className="shrink-0 whitespace-nowrap">分辨率</span>
                     <select
@@ -1201,7 +1259,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                   </label>
                 </div>
               </div>
-            </div>
+            ) : null}
           </div>
           <div className="mt-3 hidden grid sm:grid-cols-2 gap-2 text-xs text-white/80" aria-hidden>
             <label className="inline-flex items-center gap-2">
