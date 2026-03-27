@@ -257,10 +257,9 @@ function TypingDots() {
 type Props = {
   onGoBenefits: () => void
   onRefreshUser?: () => void | Promise<void>
-  onOpenFeature?: (feature: 'ai-image' | 'ecommerce' | 'upscale' | 'translate') => void
 }
 
-export function HomeChatModule({ onGoBenefits, onRefreshUser, onOpenFeature }: Props) {
+export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const [sessions, setSessions] = useState<HomeChatSession[]>(() => loadSessions())
   const [activeId, setActiveId] = useState<string>(() => {
     try {
@@ -297,7 +296,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onOpenFeature }: P
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
-  const homeMountDoneRef = useRef(false)
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
@@ -330,17 +328,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onOpenFeature }: P
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (homeMountDoneRef.current) return
-    homeMountDoneRef.current = true
-    setSessions((prev) => {
-      if (!prev.length) return prev
-      const s = newSession()
-      setActiveId(s.id)
-      return [s, ...prev].slice(0, MAX_SESSIONS)
-    })
-  }, [])
 
   useEffect(() => {
     saveSessions(sessions)
@@ -869,18 +856,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onOpenFeature }: P
     const n = m.streamLen ?? full.length
     return full.slice(0, n)
   }
-
-  const isFreshHome = !!active && active.messages.length === 0 && pendingUploads.length === 0 && !busy
-  const quickFeatureCards: Array<{
-    id: 'ai-image' | 'ecommerce' | 'upscale' | 'translate'
-    title: string
-    mockClass: string
-  }> = [
-    { id: 'ai-image', title: 'AI生图', mockClass: 'from-violet-500/35 via-fuchsia-400/25 to-indigo-500/30' },
-    { id: 'ecommerce', title: '电商套图', mockClass: 'from-cyan-500/30 via-violet-500/20 to-fuchsia-500/25' },
-    { id: 'upscale', title: '高清放大', mockClass: 'from-emerald-400/25 via-cyan-500/20 to-violet-500/25' },
-    { id: 'translate', title: '图片翻译', mockClass: 'from-sky-400/30 via-indigo-500/24 to-violet-500/25' },
-  ]
 
   return (
     <div className="flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
