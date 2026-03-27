@@ -274,7 +274,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
-  const [sessionSearch, setSessionSearch] = useState('')
   const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [assetTab, setAssetTab] = useState<'user_upload' | 'ai_generated'>('user_upload')
   const [assetBusy, setAssetBusy] = useState(false)
@@ -800,18 +799,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     )
   }
 
-  const filteredSessions = useMemo(() => {
-    const kw = sessionSearch.trim().toLowerCase()
-    return sessions
-      .filter((s) => {
-        if (!kw) return true
-        return (
-          s.title.toLowerCase().includes(kw) ||
-          new Date(s.createdAt).toLocaleString().toLowerCase().includes(kw)
-        )
-      })
-      .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt)
-  }, [sessions, sessionSearch])
+  const filteredSessions = useMemo(
+    () => [...sessions].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt),
+    [sessions],
+  )
 
   const pendingReady = pendingUploads.some((p) => p.status === 'done' && p.url)
   const canSend =
@@ -1327,20 +1318,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               <button
                 type="button"
                 onClick={newChat}
-                className="flex-1 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
+                className="relative flex-1 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
               >
-                <span className="inline-flex items-center justify-center gap-2">
-                  <Plus className="h-4 w-4" /> 新建对话
-                </span>
+                <Plus className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2" />
+                <span className="block text-center">新建对话</span>
               </button>
             </div>
             <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
-            <input
-              value={sessionSearch}
-              onChange={(e) => setSessionSearch(e.target.value)}
-              placeholder="搜索标题或时间"
-              className="mb-3 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md placeholder:text-white/30 outline-none focus:border-violet-400/35 focus:ring-1 focus:ring-violet-400/20"
-            />
             <div className="flex-1 space-y-2 overflow-y-auto pr-1">
               {filteredSessions.length === 0 ? (
                 <div className="py-8 text-center text-xs text-white/40">暂无历史对话，点击「新建对话」开始创作</div>
