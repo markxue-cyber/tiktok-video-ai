@@ -18,7 +18,6 @@ import {
   Pin,
   Plus,
   SlidersHorizontal,
-  Sparkles,
   Trash2,
   Upload,
   X,
@@ -1137,10 +1136,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   {(
                     [
-                      { id: 'imageGen' as const, label: 'AI生图' },
-                      { id: 'ecommerce' as const, label: '电商套图' },
-                      { id: 'upscale' as const, label: '高清放大' },
-                      { id: 'translate' as const, label: '图片翻译' },
+                      { id: 'imageGen' as const, label: 'AI生图', image: '/home-chat-cards/card-ai-image.png' },
+                      { id: 'ecommerce' as const, label: '电商套图', image: '/home-chat-cards/card-ecommerce.png' },
+                      { id: 'upscale' as const, label: '高清放大', image: '/home-chat-cards/card-upscale.png' },
+                      { id: 'translate' as const, label: '图片翻译', image: '/home-chat-cards/card-translate.png' },
                     ] as const
                   ).map((item) => (
                     <button
@@ -1151,10 +1150,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     >
                       <span className="text-sm font-medium text-white/90">{item.label}</span>
                       <div
-                        className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-slate-600/40 to-slate-900/50"
+                        className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/30"
                         aria-hidden
                       >
-                        <Sparkles className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-white/25" />
+                        <img src={item.image} alt="" className="h-full w-full object-cover" loading="lazy" />
                       </div>
                     </button>
                   ))}
