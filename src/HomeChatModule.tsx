@@ -859,7 +859,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-6 overflow-hidden">
+    <div className="flex h-[calc(100vh-7.5rem)] max-h-[calc(100vh-7.5rem)] gap-4 overflow-hidden">
       <div className="flex h-full min-w-0 flex-1 flex-col min-h-0">
         <div
           className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#0c0e16_0%,#080a10_55%,#06070c_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
@@ -1288,7 +1288,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
       </div>
     </div>
 
-      <aside className="sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] w-[380px] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      <aside className="sticky top-[7.5rem] flex h-[calc(100vh-7.5rem)] w-[320px] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         <button
           type="button"
           onClick={newChat}
