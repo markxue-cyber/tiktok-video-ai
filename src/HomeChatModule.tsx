@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
+  AlertCircle,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -7,8 +8,6 @@ import {
   Pencil,
   Pin,
   Plus,
-  RefreshCw,
-  Send,
   Trash2,
   Upload,
   X,
@@ -231,7 +230,9 @@ function UserBubble({
   className?: string
 }) {
   return (
-    <div className={`max-w-[85%] rounded-2xl border border-white/15 bg-gradient-to-br from-pink-500/40 via-purple-600/35 to-violet-700/35 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] px-4 py-3 text-sm leading-relaxed text-white/95 ${className}`}>
+    <div
+      className={`max-w-[min(85%,40rem)] rounded-3xl border border-white/12 bg-gradient-to-br from-violet-900/55 via-purple-900/45 to-fuchsia-900/40 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_8px_32px_rgba(0,0,0,0.35)] px-4 py-3 text-sm leading-relaxed text-white/95 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_40px_rgba(139,92,246,0.18)] ${className}`}
+    >
       {children}
     </div>
   )
@@ -246,10 +247,20 @@ function AssistantBubble({
 }) {
   return (
     <div
-      className={`max-w-[85%] rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] px-4 py-3 text-sm leading-relaxed text-white/90 ${className}`}
+      className={`max-w-[min(85%,40rem)] rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1d28]/95 via-[#14161f]/95 to-[#0e1018]/95 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] px-4 py-3 text-sm leading-relaxed text-white/92 ${className}`}
     >
       {children}
     </div>
+  )
+}
+
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-0.5" aria-hidden>
+      <span className="inline-block h-2 w-2 rounded-full bg-white/55 animate-bounce" />
+      <span className="inline-block h-2 w-2 rounded-full bg-white/55 animate-bounce [animation-delay:120ms]" />
+      <span className="inline-block h-2 w-2 rounded-full bg-white/55 animate-bounce [animation-delay:240ms]" />
+    </span>
   )
 }
 
@@ -860,10 +871,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
     <div className="flex gap-6 min-h-[calc(100vh-7.5rem)]">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
         <div
-          ref={chatScrollRef}
-          className={`tikgen-panel rounded-2xl flex-1 min-h-0 overflow-y-auto mb-3 p-4 relative transition-[box-shadow] duration-150 ${
-            dragOver ? 'ring-2 ring-violet-400/55 ring-offset-2 ring-offset-[#0a0c14]' : ''
-          }`}
+          className="tikgen-panel relative flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#0c0e16_0%,#080a10_55%,#06070c_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
           onDragEnter={(e) => {
             e.preventDefault()
             setDragOver(true)
@@ -879,26 +887,31 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           }}
           onDrop={onDropFiles}
         >
-          {active?.messages.length === 0 && !pendingUploads.length && !busy ? (
-            <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-4">
-              <p className="text-sm text-white/40 mb-1">拖拽文件到此处或点击输入框左侧「+」上传</p>
-              <p className="text-xs text-white/30">支持图片 JPG/PNG/WebP（≤20MB）、视频 MP4/MOV（≤500MB，≤10 分钟）</p>
+          {dragOver ? (
+            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-[inherit] border-2 border-dashed border-violet-400/60 bg-gradient-to-br from-violet-500/20 via-fuchsia-500/12 to-transparent shadow-[inset_0_0_0_1px_rgba(167,139,250,0.25)] backdrop-blur-[3px]">
+              <span className="text-sm font-medium text-violet-100/95 drop-shadow-sm">拖拽到此处上传</span>
             </div>
           ) : null}
 
-          <div className="space-y-4">
+          <div ref={chatScrollRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-5">
+
+            {active?.messages.length === 0 && !pendingUploads.length && !busy ? (
+              <div className="min-h-[min(52vh,28rem)]" aria-hidden />
+            ) : null}
+
+            <div className="space-y-5">
             {active?.messages.map((m) => (
               <div key={m.id}>
                 <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {m.role === 'user' ? (
                     <UserBubble>
                       {m.attachments?.length ? (
-                        <div className="flex flex-wrap gap-2 mb-2">
+                        <div className="mb-2 flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
                           {m.attachments.map((a) => (
                             <button
                               key={a.id}
                               type="button"
-                              className="relative w-28 h-24 rounded-xl overflow-hidden border border-white/15 bg-black/50 ring-1 ring-inset ring-white/10"
+                              className="relative h-24 w-28 shrink-0 snap-start overflow-hidden rounded-xl border border-white/15 bg-black/50 ring-1 ring-inset ring-white/10"
                               onClick={() =>
                                 openPreview(
                                   a.url,
@@ -911,12 +924,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                               }
                             >
                               {a.type === 'image' ? (
-                                <img src={a.url} alt="" className="w-full h-full object-contain" />
+                                <img src={a.url} alt="" className="h-full w-full object-cover" />
                               ) : (
-                                <video src={a.url} className="w-full h-full object-contain" muted playsInline />
+                                <video src={a.url} className="h-full w-full object-cover" muted playsInline />
                               )}
                               {a.fromAsset ? (
-                                <span className="absolute bottom-1 right-1 text-[10px] px-1 rounded bg-black/55 text-violet-200/95">
+                                <span className="absolute bottom-1 right-1 rounded bg-black/55 px-1 text-[10px] text-violet-200/95">
                                   资产库
                                 </span>
                               ) : null}
@@ -924,30 +937,45 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                           ))}
                         </div>
                       ) : null}
-                      <div className="text-[11px] text-white/55 mb-1">
-                        {active
-                          ? `【${active.params.resolution} · ${active.params.aspectRatio} · ${active.params.style} · 参考权重 ${active.params.refWeight.toFixed(2)}】`
-                          : null}
-                      </div>
                       <div className="whitespace-pre-wrap">{m.text}</div>
+                      {active ? (
+                        <div className="mt-2 text-[11px] leading-snug text-zinc-400/95">
+                          {active.params.resolution} · {active.params.aspectRatio} · {active.params.style} · 参考权重{' '}
+                          {active.params.refWeight.toFixed(2)}
+                        </div>
+                      ) : null}
                     </UserBubble>
                   ) : (
                     <AssistantBubble>
                       {m.blocked ? (
-                        <div className="text-amber-100/95 whitespace-pre-wrap">{displayAssistantText(m)}</div>
+                        <div className="whitespace-pre-wrap text-amber-100/95">{displayAssistantText(m)}</div>
                       ) : (
                         <>
                           <div className="whitespace-pre-wrap">{displayAssistantText(m)}</div>
                           {m.images?.length ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
+                            <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
                               {m.images.map((u, i) => (
                                 <button
                                   key={i}
                                   type="button"
-                                  className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/12 bg-black/40"
+                                  className="relative h-24 w-24 shrink-0 snap-start overflow-hidden rounded-xl border border-white/12 bg-black/40"
                                   onClick={() => openPreview(u, 'image', `生成 ${i + 1}`, m.images)}
                                 >
-                                  <img src={u} alt="" className="w-full h-full object-cover" />
+                                  <img src={u} alt="" className="h-full w-full object-cover" />
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                          {m.followUps?.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                              {m.followUps.map((t) => (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  className="rounded-lg border border-violet-400/30 bg-violet-500/12 px-3 py-1.5 text-xs text-violet-100/90 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-white"
+                                  onClick={() => setInput(t)}
+                                >
+                                  {t}
                                 </button>
                               ))}
                             </div>
@@ -957,22 +985,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                     </AssistantBubble>
                   )}
                 </div>
-                {m.role === 'assistant' && m.followUps?.length ? (
-                  <div className="flex justify-start mt-2 pl-1">
-                    <div className="flex flex-wrap gap-2">
-                      {m.followUps.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          className="px-3 py-1.5 rounded-full text-xs border border-white/12 bg-white/[0.04] text-white/80 hover:bg-white/[0.08]"
-                          onClick={() => setInput(t)}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
               </div>
             ))}
 
@@ -984,31 +996,34 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
                       <div className="w-24 h-20 rounded-xl border border-white/12 bg-black/40 overflow-hidden flex items-center justify-center shrink-0">
                         {p.status === 'done' && p.url ? (
                           p.type === 'image' ? (
-                            <img src={p.url} alt="" className="w-full h-full object-contain" />
+                            <img src={p.url} alt="" className="h-full w-full object-cover" />
                           ) : (
-                            <video src={p.url} className="w-full h-full object-contain" muted playsInline />
+                            <video src={p.url} className="h-full w-full object-cover" muted playsInline />
                           )
                         ) : (
-                          <Upload className="w-7 h-7 text-white/35" />
+                          <Upload className="h-7 w-7 text-white/35" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium truncate">{p.name}</div>
                         <div className="text-[11px] text-white/40">{p.sizeLabel}</div>
                         {p.status === 'uploading' ? (
-                          <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
                             <div
-                              className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-[width]"
+                              className="h-full bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 transition-[width]"
                               style={{ width: `${p.progress}%` }}
                             />
                           </div>
                         ) : null}
                         {p.status === 'error' ? (
                           <div className="mt-2 space-y-2">
-                            <div className="text-xs text-red-300/95">{p.error}</div>
+                            <div className="flex items-start gap-2 text-xs text-red-300/95">
+                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400/95" aria-hidden />
+                              <span>{p.error}</span>
+                            </div>
                             <button
                               type="button"
-                              className="text-xs px-2 py-1 rounded-lg border border-white/15 text-white/80 hover:bg-white/[0.08]"
+                              className="rounded-lg border border-red-400/35 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100/95 transition hover:bg-red-500/18"
                               onClick={() => retryPending(p.id)}
                             >
                               重新上传
@@ -1032,12 +1047,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
             ) : null}
 
             {showSuggestTags ? (
-              <div className="flex flex-wrap gap-2 justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
                 {suggestTags.map((t) => (
                   <button
                     key={t}
                     type="button"
-                    className="px-3 py-1.5 rounded-full text-xs border border-white/12 bg-white/[0.04] text-white/80 hover:bg-white/[0.08]"
+                    className="rounded-lg border border-violet-400/30 bg-violet-500/12 px-3 py-1.5 text-xs text-violet-100/90 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-white"
                     onClick={() => setInput(t)}
                   >
                     {t}
@@ -1049,9 +1064,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
             {busy ? (
               <div className="flex justify-start">
                 <AssistantBubble>
-                  <div className="flex items-center gap-2 text-white/70">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    AI 正在思考…
+                  <div className="flex items-center gap-2.5 text-white/75">
+                    <TypingDots />
+                    <span className="text-sm">AI 正在回复</span>
                   </div>
                 </AssistantBubble>
               </div>
@@ -1060,23 +1075,24 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
         </div>
 
-        {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
-        {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
+        <div className="shrink-0 border-t border-white/10 bg-[linear-gradient(180deg,rgba(12,14,22,0.92)_0%,rgba(8,10,16,0.98)_100%)] px-4 pb-4 pt-3 backdrop-blur-xl">
+          {!!toast && <div className="mb-2 text-sm text-amber-200/90">{toast}</div>}
+          {!!error && <div className="mb-2 text-sm text-red-300">{error}</div>}
 
-        <div className="tikgen-panel rounded-2xl p-4 shrink-0">
-          <div className="flex gap-2 items-end">
+          <div className="group rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#14161f]/92 via-[#10121a]/92 to-[#0c0e16]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-[border-color,box-shadow] duration-200 hover:border-violet-400/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]">
+            <div className="flex items-end gap-2.5">
             <div className="relative shrink-0" ref={plusMenuRef}>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setPlusMenuOpen((v) => !v)}
-                className="w-11 h-11 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-md flex items-center justify-center disabled:opacity-45 hover:brightness-110 hover:shadow-lg transition-all"
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-violet-600 to-indigo-600 text-white shadow-[0_8px_24px_rgba(124,58,237,0.35)] transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:opacity-45"
                 title="上传"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="h-5 w-5 stroke-[2.5]" />
               </button>
               {plusMenuOpen ? (
-                <div className="absolute bottom-full left-0 mb-2 z-[60] min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] shadow-xl py-1.5">
+                <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] rounded-xl border border-white/14 bg-[#121522] py-1.5 shadow-xl">
                   <button
                     type="button"
                     className="w-full text-left px-3 py-2 text-sm text-white/90 hover:bg-white/[0.06]"
@@ -1116,26 +1132,24 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
               }}
               placeholder={
                 !hasThreadMedia && !pendingReady
-                  ? '请先上传图片或视频，再发起对话'
+                  ? '上传图片或视频，开始对话'
                   : '请输入您的需求，支持图片分析、图片生成、视频分析'
               }
               rows={3}
-              className="flex-1 min-w-0 rounded-xl px-4 py-3 bg-black/25 border border-white/10 text-white/90 placeholder:text-white/35 outline-none focus:ring-2 focus:ring-violet-400/30 disabled:opacity-45"
+              className="min-h-[5.25rem] flex-1 min-w-0 resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white/90 outline-none ring-0 placeholder:text-white/28 focus:border-violet-400/25 focus:ring-1 focus:ring-violet-400/25 disabled:opacity-45"
             />
             <button
               type="button"
               disabled={!canSend}
               onClick={() => void handleSend()}
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold disabled:opacity-45 shrink-0"
+              className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
             >
-              <span className="inline-flex items-center gap-2">
-                <Send className="w-4 h-4" />
-                发送
-              </span>
+              发送
             </button>
           </div>
+          </div>
 
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
             <label className="text-white/60 text-xs">
               分辨率
               <select
@@ -1233,25 +1247,28 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           </div>
         </div>
       </div>
+    </div>
 
-      <aside className="w-[380px] shrink-0 tikgen-panel rounded-2xl p-4 flex flex-col min-h-0 max-h-[calc(100vh-7.5rem)]">
+      <aside className="flex max-h-[calc(100vh-7.5rem)] w-[380px] shrink-0 flex-col rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#10121a_0%,#0a0c12_100%)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         <button
           type="button"
           onClick={newChat}
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold mb-4 shrink-0"
+          className="mb-4 shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-[0_6px_22px_rgba(124,58,237,0.28)] transition hover:brightness-110"
         >
           <span className="inline-flex items-center justify-center gap-2">
-            <Plus className="w-4 h-4" /> 新建对话
+            <Plus className="h-4 w-4" /> 新建对话
           </span>
         </button>
-        <div className="text-sm font-semibold text-white/90 mb-2">历史对话</div>
-        <div className="flex gap-1 mb-2 shrink-0">
+        <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
+        <div className="mb-2 flex shrink-0 flex-wrap gap-1.5">
           {(['all', 'image_gen', 'video_analysis'] as const).map((k) => (
             <button
               key={k}
               type="button"
-              className={`px-2 py-1 rounded-lg text-[11px] border ${
-                sessionFilter === k ? 'bg-white/12 border-white/20 text-white' : 'border-white/10 text-white/55'
+              className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+                sessionFilter === k
+                  ? 'bg-gradient-to-r from-violet-700/90 to-fuchsia-700/85 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
+                  : 'border border-violet-400/25 bg-violet-500/10 text-violet-100/80 hover:border-violet-400/40 hover:bg-violet-500/16'
               }`}
               onClick={() => setSessionFilter(k)}
             >
@@ -1263,58 +1280,60 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
           value={sessionSearch}
           onChange={(e) => setSessionSearch(e.target.value)}
           placeholder="搜索标题或时间"
-          className="mb-3 w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-white/90 placeholder:text-white/35"
+          className="mb-3 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md placeholder:text-white/30 outline-none focus:border-violet-400/35 focus:ring-1 focus:ring-violet-400/20"
         />
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        <div className="flex-1 space-y-2 overflow-y-auto pr-1">
           {filteredSessions.length === 0 ? (
-            <div className="text-xs text-white/40 py-8 text-center">暂无历史对话，点击「新建对话」开始创作</div>
+            <div className="py-8 text-center text-xs text-white/40">暂无历史对话，点击「新建对话」开始创作</div>
           ) : (
             filteredSessions.map((s) => (
               <div
                 key={s.id}
-                className={`rounded-xl border p-3 cursor-pointer transition-colors ${
-                  s.id === activeId ? 'border-violet-400/50 bg-white/[0.07]' : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05]'
+                className={`cursor-pointer rounded-2xl border p-3 backdrop-blur-md transition ${
+                  s.id === activeId
+                    ? 'border-violet-400/45 bg-gradient-to-br from-violet-900/35 via-[#1a1d28]/90 to-[#14161f]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+                    : 'border-white/10 bg-gradient-to-br from-[#1a1d28]/75 via-[#14161f]/80 to-[#10121a]/85 hover:border-violet-400/35 hover:bg-gradient-to-br hover:from-violet-900/25 hover:via-[#1a1d28]/90 hover:to-[#14161f]/95'
                 }`}
                 onClick={() => setActiveId(s.id)}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-sm text-white/90 font-medium truncate">{s.title}</div>
-                    <div className="text-[11px] text-white/40 mt-1">{new Date(s.createdAt).toLocaleString()}</div>
+                    <div className="truncate text-sm font-medium text-white/90">{s.title}</div>
+                    <div className="mt-1 text-[11px] text-white/40">{new Date(s.createdAt).toLocaleString()}</div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       type="button"
-                      className="p-1 rounded hover:bg-white/10 text-white/50"
+                      className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
                       title="置顶"
                       onClick={(e) => {
                         e.stopPropagation()
                         togglePin(s.id)
                       }}
                     >
-                      <Pin className={`w-3.5 h-3.5 ${s.pinned ? 'text-amber-200' : ''}`} />
+                      <Pin className={`h-3.5 w-3.5 ${s.pinned ? 'text-amber-200' : ''}`} />
                     </button>
                     <button
                       type="button"
-                      className="p-1 rounded hover:bg-white/10 text-white/50"
+                      className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
                       title="重命名"
                       onClick={(e) => {
                         e.stopPropagation()
                         renameSession(s.id)
                       }}
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
-                      className="p-1 rounded hover:bg-white/10 text-red-300/80"
+                      className="rounded p-1.5 text-white/70 transition hover:text-violet-300"
                       title="删除"
                       onClick={(e) => {
                         e.stopPropagation()
                         deleteSession(s.id)
                       }}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1325,7 +1344,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser }: Props) {
         <button
           type="button"
           onClick={clearAll}
-          className="mt-3 w-full py-2 rounded-xl border border-white/15 text-sm text-white/70 hover:bg-white/[0.05] shrink-0"
+          className="mt-3 shrink-0 rounded-xl border border-white/12 py-2 text-sm text-white/70 transition hover:border-white/18 hover:bg-white/[0.04]"
         >
           清空全部历史
         </button>
