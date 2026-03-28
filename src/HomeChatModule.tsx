@@ -47,6 +47,37 @@ const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 /** 首页输入框本地上传：单次多选上限，且待上传队列总数不超过该值 */
 const MAX_HOME_CHAT_UPLOAD_QUEUE = 6
 
+/** 与图片工作台一致的常见图模；与 /api/models 合并，供下拉候选（后台仅「禁用」会剔除） */
+const HOME_PRESET_IMAGE_MODELS: { id: string; name: string }[] = [
+  { id: 'nano-banana-2', name: 'Nano Banana 2' },
+  { id: 'seedream', name: 'Seedream 4.5' },
+  { id: 'seedream-4.5', name: 'Seedream 4.5 (Alt)' },
+  { id: 'flux', name: 'FLUX' },
+  { id: 'flux-dev', name: 'FLUX Dev' },
+  { id: 'flux-pro', name: 'FLUX Pro' },
+  { id: 'sdxl', name: 'SDXL' },
+  { id: 'dalle-3', name: 'DALL·E 3' },
+  { id: 'midjourney', name: 'Midjourney' },
+]
+
+function looksLikeHomeImageModel(id: string): boolean {
+  const s = String(id || '').toLowerCase()
+  return (
+    s.includes('nano-banana') ||
+    s.includes('flux') ||
+    s.includes('seedream') ||
+    s.includes('dall-e') ||
+    s.includes('gpt-image') ||
+    s.includes('midjourney') ||
+    s.includes('ideogram') ||
+    s.includes('recraft') ||
+    s.includes('qwen-image') ||
+    s.includes('kolors') ||
+    s.includes('stable-diffusion') ||
+    s.includes('sdxl')
+  )
+}
+
 function buildAssistantTextFromTurn(data: HomeChatTurnResult): string {
   const parts: string[] = []
   if (data.analysisText) parts.push(String(data.analysisText))
@@ -575,9 +606,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
-  const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>(() => [
-    { id: 'nano-banana-2', label: 'nano-banana-2' },
-  ])
+  const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>(() =>
+    HOME_PRESET_IMAGE_MODELS.map((x) => ({ id: x.id, label: x.name })),
+  )
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
@@ -633,11 +664,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
   }, [activeId])
 
-  /** 与后台 model_controls 对齐的可选出图模型；未登录时仅依赖公开 controls */
+  /**
+   * 出图模型下拉：/api/models 与本地预设并集；model_controls 仅剔除 enabled=false；
+   * 「推荐」来自 controls；不可用来自 model-availability（需登录）。
+   */
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const fallback = [{ id: 'nano-banana-2', label: 'nano-banana-2' }]
+      const fallback = [{ id: 'nano-banana-2', label: 'Nano Banana 2' }]
       const unavailable: Record<string, string> = {}
       try {
         const token = localStorage.getItem('tikgen.accessToken') || ''
@@ -648,22 +682,72 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       } catch {
         /* ignore */
       }
-      const options: { id: string; label: string }[] = []
+
+      const friendly = new Map(HOME_PRESET_IMAGE_MODELS.map((x) => [x.id, x.name]))
+
+      const apiIds: string[] = []
+      try {
+        const resp = await fetch('/api/models')
+        const text = await resp.text()
+        const data = (() => {
+          try {
+            return text ? JSON.parse(text) : null
+          } catch {
+            return null
+          }
+        })()
+        const list = data?.data?.data
+        if (Array.isArray(list)) {
+          for (const m of list) {
+            const id = String(m?.id || '').trim()
+            if (!id) continue
+            const types: string[] = Array.isArray(m?.supported_endpoint_types)
+              ? m.supported_endpoint_types.map(String)
+              : []
+            if (types.includes('image-generation') || looksLikeHomeImageModel(id)) apiIds.push(id)
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+
+      const presetIds = HOME_PRESET_IMAGE_MODELS.map((x) => x.id)
+      const mergedIds = [...new Set([...apiIds, ...presetIds])]
+
+      const disabled = new Set<string>()
+      const recommended = new Set<string>()
       try {
         const resp = await fetch('/api/model-controls?type=image')
         const data = await resp.json()
         if (data?.success && Array.isArray(data.controls)) {
           for (const c of data.controls) {
             const id = String(c.model_id || '').trim()
-            if (!id || c.enabled === false) continue
-            if (unavailable[id]) continue
-            const rec = c.recommended === true
-            options.push({ id, label: rec ? `${id}（推荐）` : id })
+            if (!id) continue
+            if (c.enabled === false) disabled.add(id)
+            if (c.recommended === true) recommended.add(id)
           }
         }
       } catch {
         /* ignore */
       }
+
+      const options: { id: string; label: string }[] = []
+      for (const id of mergedIds) {
+        if (!id || unavailable[id] || disabled.has(id)) continue
+        const name = friendly.get(id) || id
+        options.push({
+          id,
+          label: recommended.has(id) ? `${name}（推荐）` : name,
+        })
+      }
+
+      options.sort((a, b) => {
+        const ar = recommended.has(a.id) ? 0 : 1
+        const br = recommended.has(b.id) ? 0 : 1
+        if (ar !== br) return ar - br
+        return a.label.localeCompare(b.label, 'zh-CN')
+      })
+
       const finalOpts = options.length ? options : fallback
       if (cancelled) return
       setImageModelOptions(finalOpts)
