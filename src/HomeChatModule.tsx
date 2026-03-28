@@ -26,7 +26,12 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
+import {
+  createAssetAPI,
+  createUserUploadAssetFromFile,
+  listAssetsAPI,
+  type AssetItem,
+} from './api/assets'
 import {
   homeChatGenStatusAPI,
   homeChatTurnAPI,
@@ -46,6 +51,8 @@ const API_HISTORY_MAX = 40
 const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 /** 首页输入框本地上传：单次多选上限，且待上传队列总数不超过该值 */
 const MAX_HOME_CHAT_UPLOAD_QUEUE = 6
+/** 超过此大小的图片走 Storage 直传，避免 data URL 进 JSON 超过服务端请求体上限（≈4.5MB） */
+const HOME_CHAT_DIRECT_UPLOAD_IMAGE_BYTES = 3 * 1024 * 1024
 
 /** 仅用于展示名：下列表中的 id 必须仍出现在网关 /models 返回里才会出现在下拉中 */
 const HOME_IMAGE_MODEL_LABELS: { id: string; name: string }[] = [
@@ -193,7 +200,7 @@ function HomeComposerPendingStrip({
       {items.map((p) => (
         <div
           key={p.id}
-          title={p.name}
+          title={p.error ? `${p.name} — ${p.error}` : p.name}
           className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-black/35 sm:h-[4.25rem] sm:w-[4.25rem]"
         >
           {p.status === 'done' && p.url ? (
@@ -605,6 +612,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const abortRef = useRef<AbortController | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  /** 上传失败点「重试」时复用同一 File，无需重新选择 */
+  const pendingFileByIdRef = useRef(new Map<string, { file: File; kind: 'image' | 'video' }>())
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
   const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>([])
   const [imageModelListLoading, setImageModelListLoading] = useState(true)
@@ -951,6 +960,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
           ? globalThis.crypto.randomUUID()
           : `p_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      pendingFileByIdRef.current.set(pid, { file, kind })
       setPendingUploads((prev) => [
         ...prev,
         {
@@ -964,17 +974,29 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       ])
       const stopProg = simulateProgress(pid)
       try {
-        const dataUrl = await fileToDataUrl(file)
-        const created = await createAssetAPI({
-          source: 'user_upload',
-          type: kind,
-          url: dataUrl,
-          name: file.name,
-          metadata: { from: 'home_chat_upload', mime: file.type, size: file.size },
-        })
+        const useDirect =
+          kind === 'video' || file.size >= HOME_CHAT_DIRECT_UPLOAD_IMAGE_BYTES
+        const created = useDirect
+          ? await createUserUploadAssetFromFile({
+              file,
+              type: kind,
+              name: file.name,
+              metadata: { from: 'home_chat_upload', mime: file.type, size: file.size },
+            })
+          : await (async () => {
+              const dataUrl = await fileToDataUrl(file)
+              return createAssetAPI({
+                source: 'user_upload',
+                type: kind,
+                url: dataUrl,
+                name: file.name,
+                metadata: { from: 'home_chat_upload', mime: file.type, size: file.size },
+              })
+            })()
         const url = String(created?.asset?.url || '').trim()
         if (!url) throw new Error('上传失败')
         stopProg()
+        pendingFileByIdRef.current.delete(pid)
         setPendingUploads((prev) =>
           prev.map((p) =>
             p.id === pid ? { ...p, status: 'done', progress: 100, url, type: kind } : p,
@@ -1028,10 +1050,18 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   }
 
   const removePending = (id: string) => {
+    pendingFileByIdRef.current.delete(id)
     setPendingUploads((prev) => prev.filter((p) => p.id !== id))
   }
 
   const retryPending = (id: string) => {
+    const rec = pendingFileByIdRef.current.get(id)
+    if (rec) {
+      pendingFileByIdRef.current.delete(id)
+      setPendingUploads((prev) => prev.filter((p) => p.id !== id))
+      void validateAndUploadFiles([rec.file])
+      return
+    }
     uploadInputRef.current?.click()
     setPendingUploads((prev) => prev.filter((p) => p.id !== id))
   }

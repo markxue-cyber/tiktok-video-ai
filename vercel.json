@@ -8,11 +8,15 @@
     },
     "api/assets-create.ts": {
       "maxDuration": 60
+    },
+    "api/assets-upload-sign.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
     { "source": "/api/home-chat-gen-status", "destination": "/api/home-chat-turn" },
     { "source": "/api/assets/create", "destination": "/api/assets-create" },
+    { "source": "/api/assets/upload-sign", "destination": "/api/assets-upload-sign" },
     { "source": "/api/assets/list", "destination": "/api/assets-list" },
     { "source": "/api/assets/update", "destination": "/api/assets-update" },
     { "source": "/api/assets/delete", "destination": "/api/assets-delete" },
