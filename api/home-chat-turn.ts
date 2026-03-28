@@ -373,8 +373,19 @@ function historyToMessages(
   history: ChatTurn[],
   currentUserContent: string | ContentPart[],
   supabaseUrl: string,
+  analysisCtx?: { mediaType: MediaType; userMessage: string },
 ): ChatMessage[] {
   const out: ChatMessage[] = []
+  const wantsExecImage =
+    analysisCtx &&
+    inferHomeIntentOverride(analysisCtx.userMessage, analysisCtx.mediaType).needsImageGen === true
+  const execBlock = wantsExecImage
+    ? [
+        '【出图指令已识别】用户本轮要基于参考图生成/修改商品图（含快捷指令：更亮、换场景、白底、信息流等）。',
+        '禁止：推荐或提及 Photoshop、Lightroom、Canva、Pixlr、美图秀秀、手机相册、任何第三方修图软件或「自己去软件里调」类教程；不要写分步骤修图指南。',
+        '必须：仍按下方「电商结构化格式」输出，但内容服务于即将自动出图：商用诊断只写与当前画面相关的简短要点；用一行收尾：「系统将基于参考图按你的指令生成新的商品图。」',
+      ].join('\n')
+    : ''
   const sys: ChatMessage = {
     role: 'system',
     content: [
@@ -383,8 +394,11 @@ function historyToMessages(
       '上下文要求：自动继承历史轮次中的商品主体信息，除非用户明确要求换品，不要反复确认同一主体。',
       '事实要求：仅基于可见信息下结论；不确定就明确写“无法确认”。',
       '任务边界：本阶段只做理解分析与运营建议，不执行视频生成/剪辑指令。',
+      execBlock,
       ECOM_ANALYSIS_FORMAT,
-    ].join('\n\n'),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
   }
   out.push(sys)
   const tail = history.slice(-40)
@@ -521,6 +535,8 @@ function stripHomeParamLine(text: string): string {
 const HOME_FORCE_IMAGE_PHRASES: string[] = [
   '换场景',
   '更亮一点',
+  '更亮一些',
+  '再亮一点',
   '改成白底主图',
   '改成信息流风格',
   '生成同款风格图片',
@@ -551,7 +567,7 @@ function inferHomeIntentOverride(
   }
 
   for (const p of HOME_FORCE_IMAGE_PHRASES) {
-    if (raw.includes(p)) return { needsImageGen: true }
+    if (raw.includes(p) || core.includes(p)) return { needsImageGen: true }
   }
 
   const execRe =
@@ -1228,7 +1244,9 @@ export default async function handler(req: any, res: any) {
 
     const mediaType = String(body.mediaType || '') as MediaType
     const mediaUrl = String(body.mediaUrl || '').trim()
-    const userMessage = String(body.userMessage || '').trim()
+    const userMessage = String(body.userMessage || '')
+      .trim()
+      .normalize('NFC')
     const history = (Array.isArray(body.history) ? body.history : []) as ChatTurn[]
     const params = body.params || {}
     const generateMode = String(body.generateMode || params.generateMode || 'final') as GenerateMode
@@ -1342,6 +1360,14 @@ export default async function handler(req: any, res: any) {
     if (homeIo.needsImageGen) needsImageGen = true
     else if (homeIo.consultOnly) needsImageGen = false
 
+    // 双保险：快捷词在部分模型/字符集下未命中 exec 正则时仍强制出图
+    if (!homeIo.consultOnly) {
+      const coreForce = stripHomeParamLine(userMessage).trim()
+      if (HOME_FORCE_IMAGE_PHRASES.some((p) => userMessage.includes(p) || coreForce === p)) {
+        needsImageGen = true
+      }
+    }
+
     // 首页要求：用户上传媒体后默认先做结构化商用分析；生成诉求可与分析并行返回
     needsAnalysis = true
     if (!needsAnalysis && !needsImageGen) needsAnalysis = true
@@ -1358,7 +1384,7 @@ export default async function handler(req: any, res: any) {
       if (useStreamForAnalysis) {
         try {
           const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
-          const messages = historyToMessages(history, multimodal, supabaseUrl)
+          const messages = historyToMessages(history, multimodal, supabaseUrl, { mediaType, userMessage })
 
           res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
           res.setHeader('Cache-Control', 'no-cache, no-transform')
@@ -1371,7 +1397,8 @@ export default async function handler(req: any, res: any) {
             res.write(`data: ${JSON.stringify({ type: 'delta', text: piece })}\n\n`)
           }
 
-          if (!needsImageGen || generateMode === 'preview') {
+          // 已要走分支出图时，opsPack 易把「修图教程」包装成标题卖点，干扰用户；仅纯分析轮再生成 opsPack
+          if (!needsImageGen) {
             opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
             res.write(`data: ${JSON.stringify({ type: 'ops', opsPack })}\n\n`)
           }
@@ -1425,9 +1452,9 @@ export default async function handler(req: any, res: any) {
 
       try {
         const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
-        const messages = historyToMessages(history, multimodal, supabaseUrl)
+        const messages = historyToMessages(history, multimodal, supabaseUrl, { mediaType, userMessage })
         analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35)
-        if (!needsImageGen || generateMode === 'preview') {
+        if (!needsImageGen) {
           opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
         }
       } catch (e: any) {

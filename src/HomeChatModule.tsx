@@ -1176,13 +1176,16 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         )
 
         /** 首轮仅分析，出图在第二轮请求，先展示文字再补图 */
-        if (data.deferredImageGen && data.analysisText) {
+        if (data.deferredImageGen) {
+          const analysisForGen = String(data.analysisText || '').trim()
+          const analysisTextFallback =
+            '【商品主体】与参考图一致（继承会话上下文）。\n【说明】用户已发起改图/出图快捷指令；本节为简要占位，正式画面由下一步生成模型输出。\n【商用视觉诊断】仅基于参考图简述当前曝光与主体清晰度，禁止展开第三方修图教程。\n系统将基于参考图按你的指令生成新的商品图。'
           setBusyStage('optimize')
           setBusyStage('generate')
           const data2 = await homeChatTurnAPI(
             {
               generateOnly: true,
-              analysisText: data.analysisText,
+              analysisText: analysisForGen || analysisTextFallback,
               mediaType: primary.type,
               mediaUrl: primary.url,
               userMessage: `${paramLine}\n${sendText}`,
