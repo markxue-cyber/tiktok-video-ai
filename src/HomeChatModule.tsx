@@ -47,8 +47,8 @@ const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 /** 首页输入框本地上传：单次多选上限，且待上传队列总数不超过该值 */
 const MAX_HOME_CHAT_UPLOAD_QUEUE = 6
 
-/** 与图片工作台一致的常见图模；与 /api/models 合并，供下拉候选（后台仅「禁用」会剔除） */
-const HOME_PRESET_IMAGE_MODELS: { id: string; name: string }[] = [
+/** 仅用于展示名：下列表中的 id 必须仍出现在网关 /models 返回里才会出现在下拉中 */
+const HOME_IMAGE_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'nano-banana-2', name: 'Nano Banana 2' },
   { id: 'seedream', name: 'Seedream 4.5' },
   { id: 'seedream-4.5', name: 'Seedream 4.5 (Alt)' },
@@ -606,9 +606,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
-  const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>(() =>
-    HOME_PRESET_IMAGE_MODELS.map((x) => ({ id: x.id, label: x.name })),
-  )
+  const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>([])
+  const [imageModelListLoading, setImageModelListLoading] = useState(true)
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
@@ -665,13 +664,16 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   }, [activeId])
 
   /**
-   * 出图模型下拉：/api/models 与本地预设并集；model_controls 仅剔除 enabled=false；
-   * 「推荐」来自 controls；不可用来自 model-availability（需登录）。
+   * 出图模型下拉：仅展示当前 XIAO_DOU_BAO 网关 /models 返回、且判定为图模的 id（与账号权限一致）。
+   * model_controls 中 enabled=false 的剔除（显式下架）；不在列表中的网关模型仍展示。
+   * 登录用户叠 model-availability 不可用项。无可用项时兜底 nano-banana-2 并提示。
    */
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const fallback = [{ id: 'nano-banana-2', label: 'Nano Banana 2' }]
+      setImageModelListLoading(true)
+      try {
+      const fallback = [{ id: 'nano-banana-2', label: 'Nano Banana 2（网关未返回图模时的兜底）' }]
       const unavailable: Record<string, string> = {}
       try {
         const token = localStorage.getItem('tikgen.accessToken') || ''
@@ -683,7 +685,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         /* ignore */
       }
 
-      const friendly = new Map(HOME_PRESET_IMAGE_MODELS.map((x) => [x.id, x.name]))
+      const friendly = new Map(HOME_IMAGE_MODEL_LABELS.map((x) => [x.id, x.name]))
 
       const apiIds: string[] = []
       try {
@@ -696,8 +698,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             return null
           }
         })()
-        const list = data?.data?.data
-        if (Array.isArray(list)) {
+        if (!data?.success) {
+          /* 网关报错时不再伪造其它模型 */
+        } else {
+          const root = data?.data
+          const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
           for (const m of list) {
             const id = String(m?.id || '').trim()
             if (!id) continue
@@ -711,8 +716,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         /* ignore */
       }
 
-      const presetIds = HOME_PRESET_IMAGE_MODELS.map((x) => x.id)
-      const mergedIds = [...new Set([...apiIds, ...presetIds])]
+      let mergedIds = [...new Set(apiIds)]
 
       const disabled = new Set<string>()
       const recommended = new Set<string>()
@@ -749,16 +753,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       })
 
       const finalOpts = options.length ? options : fallback
-      if (cancelled) return
-      setImageModelOptions(finalOpts)
-      setSessions((prev) =>
-        prev.map((s) => {
-          const cur = String(s.params.imageModel || 'nano-banana-2')
-          if (finalOpts.some((o) => o.id === cur)) return s
-          const preferred = finalOpts.find((o) => o.label.includes('推荐')) || finalOpts[0]
-          return { ...s, params: { ...s.params, imageModel: preferred.id } }
-        }),
-      )
+      if (!cancelled) {
+        setImageModelOptions(finalOpts)
+        setSessions((prev) =>
+          prev.map((s) => {
+            const cur = String(s.params.imageModel || 'nano-banana-2')
+            if (finalOpts.some((o) => o.id === cur)) return s
+            const preferred = finalOpts.find((o) => o.label.includes('推荐')) || finalOpts[0]
+            return { ...s, params: { ...s.params, imageModel: preferred.id } }
+          }),
+        )
+      }
+      } finally {
+        setImageModelListLoading(false)
+      }
     })()
     return () => {
       cancelled = true
@@ -2009,15 +2017,26 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                         <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
                           <span className="shrink-0 whitespace-nowrap">出图模型</span>
                           <select
-                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                            value={active?.params.imageModel || 'nano-banana-2'}
+                            disabled={imageModelListLoading}
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90 disabled:cursor-wait disabled:opacity-70"
+                            value={
+                              imageModelListLoading
+                                ? ''
+                                : imageModelOptions.some((o) => o.id === active?.params.imageModel)
+                                  ? String(active?.params.imageModel)
+                                  : String(imageModelOptions[0]?.id || 'nano-banana-2')
+                            }
                             onChange={(e) => updateParams({ imageModel: e.target.value })}
                           >
-                            {imageModelOptions.map((o) => (
-                              <option key={o.id} value={o.id}>
-                                {o.label}
-                              </option>
-                            ))}
+                            {imageModelListLoading ? (
+                              <option value="">正在拉取网关可用模型…</option>
+                            ) : (
+                              imageModelOptions.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.label}
+                                </option>
+                              ))
+                            )}
                           </select>
                         </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
@@ -2489,15 +2508,26 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
                     <span className="shrink-0 whitespace-nowrap">出图模型</span>
                     <select
-                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                      value={active?.params.imageModel || 'nano-banana-2'}
+                      disabled={imageModelListLoading}
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90 disabled:cursor-wait disabled:opacity-70"
+                      value={
+                        imageModelListLoading
+                          ? ''
+                          : imageModelOptions.some((o) => o.id === active?.params.imageModel)
+                            ? String(active?.params.imageModel)
+                            : String(imageModelOptions[0]?.id || 'nano-banana-2')
+                      }
                       onChange={(e) => updateParams({ imageModel: e.target.value })}
                     >
-                      {imageModelOptions.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
-                        </option>
-                      ))}
+                      {imageModelListLoading ? (
+                        <option value="">正在拉取网关可用模型…</option>
+                      ) : (
+                        imageModelOptions.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
