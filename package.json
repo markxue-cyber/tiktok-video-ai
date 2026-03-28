@@ -10,7 +10,8 @@
     "lint": "pnpm install --prefer-offline && eslint .",
     "preview": "pnpm install --prefer-offline && vite preview",
     "install-deps": "pnpm install --prefer-offline",
-    "clean": "rm -rf node_modules .pnpm-store pnpm-lock.yaml && pnpm store prune"
+    "clean": "rm -rf node_modules .pnpm-store pnpm-lock.yaml && pnpm store prune",
+    "bench:image-models": "node scripts/benchmark-image-models.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
