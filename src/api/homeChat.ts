@@ -142,11 +142,11 @@ export async function homeChatTurnAPI(
 }
 
 /** 首页专用埋点/反馈：写入服务端任务表 raw 字段，不计入出图计费 */
-export async function postHomeTelemetry(homeTelemetry: Record<string, unknown>): Promise<void> {
+export async function postHomeTelemetry(homeTelemetry: Record<string, unknown>): Promise<boolean> {
   const token = localStorage.getItem('tikgen.accessToken') || ''
-  if (!token) return
+  if (!token) return false
   try {
-    await fetch('/api/home-chat-turn', {
+    const resp = await fetch('/api/home-chat-turn', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -154,8 +154,10 @@ export async function postHomeTelemetry(homeTelemetry: Record<string, unknown>):
       },
       body: JSON.stringify({ homeTelemetryOnly: true, homeTelemetry }),
     })
+    const data = await readJsonOrText(resp)
+    return data?.success !== false
   } catch {
-    // ignore
+    return false
   }
 }
 

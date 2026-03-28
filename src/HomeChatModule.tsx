@@ -12,7 +12,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Download,
   Folder,
   ImagePlus,
@@ -20,7 +19,6 @@ import {
   Pin,
   Plus,
   Redo2,
-  Share2,
   SlidersHorizontal,
   ThumbsDown,
   ThumbsUp,
@@ -388,11 +386,6 @@ function hasSessionGeneratedMessages(messages: HomeChatMsg[]): boolean {
   return messages.some((m) => m.role === 'assistant' && !!(m.images?.length || m.imageItems?.length))
 }
 
-function extractOptimizedPromptBlock(text: string): string {
-  const m = String(text || '').match(/【优化后提示词】\n([\s\S]*?)(?=\n\n【|$)/)
-  return m ? m[1].trim() : ''
-}
-
 async function downloadImageUrl(url: string, filename: string) {
   const r = await fetch(url)
   const blob = await r.blob()
@@ -437,40 +430,26 @@ function AssistantBubble({
 function HomeGeneratedImageActions({
   imageUrl,
   index,
-  assistantText,
   sessionId,
   messageId,
+  onFeedbackRecorded,
 }: {
   imageUrl: string
   index: number
-  assistantText: string
   sessionId: string
   messageId: string
+  onFeedbackRecorded?: (satisfied: boolean, ok: boolean) => void
 }) {
+  const [vote, setVote] = useState<null | 'up' | 'down'>(null)
+  const [submitting, setSubmitting] = useState(false)
   const label = `首页生成_${index + 1}`
-  const prompt = extractOptimizedPromptBlock(assistantText)
-  const onCopyPrompt = () => {
-    void navigator.clipboard.writeText(prompt || assistantText.slice(0, 8000))
-  }
+
   const onDownload = () => void downloadImageUrl(imageUrl, `${label}.png`)
-  const onShare = async () => {
-    try {
-      const r = await fetch(imageUrl)
-      const blob = await r.blob()
-      const file = new File([blob], `${label}.png`, { type: blob.type || 'image/png' })
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: label })
-        return
-      }
-      if (navigator.share) {
-        await navigator.share({ title: label, text: prompt || label, url: imageUrl })
-      }
-    } catch {
-      // ignore
-    }
-  }
-  const onFeedback = (satisfied: boolean) => {
-    void postHomeTelemetry({
+
+  const onFeedback = async (satisfied: boolean) => {
+    if (vote !== null || submitting) return
+    setSubmitting(true)
+    const ok = await postHomeTelemetry({
       event: 'home_feedback',
       satisfied,
       sessionId,
@@ -478,13 +457,17 @@ function HomeGeneratedImageActions({
       imageUrl,
       index,
     })
+    setSubmitting(false)
+    if (ok) setVote(satisfied ? 'up' : 'down')
+    onFeedbackRecorded?.(satisfied, ok)
   }
+
   return (
-    <div className="mt-1 flex flex-wrap gap-1">
+    <div className="mt-1 flex w-full flex-nowrap items-center justify-center gap-1">
       <button
         type="button"
         title="下载图片"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
         onClick={(e) => {
           e.stopPropagation()
           void onDownload()
@@ -494,33 +477,14 @@ function HomeGeneratedImageActions({
       </button>
       <button
         type="button"
-        title="复制提示词"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
-        onClick={(e) => {
-          e.stopPropagation()
-          onCopyPrompt()
-        }}
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        title="分享"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
-        onClick={(e) => {
-          e.stopPropagation()
-          void onShare()
-        }}
-      >
-        <Share2 className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
         title="满意"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-emerald-200/90 transition hover:border-white/22 hover:bg-white/[0.08]"
+        disabled={vote !== null || submitting}
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-black/40 text-emerald-200/90 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45 ${
+          vote === 'up' ? 'border-emerald-400/70 ring-1 ring-emerald-400/50' : 'border-white/12 hover:border-white/22'
+        }`}
         onClick={(e) => {
           e.stopPropagation()
-          onFeedback(true)
+          void onFeedback(true)
         }}
       >
         <ThumbsUp className="h-3.5 w-3.5" />
@@ -528,10 +492,13 @@ function HomeGeneratedImageActions({
       <button
         type="button"
         title="不满意"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-rose-200/90 transition hover:border-white/22 hover:bg-white/[0.08]"
+        disabled={vote !== null || submitting}
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-black/40 text-rose-200/90 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45 ${
+          vote === 'down' ? 'border-rose-400/70 ring-1 ring-rose-400/50' : 'border-white/12 hover:border-white/22'
+        }`}
         onClick={(e) => {
           e.stopPropagation()
-          onFeedback(false)
+          void onFeedback(false)
         }}
       >
         <ThumbsDown className="h-3.5 w-3.5" />
@@ -2044,9 +2011,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                     <HomeGeneratedImageActions
                                       imageUrl={u}
                                       index={i}
-                                      assistantText={m.text}
                                       sessionId={active?.id || ''}
                                       messageId={m.id}
+                                      onFeedbackRecorded={(sat, ok) => {
+                                        if (ok) {
+                                          setToast(
+                                            sat
+                                              ? '已记录：满意，感谢反馈'
+                                              : '已记录：不满意，我们会继续改进',
+                                          )
+                                        } else {
+                                          setToast('反馈提交失败，请检查登录或稍后重试')
+                                        }
+                                        window.setTimeout(() => setToast(''), 3800)
+                                      }}
                                     />
                                   </div>
                                 )
