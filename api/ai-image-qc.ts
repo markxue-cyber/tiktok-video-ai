@@ -1,3 +1,5 @@
+import { buildWorkbenchUserLanguagePreamble } from './_ecommerceTargetingPrompt.js'
+
 async function callOpenAICompatJSON<T>({
   apiKey,
   baseUrl,
@@ -97,12 +99,14 @@ export default async function handler(req, res) {
               '给 fix：',
               '- addToNegative：给出可直接追加的负面词（用逗号分隔）',
               '- promptTweaks：给出“最小改动”的分字段修改建议（只写需要改的字段，其他可空字符串）',
+              '',
+              'issues/suggestions/fix 内所有说明性文字须为简体中文（见用户消息「工作台输出语言」）。',
             ].join('\n'),
           },
           {
             role: 'user',
             content: [
-              { type: 'text', text: `输出语言：${language || '简体中文'}` },
+              { type: 'text', text: buildWorkbenchUserLanguagePreamble(String(language || '简体中文')) },
               { type: 'text', text: `画幅：比例=${aspectRatio || '未指定'}；分辨率档位=${resolution || '未指定'}` },
               { type: 'text', text: `商品信息：${JSON.stringify(product || {})}` },
               { type: 'text', text: '这是“生成结果图”，请做电商主图质检。' },

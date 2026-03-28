@@ -1,4 +1,7 @@
-import { buildEcommerceTargetingBlock } from './_ecommerceTargetingPrompt.js'
+import {
+  buildEcommerceTargetingBlock,
+  buildWorkbenchUserLanguagePreamble,
+} from './_ecommerceTargetingPrompt.js'
 
 async function callOpenAICompatJSON<T>({
   apiKey,
@@ -84,6 +87,7 @@ export default async function handler(req, res) {
               '- 不要输出任何解释、Markdown、前后缀',
               '',
               '硬约束：',
+              '0) 全部输出（categoryHint/prompt/negativePrompt/parts 各字段）面向国内运营须为简体中文；投放「文案语言」不改为外语（见用户消息「工作台输出语言」）。',
               '1) 禁止编造商品参数/材质/成分/功效/认证/价格优惠/对比指标（除非商品信息明确给出）。不确定就不要写。',
               '2) 避免医疗/绝对化/夸大承诺，不写“治愈/100%有效/永久/最强”等。',
               '3) 画面要“电商可用”：主体清晰、构图干净、光影合理、背景不抢戏。',
@@ -139,7 +143,7 @@ export default async function handler(req, res) {
           {
             role: 'user',
             content: [
-              `输出语言：${language || product.language || '简体中文'}`,
+              buildWorkbenchUserLanguagePreamble(String(language || product?.language || '简体中文')),
               buildEcommerceTargetingBlock({
                 targetPlatform: product?.targetPlatform,
                 targetMarket: product?.targetMarket,

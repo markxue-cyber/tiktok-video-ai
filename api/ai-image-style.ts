@@ -1,3 +1,5 @@
+import { buildWorkbenchUserLanguagePreamble } from './_ecommerceTargetingPrompt.js'
+
 async function callOpenAICompatJSON<T>({
   apiKey,
   baseUrl,
@@ -67,6 +69,7 @@ export default async function handler(req, res) {
               '{"prompt": string, "negativePrompt": string, "parts": {"subject": string, "scene": string, "composition": string, "lighting": string, "camera": string, "style": string, "quality": string, "extra": string}}',
               '',
               '硬约束：',
+              '- 输出语言：prompt/negativePrompt/parts 须为简体中文（见用户消息「工作台输出语言」）；投放文案语言偏好不得改为外语输出。',
               '- 主体一致性（必须遵守）：不得改变商品的品类/形态/结构/颜色方案，不得新增第二个主体或重复主体，不得把商品替换成其他产品。',
               '- 禁止编造：不得新增未给出的参数/功效/认证/品牌背书/价格优惠等。',
               '- 文字规则：默认不在画面里生成新增文字/水印/Logo（除非 parts.extra 明确要求生成“可读文字海报”，且仍需尽量减少乱码）。',
@@ -90,7 +93,7 @@ export default async function handler(req, res) {
           {
             role: 'user',
             content: [
-              `输出语言：${language || '简体中文'}`,
+              buildWorkbenchUserLanguagePreamble(String(language || '简体中文')),
               `风格标签（多选）：${normalizedTags.join('、')}`,
               sceneMode ? `模式：${String(sceneMode)}（clean=主图干净；lite=轻场景）` : '',
               categoryHint ? `categoryHint：${String(categoryHint)}` : '',

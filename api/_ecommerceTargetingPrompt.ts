@@ -88,9 +88,24 @@ function marketLabel(value: string): string {
 export type EcommerceTargetingInput = {
   targetPlatform?: string
   targetMarket?: string
-  /** 文案语言：与 ProductInfo.language 一致 */
+  /** 文案语言：与 ProductInfo.language 一致（仅投放语境，不决定工作台输出语种） */
   copyLanguage?: string
   language?: string
+}
+
+/**
+ * 电商套图工作台：与「文案语言」解耦，国内运营界面始终可读中文。
+ * 拼在用户消息靠前位置，配合 buildEcommerceTargetingBlock 使用。
+ */
+export function buildWorkbenchUserLanguagePreamble(copyLanguageLabel: string): string {
+  const l = String(copyLanguageLabel || '简体中文').trim() || '简体中文'
+  return [
+    '【工作台输出语言｜固定简体中文】',
+    '商品分析全文、爆款风格（title 须恰好 4 个汉字 / description / imagePrompt）、六场景（title / description / imagePrompt）、主提示词 parts 与合并 prompt、精修与质检中的 issues/suggestions 等——凡国内用户在界面可读的说明性文字，必须使用简体中文。',
+    'imagePrompt 以中文叙述为主；如需便于生图模型理解，可在短语后用括号夹极短英文视觉关键词，禁止整段改为英文。',
+    '「文案语言」仅表示投放定向偏好（见下条【投放定向】），用于理解目标平台/市场的场景符号、主图习惯；若画面内需生成可读文字时优先使用该语言。禁止仅凭「文案语言」将上述工作台字段改为外语。',
+    `【投放文案语言（用户选择，仅供参考）】${l}`,
+  ].join('\n')
 }
 
 /**
@@ -108,7 +123,8 @@ export function buildEcommerceTargetingBlock(input: EcommerceTargetingInput): st
     '【投放定向｜须融入爆款 DNA 与 6 场景规划，勿编造当地法规、认证、具体折扣与医疗功效】',
     `目标平台（用户选择）：${platformLabel(tp)}。侧重点：${pHint}`,
     `目标市场（用户选择）：${marketLabel(tm)}。文化与视觉倾向：${mHint}`,
-    `文案与提示词输出语言：${lang}。description / imagePrompt / 商品分析等面向用户的正文优先使用该语言；画面内默认尽量不生成可读文字，若需文字须与该语言一致且避免乱码。`,
+    `投放文案语言（用户选择）：${lang}。仅作渠道语境：帮助构思符合该平台/市场的场景符号、构图与光影气质；不得要求将商品分析、爆款风格卡片文案或六场景说明改为该外语。画面内默认尽量不生成可读文字；若需文字须与该语言一致且避免乱码。`,
+    '工作台界面可见正文须为简体中文（规则见同条请求中的【工作台输出语言】）。',
     '各场景格（白底/卖点/生活/对比/细节/氛围）的 imagePrompt 须体现上述平台主图习惯与市场审美，并与 DNA 分层策略兼容（白底格不因市场而改为暗底）。',
   ].join('\n')
 }

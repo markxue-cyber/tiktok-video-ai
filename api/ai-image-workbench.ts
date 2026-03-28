@@ -1,7 +1,10 @@
 /**
  * 图片工作台：商品分析 + 爆款风格（GPT-4o 视觉，主参考图为第一张上传图）
  */
-import { buildEcommerceTargetingBlock } from './_ecommerceTargetingPrompt.js'
+import {
+  buildEcommerceTargetingBlock,
+  buildWorkbenchUserLanguagePreamble,
+} from './_ecommerceTargetingPrompt.js'
 type OpenAICompatContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
@@ -255,7 +258,7 @@ export default async function handler(req: any, res: any) {
       '- 明确一句：白底主图、虚化生活场、强氛围夜景等由后续「场景规划」分格追加，本段不写死与白底主图冲突的全图背景。',
       '- 结尾可提醒：默认棚拍级干净基底/电商标准即可，勿强制暗色全图底。',
       '四套方案须在 DNA 维度（冷暖、软硬光、色彩倾向、情绪、材质强调点）上有明显差异；禁止编造未在图中出现的参数、功效、认证、续航数字。',
-      '须响应用户消息中的【投放定向】：气质与光型适配目标电商平台主图习惯（如 Amazon 白底清晰、TikTok 动感生活、东南亚明亮暖调等），并与 DNA+6 场景分层兼容，不写死与白底主图互斥的全图暗环境。',
+      '须响应用户消息中的【投放定向】：气质与光型适配目标电商平台主图习惯（如 Amazon 白底清晰、TikTok 动感生活、东南亚明亮暖调等），并与 DNA+6 场景分层兼容，不写死与白底主图互斥的全图暗环境。投放「文案语言」仅影响渠道语境理解，description/imagePrompt 正文仍为简体中文（见用户消息「工作台输出语言」）。',
       '若你从参考图识别到商品属于手持电动吹叶机/鼓风机（园艺清理工具）：优先给出可落地的 4 套 DNA 方向，覆盖「结构白底主图」「功能信息图式展示（旋转手柄/可拆电池/喷嘴形态）」「户外落叶清理生活场景」「便携效率对比语义」；DNA 可提及信息图感，但默认仍不要求生成可读大段文字。',
       '不要输出 Markdown 或其它字段。',
     ].join('\n')
@@ -270,13 +273,13 @@ export default async function handler(req: any, res: any) {
       'productAnalysisText 格式要求：多行中文，依次包含小节：产品名称 / 产品类目 / 产品卖点 / 目标人群 / 期望场景 / 尺寸参数（规则同单任务）。',
       'styles：恰好 4 个；title 必须恰好 4 个汉字；description 80–160 字，侧重 DNA（材质/光型/色调气质/构图偏好），避免写死整张图唯一强环境。',
       '每个 imagePrompt：180–420 字，为「拍法基因 DNA」主描述，非单张背景合同。开头须「参考图同款商品保持一致」；多写材质与光型气质，少写「整图只能是黑底/夜景墙」；须说明或与下列策略一致：白底/生活/氛围由后续 6 场景分格追加；禁止编造图中没有的信息。',
-      '四套方案在 DNA 维度须互不重复且可和 6 场景叠加而不矛盾；须落实用户消息中的【投放定向】（平台主图习惯、市场审美、文案语言）。',
+      '四套方案在 DNA 维度须互不重复且可和 6 场景叠加而不矛盾；须落实用户消息中的【投放定向】（平台主图习惯、市场审美）。投放「文案语言」不改为外语输出，全文仍为简体中文。',
       '若识别到“手持电动吹叶机/鼓风机”类目，四套风格应优先覆盖：结构主图、功能卖点信息图感、户外使用动作场景、便携效率对比语义。',
       '不要输出 Markdown、代码块或解释。',
     ].join('\n')
 
     const userImage: OpenAICompatContentPart[] = [
-      { type: 'text', text: `输出语言：${lang}` },
+      { type: 'text', text: buildWorkbenchUserLanguagePreamble(lang) },
       { type: 'text', text: targetingBlock },
       { type: 'text', text: '以下为主参考商品图（若用户有多张图，仅以本张为准）。' },
       { type: 'image_url', image_url: { url: String(refImage) } },

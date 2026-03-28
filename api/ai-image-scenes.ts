@@ -1,7 +1,10 @@
 /**
  * 基于「基础出图描述」用 GPT-4o 规划 6 组电商场景（文案 + 每场景可合并的 imagePrompt）
  */
-import { buildEcommerceTargetingBlock } from './_ecommerceTargetingPrompt.js'
+import {
+  buildEcommerceTargetingBlock,
+  buildWorkbenchUserLanguagePreamble,
+} from './_ecommerceTargetingPrompt.js'
 
 async function callOpenAICompatJSON<T>({
   apiKey,
@@ -123,7 +126,7 @@ export default async function handler(req: any, res: any) {
               '硬约束：',
               '- 6 组之间构图与光影差异清晰；都适合电商素材。',
               '- 真人出镜：凡 lifestyle/atmosphere 涉及穿着/佩戴类商品，不得生成「无头」胸像；须在 imagePrompt 中约束中景/半身与完整头顶。',
-              '- 须落实用户消息中的【投放定向】：各 key 的 imagePrompt 在构图侧重、生活场景符号、主图干净度上贴合目标平台与目标市场（如 Amazon 白底格更规范、TikTok 生活格更动感、中东避免不当裸露符号等），且与 DNA 分层兼容。',
+              '- 须落实用户消息中的【投放定向】：各 key 的 imagePrompt 在构图侧重、生活场景符号、主图干净度上贴合目标平台与目标市场（如 Amazon 白底格更规范、TikTok 生活格更动感、中东避免不当裸露符号等），且与 DNA 分层兼容。title/description/imagePrompt 面向运营的句子须为简体中文（见用户消息「工作台输出语言」）。',
               '- 若信息不足，保守可执行，不胡编参数。',
               '- 只输出 JSON。',
             ].join('\n'),
@@ -131,7 +134,7 @@ export default async function handler(req: any, res: any) {
           {
             role: 'user',
             content: [
-              `输出语言：${String(language || '简体中文')}`,
+              buildWorkbenchUserLanguagePreamble(String(language || product?.language || '简体中文')),
               buildEcommerceTargetingBlock({
                 targetPlatform: product?.targetPlatform,
                 targetMarket: product?.targetMarket,
