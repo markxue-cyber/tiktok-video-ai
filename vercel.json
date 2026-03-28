@@ -4,7 +4,7 @@
       "maxDuration": 120
     },
     "api/home-chat-turn.ts": {
-      "maxDuration": 120
+      "maxDuration": 300
     },
     "api/assets-create.ts": {
       "maxDuration": 60

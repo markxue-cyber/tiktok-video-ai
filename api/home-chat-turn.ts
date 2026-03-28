@@ -1077,6 +1077,8 @@ type ImageGenCtx = {
   previewToken: string
   /** 本轮主参考是否与会话内上一轮用户附件不同（新上传/换资产） */
   newSubjectMediaThisTurn?: boolean
+  /** 前端分支出图的第二轮请求：省略轻量 QC、提示词优化限时，降低 Vercel 120s 超时风险 */
+  generateOnlyHop?: boolean
 } & ParsedHomeParams
 
 async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> {
@@ -1114,6 +1116,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     imageCount,
     refinementIntent,
     newSubjectMediaThisTurn,
+    generateOnlyHop,
   } = ctx
 
   if (!allowImageGenPerMinute(userId)) {
@@ -1160,7 +1163,8 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
               '【本轮模式·重新生成】用户可能否定了上一版：在满足商品主体与合规前提下，可大幅调整构图、场景、光影与风格；新图不必与上一版成图的布局一致，以用户最新文字为准。',
               '核心原则：若有商品实拍参考，须保持款式/颜色/材质真实一致；背景与整体画面可整体重想。',
             ]
-      const op = await gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
+      const optimizeMs = generateOnlyHop ? 22_000 : 45_000
+      const opPromise = gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
         '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
         ...modeRules,
         '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
@@ -1183,6 +1187,10 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           refinementMode,
         }),
       )
+      const op = (await Promise.race([
+        opPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), optimizeMs)),
+      ])) as { optimized?: string } | null
       optimizedPrompt = String(op?.optimized || userMessage).trim() || userMessage
     } catch {
       optimizedPrompt = userMessage
@@ -1319,7 +1327,8 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           model: 'nano-banana-2',
         })
         let qc: QcResult = { score: 80, issues: [] }
-        if (qcEnabled && images.length < 1 && Date.now() - startedAt < 120_000) {
+        const qcBudgetOk = Date.now() - startedAt < 72_000
+        if (qcEnabled && !generateOnlyHop && images.length < 1 && qcBudgetOk) {
           qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
         }
         images.push({
@@ -1469,6 +1478,7 @@ export default async function handler(req: any, res: any) {
         generateMode,
         previewToken,
         newSubjectMediaThisTurn,
+        generateOnlyHop: true,
         ...parsedGen,
       })
       return
