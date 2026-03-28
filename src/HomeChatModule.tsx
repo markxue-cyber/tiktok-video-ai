@@ -13,17 +13,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Folder,
   ImagePlus,
   Pencil,
   Pin,
   Plus,
-  Redo2,
   SlidersHorizontal,
   ThumbsDown,
   ThumbsUp,
   Trash2,
-  Undo2,
   Upload,
   X,
   ZoomIn,
@@ -105,8 +102,6 @@ export type HomeChatSession = {
   lastGeneratedRefUrl?: string
   /** 最近一次结构化分析摘要，供第二轮出图上下文 */
   productAnalysisSummary?: string
-  undoStack?: HomeChatMsg[][]
-  redoStack?: HomeChatMsg[][]
   /** 兼容旧版：仅用于迁移与会话筛选兜底 */
   media?: null | {
     type: 'image' | 'video'
@@ -973,8 +968,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     setSessions((prev) =>
       prev.map((x) => {
         if (x.id !== activeId) return x
-        const snap = JSON.parse(JSON.stringify(x.messages)) as HomeChatMsg[]
-        const undoStack = [...(x.undoStack || []), snap].slice(-8)
         const nextMsgs = [...x.messages, userMsg].slice(-MAX_STORED_MESSAGES)
         const title =
           x.messages.length === 0 ? sessionTitleFrom(sendText, primary.type) : x.title
@@ -984,8 +977,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           updatedAt: Date.now(),
           messages: nextMsgs,
           media: null,
-          undoStack,
-          redoStack: [],
         }
       }),
     )
@@ -1576,58 +1567,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     const n = m.streamLen ?? full.length
     return full.slice(0, n)
   }
-
-  const undoLastTurn = useCallback(() => {
-    setSessions((prev) =>
-      prev.map((session) => {
-        if (session.id !== activeId) return session
-        const stack = [...(session.undoStack || [])]
-        if (!stack.length) return session
-        const restored = stack.pop()!
-        const currentSnap = JSON.parse(JSON.stringify(session.messages)) as HomeChatMsg[]
-        const redoStack = [...(session.redoStack || []), currentSnap].slice(-8)
-        return {
-          ...session,
-          messages: restored,
-          undoStack: stack,
-          redoStack,
-          updatedAt: Date.now(),
-        }
-      }),
-    )
-  }, [activeId])
-
-  const redoLastTurn = useCallback(() => {
-    setSessions((prev) =>
-      prev.map((session) => {
-        if (session.id !== activeId) return session
-        const rstack = [...(session.redoStack || [])]
-        if (!rstack.length) return session
-        const restored = rstack.pop()!
-        const currentSnap = JSON.parse(JSON.stringify(session.messages)) as HomeChatMsg[]
-        const undoStack = [...(session.undoStack || []), currentSnap].slice(-8)
-        return {
-          ...session,
-          messages: restored,
-          undoStack,
-          redoStack: rstack,
-          updatedAt: Date.now(),
-        }
-      }),
-    )
-  }, [activeId])
-
-  const exportActiveSessionJson = useCallback(() => {
-    const row = sessions.find((x) => x.id === activeId)
-    if (!row) return
-    const blob = new Blob([JSON.stringify(row, null, 2)], { type: 'application/json' })
-    const href = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = href
-    a.download = `home-chat-${row.id.slice(0, 8)}.json`
-    a.click()
-    URL.revokeObjectURL(href)
-  }, [sessions, activeId])
 
   return (
     <div className="home-chat-module-root flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
@@ -2374,37 +2313,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               >
                 <Plus className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2" />
                 <span className="block text-center">新建对话</span>
-              </button>
-            </div>
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                title="撤销上一步"
-                disabled={!active?.undoStack?.length}
-                onClick={undoLastTurn}
-                className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 text-[11px] text-white/80 transition hover:border-violet-400/35 hover:text-violet-100 disabled:cursor-not-allowed disabled:opacity-35"
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-                撤销
-              </button>
-              <button
-                type="button"
-                title="重做"
-                disabled={!active?.redoStack?.length}
-                onClick={redoLastTurn}
-                className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 text-[11px] text-white/80 transition hover:border-violet-400/35 hover:text-violet-100 disabled:cursor-not-allowed disabled:opacity-35"
-              >
-                <Redo2 className="h-3.5 w-3.5" />
-                重做
-              </button>
-              <button
-                type="button"
-                title="导出当前会话 JSON"
-                onClick={exportActiveSessionJson}
-                className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 text-[11px] text-white/80 transition hover:border-violet-400/35 hover:text-violet-100"
-              >
-                <Folder className="h-3.5 w-3.5" />
-                导出
               </button>
             </div>
             <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>
