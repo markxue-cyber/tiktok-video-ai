@@ -727,7 +727,11 @@ async function runNanoBananaGeneration(params: {
   const consumed = await checkAndConsume(reqBill, { type: 'image' })
   if (consumed.already) {
     const r = consumed.result as any
-    return { imageUrl: r?.imageUrl as string, size: r?.size as string | undefined, cached: true as const }
+    const cachedUrl = String(r?.imageUrl || '').trim()
+    if (!cachedUrl) {
+      throw new Error('计费记录中缺少有效图片地址，请稍后重试或联系客服')
+    }
+    return { imageUrl: cachedUrl, size: r?.size as string | undefined, cached: true as const }
   }
 
   const aspect = String(params.aspectRatio || '1:1')
@@ -1265,7 +1269,8 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     for (const variant of variantsSafe) {
       for (let i = 0; i < imageCountSafe; i++) {
         if (images.length >= maxJobs) break
-        if (Date.now() - startedAt > 18_000) {
+        // 提示词优化等步骤与 nano 共用同一次请求的 startedAt；若在「尚未产出任何图」时用整场耗时截断，会导致从未调用 nano 却仍返回 success。
+        if (images.length > 0 && Date.now() - startedAt > 55_000) {
           break
         }
         const idem = `${baseIdem}:homeimg:${ratio}:${variant}:${i}:${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -1293,7 +1298,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           model: 'nano-banana-2',
         })
         let qc: QcResult = { score: 80, issues: [] }
-        if (qcEnabled && images.length < 1 && Date.now() - startedAt < 16_000) {
+        if (qcEnabled && images.length < 1 && Date.now() - startedAt < 120_000) {
           qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
         }
         images.push({
@@ -1307,11 +1312,21 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     }
   }
 
+  const imagesOut = images.filter((x) => String(x?.url || '').trim())
+  if (!imagesOut.length) {
+    res.status(200).json({
+      success: false,
+      code: 'IMAGE_GEN_EMPTY',
+      error: '出图步骤未返回有效图片（可能因上游超时或提示词优化耗时过长）。请重试，或先关闭「自动优化提示词」、减少张数后再试。',
+    })
+    return
+  }
+
   void writeHomeTelemetry(userId, {
     event: 'home_image_gen_ok',
     mode: 'final',
     sessionId: sessionId || undefined,
-    imageCount: images.length,
+    imageCount: imagesOut.length,
     hasSessionGenerated: !!hasSessionGenerated,
     refinementMode,
   })
@@ -1321,8 +1336,8 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     kind: 'mixed',
     analysisText: analysisText || undefined,
     optimizedPrompt: draft?.optimizedPrompt || optimizedPrompt,
-    imageUrls: images.map((x) => x.url),
-    images,
+    imageUrls: imagesOut.map((x) => x.url),
+    images: imagesOut,
     nextQuestion: nextQuestionFor(mediaTypeToUse),
     quickActions: quickActionsDynamic(mediaTypeToUse, userMessage, { hasSessionGenerated }),
     opsPack: undefined,

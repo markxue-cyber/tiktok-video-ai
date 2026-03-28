@@ -1219,6 +1219,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             const msg =
               code === 'NOT_PRODUCT_IMAGE'
                 ? String(data2?.error || '参考图不太像商品主体，请换图或先仅分析。')
+                : code === 'IMAGE_GEN_EMPTY'
+                  ? String(
+                      data2?.error ||
+                        '未收到有效出图结果，请重试；若多次出现可暂时关闭「自动优化提示词」或减少生成张数。',
+                    )
                 : code === 'UPSTREAM_TIMEOUT'
                   ? '出图超时，请稍后重试或先生成预览图。'
                   : code === 'RATE_LIMITED'
@@ -1250,6 +1255,24 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           if (data2.previewToken) setPreviewToken(String(data2.previewToken))
           else if (generateMode === 'final') setPreviewToken('')
 
+          if (!imgs.length) {
+            const msg =
+              '【出图未完成】服务端返回成功但未包含图片地址，请重试；若持续出现请联系支持或暂时关闭「自动优化提示词」。'
+            setSessions((prev) =>
+              prev.map((session) => {
+                if (session.id !== activeId) return session
+                return {
+                  ...session,
+                  updatedAt: Date.now(),
+                  messages: session.messages.map((m) =>
+                    m.id === assistantMsgId ? { ...m, text: `${m.text}\n\n${msg}`, blocked: true } : m,
+                  ),
+                }
+              }),
+            )
+            return
+          }
+
           const extraOpt = data2.optimizedPrompt
             ? `\n\n【优化后提示词】\n${String(data2.optimizedPrompt)}`
             : ''
@@ -1258,16 +1281,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               if (session.id !== activeId) return session
               const msgs = session.messages.map((m) =>
                 m.id === assistantMsgId
-                  ? {
-                      ...m,
-                      text: `${m.text}${extraOpt}`,
-                      images: imgs.length ? imgs : undefined,
-                      imageItems: imageItems.length ? imageItems : undefined,
-                      followUps:
-                        data2.quickActions && data2.quickActions.length
-                          ? [...data2.quickActions, ...(data2.previewToken ? ['确认高清生成'] : [])]
-                          : m.followUps,
-                    }
+                  ? (() => {
+                      const nextText = `${m.text}${extraOpt}`
+                      return {
+                        ...m,
+                        text: nextText,
+                        streamLen: nextText.length,
+                        images: imgs.length ? imgs : undefined,
+                        imageItems: imageItems.length ? imageItems : undefined,
+                        followUps:
+                          data2.quickActions && data2.quickActions.length
+                            ? [...data2.quickActions, ...(data2.previewToken ? ['确认高清生成'] : [])]
+                            : m.followUps,
+                      }
+                    })()
                   : m,
               )
               const firstImg = imgs[0]
