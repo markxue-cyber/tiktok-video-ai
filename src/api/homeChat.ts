@@ -133,11 +133,29 @@ export async function homeChatGenStatusAPI(
 ): Promise<HomeChatGenStatusResult> {
   const token = localStorage.getItem('tikgen.accessToken') || ''
   if (!token) throw new Error('请先登录')
-  const resp = await fetch(`/api/home-chat-gen-status?id=${encodeURIComponent(jobId)}`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
-    signal: init?.signal,
-  })
+  const bust = typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : String(Date.now())
+  const resp = await fetch(
+    `/api/home-chat-gen-status?id=${encodeURIComponent(jobId)}&_=${encodeURIComponent(bust)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+      cache: 'no-store',
+      signal: init?.signal,
+    },
+  )
+  if (resp.status === 304) {
+    return {
+      success: false,
+      error: '状态查询被缓存拦截（304），请刷新页面后重试',
+      code: 'GEN_STATUS_CACHE_304',
+    }
+  }
   return readJsonOrText(resp) as Promise<HomeChatGenStatusResult>
 }
 

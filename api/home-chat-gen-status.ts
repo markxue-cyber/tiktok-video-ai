@@ -1,8 +1,19 @@
 import { requireUser } from './_supabase.js'
 import { fetchHomeChatImageJobForUser } from './_homeChatImageJob.js'
 
+function noStoreHeaders(res: any) {
+  // 轮询接口绝不能被 CDN/浏览器缓存；否则易返回 304 + 空 body，前端解析成 {} 永远等不到终态
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+}
+
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' })
+  if (req.method !== 'GET') {
+    noStoreHeaders(res)
+    return res.status(405).json({ success: false, error: 'Method not allowed' })
+  }
+  noStoreHeaders(res)
   try {
     const { user } = await requireUser(req)
     const userId = user.id || user.sub

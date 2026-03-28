@@ -1264,6 +1264,23 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 resolved = { success: false, error: '出图任务不存在或已过期', code: 'NOT_FOUND' }
                 break
               }
+              if (st?.success === false && st.code === 'GEN_STATUS_CACHE_304') {
+                resolved = {
+                  success: false,
+                  error: String(st.error || '状态查询被缓存拦截，请刷新页面后重试'),
+                  code: 'GEN_STATUS_CACHE_304',
+                }
+                break
+              }
+              // 304 等异常下 body 可能为空 {}，避免空转到超时
+              if (st && typeof st === 'object' && Object.keys(st as object).length === 0) {
+                resolved = {
+                  success: false,
+                  error: '无法读取出图状态（可能被 CDN/浏览器缓存），请刷新页面后重试',
+                  code: 'GEN_STATUS_EMPTY',
+                }
+                break
+              }
             }
             data2 =
               resolved ||
