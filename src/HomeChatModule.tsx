@@ -125,6 +125,8 @@ export type HomeChatSession = {
     optimizePrompt: boolean
     hdEnhance: boolean
     negativePrompt: boolean
+    /** 缺省等同 auto，兼容旧版本地会话 */
+    refinementIntent?: 'auto' | 'iterative' | 'fresh'
   }
 }
 
@@ -224,6 +226,7 @@ const defaultParams = (): HomeChatSession['params'] => ({
   optimizePrompt: true,
   hdEnhance: true,
   negativePrompt: true,
+  refinementIntent: 'auto',
 })
 
 function newSession(): HomeChatSession {
@@ -1022,6 +1025,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         optimizePrompt: ep.optimizePrompt,
         hdEnhance: ep.hdEnhance,
         negativePrompt: ep.negativePrompt,
+        refinementIntent: ep.refinementIntent ?? 'auto',
       }
 
       setBusyStage('analyze')
@@ -1784,6 +1788,22 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           </select>
                         </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                          <span className="shrink-0 whitespace-nowrap" title="自动：根据你的话术与是否基于上一张成图推断">
+                            改图方式
+                          </span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.refinementIntent ?? 'auto'}
+                            onChange={(e) =>
+                              updateParams({ refinementIntent: e.target.value as 'auto' | 'iterative' | 'fresh' })
+                            }
+                          >
+                            <option value="auto">自动推断</option>
+                            <option value="iterative">上一版微调</option>
+                            <option value="fresh">重新生成</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                           <span className="shrink-0 whitespace-nowrap tabular-nums">
                             参考权重 {active?.params.refWeight?.toFixed(2)}
                           </span>
@@ -2231,6 +2251,22 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     >
                       <option value="high">高</option>
                       <option value="medium">中</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
+                    <span className="shrink-0 whitespace-nowrap" title="自动：根据你的话术与是否基于上一张成图推断">
+                      改图方式
+                    </span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.refinementIntent ?? 'auto'}
+                      onChange={(e) =>
+                        updateParams({ refinementIntent: e.target.value as 'auto' | 'iterative' | 'fresh' })
+                      }
+                    >
+                      <option value="auto">自动推断</option>
+                      <option value="iterative">上一版微调</option>
+                      <option value="fresh">重新生成</option>
                     </select>
                   </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">

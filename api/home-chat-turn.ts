@@ -611,6 +611,52 @@ function inferHomeIntentOverride(
   return {}
 }
 
+type RefinementIntentParam = 'auto' | 'iterative' | 'fresh'
+
+/**
+ * 区分「在上一版成图上微调」与「按新要求整图重做」。
+ * explicit 非 auto 时以用户选择为准；auto 时结合话术与是否链式参考上一张成图推断。
+ */
+function resolveRefinementIntent(
+  userMessage: string,
+  explicit: RefinementIntentParam | undefined,
+  opts: { newSubjectMediaThisTurn: boolean; chainingRefFromLastGen: boolean },
+): 'iterative' | 'fresh' {
+  const ex = (explicit || 'auto').toLowerCase() as RefinementIntentParam
+  if (ex === 'iterative') return 'iterative'
+  if (ex === 'fresh') return 'fresh'
+
+  const raw = String(userMessage || '')
+  const core = stripHomeParamLine(raw)
+
+  const freshRe =
+    /完全重做|重新生成|重来一遍|重来|不要这张|不要这版|全改|大改|推翻|换一款|换掉当前|换商品|换产品|换主体|从头画|另起炉灶|完全不像|一点都不对|完全不符合|别参考上一|不要上一版|整图重做|风格全改|换整个|看不上|不满意这张|整张重做|推倒重来|全部推翻|和我要的完全|两码事/i
+  if (freshRe.test(raw) || freshRe.test(core)) return 'fresh'
+
+  /** 明确指向「上一张刚生成的成图」的微调话术 */
+  const lastGeneratedImagePhrases = [
+    '在刚生成的这张图的基础上',
+    '在刚生成的这张图上',
+    '把刚生成的这张图',
+    '在刚刚生成的这张图的基础上',
+    '在刚刚生成的这张图上',
+    '把刚刚生成的这张图',
+    '在上面这张图上',
+    '在上面这张图的基础上',
+  ]
+  if (lastGeneratedImagePhrases.some((p) => raw.includes(p) || core.includes(p))) return 'iterative'
+
+  const iterRe =
+    /微调|一点点|稍微|略[微调]|基础上|在这一版|在这张|上一张|刚生成|保持.?构图|保持.?画面|只加|只要加|加个|加上|附带|角落|局部|轻微|logo|水印|再亮|调亮|提亮/i
+  if (iterRe.test(raw) || iterRe.test(core)) return 'iterative'
+
+  if (HOME_FORCE_IMAGE_PHRASES.some((p) => raw.includes(p) || core.includes(p))) return 'iterative'
+
+  if (opts.newSubjectMediaThisTurn) return 'fresh'
+  if (opts.chainingRefFromLastGen) return 'iterative'
+  return 'iterative'
+}
+
 function priorHasFullProductAnalysis(history: ChatTurn[]): boolean {
   return history.some(
     (m) =>
@@ -936,6 +982,7 @@ type ParsedHomeParams = {
   abVariant: boolean
   qcEnabled: boolean
   imageCount: number
+  refinementIntent: RefinementIntentParam
 }
 
 function parseHomeParams(params: any, intentImageCount?: number): ParsedHomeParams {
@@ -955,6 +1002,9 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
     1,
     Math.min(4, Math.floor(Number(params.imageCount) || Math.floor(Number(intentImageCount ?? 1)))),
   )
+  const ri = String(params.refinementIntent || 'auto').toLowerCase()
+  const refinementIntent: RefinementIntentParam =
+    ri === 'iterative' || ri === 'fresh' || ri === 'auto' ? ri : 'auto'
   return {
     aspectRatio,
     resolution,
@@ -969,6 +1019,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
     abVariant,
     qcEnabled,
     imageCount,
+    refinementIntent,
   }
 }
 
@@ -993,6 +1044,8 @@ type ImageGenCtx = {
   analysisText: string
   generateMode: GenerateMode
   previewToken: string
+  /** 本轮主参考是否与会话内上一轮用户附件不同（新上传/换资产） */
+  newSubjectMediaThisTurn?: boolean
 } & ParsedHomeParams
 
 async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> {
@@ -1028,6 +1081,8 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     abVariant,
     qcEnabled,
     imageCount,
+    refinementIntent,
+    newSubjectMediaThisTurn,
   } = ctx
 
   if (!allowImageGenPerMinute(userId)) {
@@ -1036,6 +1091,11 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   }
 
   const clientRef = normalizeOptionalRefUrl(String(refImageUrlRaw || ''), supabaseUrl)
+  const chainingRefFromLastGen = !!(clientRef && mediaType === 'image')
+  const refinementMode = resolveRefinementIntent(userMessage, refinementIntent, {
+    newSubjectMediaThisTurn: newSubjectMediaThisTurn === true,
+    chainingRefFromLastGen,
+  })
   const draftEarly = previewToken ? getPreviewDraft(previewToken, userId) : null
   const nanoRefEarly = pickNanoRefImage(mediaType, mediaUrl, clientRef, draftEarly?.refImageUrl, supabaseUrl)
   if (nanoRefEarly) {
@@ -1059,10 +1119,19 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   if (optimizePrompt) {
     try {
       const execDir = homeExecutionDirectives(userMessage)
+      const modeRules =
+        refinementMode === 'iterative'
+          ? [
+              '【本轮模式·上一版微调】提示词须强调：与参考图（若有）的构图、机位、陈设、主体位置与比例尽量一致，只落实用户点名的变化（如加 logo、调亮、小范围换背景）。禁止整体换景、换机位、换商品款式或重画用户未提及的区域。',
+              '核心原则：在上一版成图基础上做最小改动；非用户要求的部分尽量保持不变。',
+            ]
+          : [
+              '【本轮模式·重新生成】用户可能否定了上一版：在满足商品主体与合规前提下，可大幅调整构图、场景、光影与风格；新图不必与上一版成图的布局一致，以用户最新文字为准。',
+              '核心原则：若有商品实拍参考，须保持款式/颜色/材质真实一致；背景与整体画面可整体重想。',
+            ]
       const op = await gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
         '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
-        '核心原则：严格保留商品主体结构/颜色/比例，不变形、不换款；仅按用户意图做局部修改。',
-        '若用户是“换场景/更亮一点/突出质感/改白底主图”等微调意图，只改指定部分，不重做无关元素。',
+        ...modeRules,
         '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
         '这是执行类出图任务：禁止只输出拍摄/修图教程文字，提示词必须能直接用于生成成品图。',
         '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。',
@@ -1080,6 +1149,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           style: styleKeywords(style),
           aspectRatio,
           refWeight,
+          refinementMode,
         }),
       )
       optimizedPrompt = String(op?.optimized || userMessage).trim() || userMessage
@@ -1095,6 +1165,10 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       : '尽量保持商品主体结构、颜色与比例，允许轻微构图变化'
 
   const execBlock = homeExecutionDirectives(userMessage)
+  const refinementTail =
+    refinementMode === 'iterative'
+      ? '【改图约束】在上一版/参考图基础上微调：除用户要求的变化外，保持画面结构与主体摆放基本一致。'
+      : '【改图约束】按用户最新需求重新构想画面；无需与上一版成图保持同一构图。'
   const extra = [
     styleKeywords(style),
     `画幅比例 ${aspectRatio}`,
@@ -1103,6 +1177,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     'clean premium background, no extra text, no watermark, no irrelevant objects',
     preserveLine,
     `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
+    refinementTail,
     execBlock,
     COMPLIANCE_TAIL,
   ]
@@ -1147,6 +1222,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       mode: 'preview',
       sessionId: sessionId || undefined,
       hasSessionGenerated: !!hasSessionGenerated,
+      refinementMode,
     })
     res.status(200).json({
       success: true,
@@ -1159,7 +1235,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       nextQuestion: '预览方向已生成，是否按该方向生成高清正式图？',
       quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
       opsPack: undefined,
-      meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview' },
+      meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview', refinementMode },
     })
     return
   }
@@ -1231,6 +1307,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     sessionId: sessionId || undefined,
     imageCount: images.length,
     hasSessionGenerated: !!hasSessionGenerated,
+    refinementMode,
   })
 
   res.status(200).json({
@@ -1253,6 +1330,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       subjectLock,
       multiRatio: multiRatio && ratioListSafe.length > 1,
       abVariant: abVariant && variantsSafe.length > 1,
+      refinementMode,
     },
   })
 }
@@ -1348,6 +1426,7 @@ export default async function handler(req: any, res: any) {
         analysisText: analysisTextOnly,
         generateMode,
         previewToken,
+        newSubjectMediaThisTurn,
         ...parsedGen,
       })
       return
@@ -1544,6 +1623,7 @@ export default async function handler(req: any, res: any) {
         analysisText,
         generateMode,
         previewToken,
+        newSubjectMediaThisTurn,
         ...parsed,
       })
       return

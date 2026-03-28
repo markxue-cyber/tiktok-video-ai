@@ -74,6 +74,8 @@ export type HomeChatTurnPayload = {
     qcEnabled?: boolean
     generateMode?: 'preview' | 'final'
     previewToken?: string
+    /** auto：服务端根据话术与是否链式参考上一张成图推断；iterative：在上一版基础上微调；fresh：按新要求整图重做 */
+    refinementIntent?: 'auto' | 'iterative' | 'fresh'
   }
 }
 
