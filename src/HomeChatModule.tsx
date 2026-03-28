@@ -903,6 +903,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       setError('请先上传图片或视频，再发起对话')
       return
     }
+    /** 与会话内「最近一条带附件的用户消息」主图是否不同；用于后端对新图走完整电商分析而非短跟进 */
+    const newSubjectMediaThisTurn =
+      !lastMedia ||
+      primary.url !== lastMedia.url ||
+      primary.type !== lastMedia.type
     if (!pendingDone.length && !trimmed) {
       setError('请输入有效内容，或上传图片/视频')
       return
@@ -1050,6 +1055,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           hasSessionGenerated: hasGenPayload,
           sessionId: s.id,
           locale: localeStr,
+          newSubjectMediaThisTurn,
           generateMode,
           previewToken: generateMode === 'final' ? previewToken : '',
           history: hist.slice(-API_HISTORY_MAX),
@@ -1194,6 +1200,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               hasSessionGenerated: hasGenPayload,
               sessionId: s.id,
               locale: localeStr,
+              newSubjectMediaThisTurn,
               generateMode,
               previewToken: generateMode === 'final' ? previewToken : '',
               history: hist.slice(-API_HISTORY_MAX),

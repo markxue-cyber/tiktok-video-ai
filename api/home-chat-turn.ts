@@ -42,6 +42,19 @@ const ECOM_ANALYSIS_FORMAT = [
   '要求：所有结论必须对电商运营可执行，避免空泛描述；看不清的内容明确标注“无法确认”。',
 ].join('\n')
 
+/** 同参考图、已出过完整分析后的改图跟进轮（含自定义长句）：只写执行说明，禁止重复首轮大模板 */
+const ECOM_MINIMAL_EXEC_FOLLOWUP = [
+  '这是同一会话、同一参考图上的「改图跟进轮」：对话中已出现过完整的【商品主体识别】等首轮分析。',
+  '禁止：再次输出【商品主体识别】【商用视觉诊断】【平台适配建议】【场景与人群】等长模板；禁止复述历史轮次写过的品类/材质/颜色档案。',
+  '用户可能使用快捷按钮，也可能自定义任意长句描述改图要求；你必须把其**本轮文字中的核心改图诉求**提炼进【执行确认】，可适度引用原话关键词。',
+  '请用中文，总行数不超过 16 行，严格按：',
+  '【执行确认】3-5 行：逐条对齐用户本轮指令（无论长短），说明将如何落实；明确商品主体与款式与参考图一致、禁止换款。',
+  '【本轮画面要点】2-5 条：只写与本轮生成直接相关的背景/光线/构图/风格；不写分平台长列表。',
+  '【一句话运营提示】1 行即可。',
+  '若媒体为视频且确有必要，最多补 2 行「动态卖点」；否则不写视频段。',
+  '结尾必须单独一行：系统将基于参考图按你的指令生成新的商品图。',
+].join('\n')
+
 type MediaType = 'image' | 'video'
 
 type ChatTurn = { role: 'user' | 'assistant'; text: string }
@@ -373,18 +386,34 @@ function historyToMessages(
   history: ChatTurn[],
   currentUserContent: string | ContentPart[],
   supabaseUrl: string,
-  analysisCtx?: { mediaType: MediaType; userMessage: string },
+  analysisCtx?: {
+    mediaType: MediaType
+    userMessage: string
+    newSubjectMediaThisTurn?: boolean
+    /** 意图合并后的最终值：同图且为 true 时与历史完整分析并存则走极简要跟进 */
+    needsImageGen: boolean
+  },
 ): ChatMessage[] {
   const out: ChatMessage[] = []
-  const wantsExecImage =
-    analysisCtx &&
-    inferHomeIntentOverride(analysisCtx.userMessage, analysisCtx.mediaType).needsImageGen === true
+  const wantsExecImage = analysisCtx?.needsImageGen === true
+  const minimalFollowup =
+    !!analysisCtx &&
+    !analysisCtx.newSubjectMediaThisTurn &&
+    analysisCtx.needsImageGen === true &&
+    priorHasFullProductAnalysis(history)
+  const formatBlock = minimalFollowup ? ECOM_MINIMAL_EXEC_FOLLOWUP : ECOM_ANALYSIS_FORMAT
   const execBlock = wantsExecImage
-    ? [
-        '【出图指令已识别】用户本轮要基于参考图生成/修改商品图（含快捷指令：更亮、换场景、白底、信息流等）。',
-        '禁止：推荐或提及 Photoshop、Lightroom、Canva、Pixlr、美图秀秀、手机相册、任何第三方修图软件或「自己去软件里调」类教程；不要写分步骤修图指南。',
-        '必须：仍按下方「电商结构化格式」输出，但内容服务于即将自动出图：商用诊断只写与当前画面相关的简短要点；用一行收尾：「系统将基于参考图按你的指令生成新的商品图。」',
-      ].join('\n')
+    ? minimalFollowup
+      ? [
+          '【出图指令·跟进轮】同一参考图、会话内已有完整商品分析；本轮无论是快捷按钮还是用户自定义长句，均禁止复述首轮长模板。',
+          '禁止：第三方修图软件教程；禁止【商品主体识别】等整段结构。',
+          '输出：仅使用下方「极简要跟进格式」，把用户本轮改图要求写进【执行确认】。',
+        ].join('\n')
+      : [
+          '【出图指令已识别】用户本轮要基于参考图生成/修改商品图（含快捷指令：更亮、换场景、白底、信息流等）。',
+          '禁止：推荐或提及 Photoshop、Lightroom、Canva、Pixlr、美图秀秀、手机相册、任何第三方修图软件或「自己去软件里调」类教程；不要写分步骤修图指南。',
+          '必须：仍按下方「电商结构化格式」输出，但内容服务于即将自动出图：商用诊断只写与当前画面相关的简短要点；用一行收尾：「系统将基于参考图按你的指令生成新的商品图。」',
+        ].join('\n')
     : ''
   const sys: ChatMessage = {
     role: 'system',
@@ -395,7 +424,7 @@ function historyToMessages(
       '事实要求：仅基于可见信息下结论；不确定就明确写“无法确认”。',
       '任务边界：本阶段只做理解分析与运营建议，不执行视频生成/剪辑指令。',
       execBlock,
-      ECOM_ANALYSIS_FORMAT,
+      formatBlock,
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -580,6 +609,15 @@ function inferHomeIntentOverride(
   }
 
   return {}
+}
+
+function priorHasFullProductAnalysis(history: ChatTurn[]): boolean {
+  return history.some(
+    (m) =>
+      m.role === 'assistant' &&
+      String(m.text || '').includes('【商品主体识别】') &&
+      String(m.text || '').includes('【商用视觉诊断】'),
+  )
 }
 
 /** 快捷指令绑定的出图约束，写入最终 prompt（仅首页出图链路） */
@@ -1261,6 +1299,7 @@ export default async function handler(req: any, res: any) {
       ''
     const hasSessionGenerated = body.hasSessionGenerated === true
     const sessionId = String(body.sessionId || '').trim().slice(0, 120)
+    const newSubjectMediaThisTurn = body.newSubjectMediaThisTurn === true
 
     if (mediaType !== 'image' && mediaType !== 'video') {
       return res.status(200).json({ success: false, error: 'mediaType 无效', code: 'BAD_REQUEST' })
@@ -1384,7 +1423,12 @@ export default async function handler(req: any, res: any) {
       if (useStreamForAnalysis) {
         try {
           const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
-          const messages = historyToMessages(history, multimodal, supabaseUrl, { mediaType, userMessage })
+          const messages = historyToMessages(history, multimodal, supabaseUrl, {
+            mediaType,
+            userMessage,
+            newSubjectMediaThisTurn,
+            needsImageGen,
+          })
 
           res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
           res.setHeader('Cache-Control', 'no-cache, no-transform')
@@ -1452,7 +1496,12 @@ export default async function handler(req: any, res: any) {
 
       try {
         const multimodal = buildUserMultimodalContent(userMessage, mediaType, mediaUrl, supabaseUrl)
-        const messages = historyToMessages(history, multimodal, supabaseUrl, { mediaType, userMessage })
+        const messages = historyToMessages(history, multimodal, supabaseUrl, {
+          mediaType,
+          userMessage,
+          newSubjectMediaThisTurn,
+          needsImageGen,
+        })
         analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35)
         if (!needsImageGen) {
           opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)

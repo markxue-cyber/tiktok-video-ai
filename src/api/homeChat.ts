@@ -43,6 +43,11 @@ export type HomeChatTurnPayload = {
   hasSessionGenerated?: boolean
   sessionId?: string
   locale?: string
+  /**
+   * 本轮主参考 mediaUrl 与会话内「上一轮用户附件主图」不一致（含新上传/换资产），
+   * 服务端应对新图走完整电商分析，勿用同图快捷改图的极简要跟进模板。
+   */
+  newSubjectMediaThisTurn?: boolean
   /** 先分析后出图：首轮仅返回分析，需配合 generateOnly 第二轮 */
   splitPipeline?: boolean
   /** 第二轮：仅执行出图（须带 analysisText） */
