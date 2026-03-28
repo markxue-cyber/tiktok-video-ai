@@ -1528,6 +1528,16 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // 与前端 likelyGenerateIntent 对齐：意图 JSON 偶发漏判时仍走分支出图，避免首轮无 deferredImageGen、用户永远等不到图
+    if (splitPipeline && !needsImageGen && !homeIo.consultOnly) {
+      const raw = String(userMessage || '')
+      const core = stripHomeParamLine(raw)
+      const genHint = /(生成|出图|做图|制图|来一张|做一张|白底|场景图|信息流|封面|换场景|换背景|更亮|调亮|提亮|质感|主图|海报|种草|同款|重绘|修图|p图)/i
+      if (genHint.test(core) || genHint.test(raw)) {
+        needsImageGen = true
+      }
+    }
+
     // 首页要求：用户上传媒体后默认先做结构化商用分析；生成诉求可与分析并行返回
     needsAnalysis = true
     if (!needsAnalysis && !needsImageGen) needsAnalysis = true

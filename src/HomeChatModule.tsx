@@ -1185,8 +1185,23 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           }),
         )
 
-        /** 首轮仅分析，出图在第二轮请求，先展示文字再补图 */
-        if (data.deferredImageGen) {
+        /**
+         * 首轮仅分析、出图在第二轮。除服务端显式 deferredImageGen 外，若用户明显要出图但首轮未带图，也走第二轮（防止意图漏判导致永远不请求 generateOnly）。
+         */
+        const firstResponseHasImages =
+          (Array.isArray(data.images) && data.images.some((x) => !!x?.url)) ||
+          (Array.isArray(data.imageUrls) && data.imageUrls.some(Boolean))
+        /** 比 likelyGenerateIntent 更严：避免「只咨询质感/主图」误触发第二轮出图 */
+        const strongExplicitImageRequest =
+          homeQuickForcePhrase(sendText) ||
+          /(生成|出图|做图|制图|来一张|做一张|来张|做张|张图|重绘|修图|p\s*图|换场景|换背景|白底主图|信息流|同款|更亮|调亮|提亮|做主图|主图生成)/i.test(
+            String(sendText || ''),
+          )
+        const shouldRunFollowUpImageGen =
+          data.deferredImageGen === true ||
+          (!firstResponseHasImages && strongExplicitImageRequest)
+
+        if (shouldRunFollowUpImageGen) {
           const analysisForGen = String(data.analysisText || '').trim()
           const analysisTextFallback =
             '【商品主体】与参考图一致（继承会话上下文）。\n【说明】用户已发起改图/出图快捷指令；本节为简要占位，正式画面由下一步生成模型输出。\n【商用视觉诊断】仅基于参考图简述当前曝光与主体清晰度，禁止展开第三方修图教程。\n系统将基于参考图按你的指令生成新的商品图。'
