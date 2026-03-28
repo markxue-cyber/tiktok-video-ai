@@ -20,7 +20,12 @@ function serviceHeaders(extra: Record<string, string> = {}) {
   }
 }
 
-export async function insertQueuedHomeChatImageJob(userId: string, jobId: string): Promise<void> {
+export async function insertQueuedHomeChatImageJob(
+  userId: string,
+  jobId: string,
+  modelId?: string,
+): Promise<void> {
+  const model = String(modelId || 'nano-banana-2').trim() || 'nano-banana-2'
   const resp = await fetch(`${supabaseBaseUrl()}/rest/v1/generation_tasks`, {
     method: 'POST',
     headers: serviceHeaders({
@@ -32,7 +37,7 @@ export async function insertQueuedHomeChatImageJob(userId: string, jobId: string
         id: jobId,
         user_id: userId,
         type: 'image',
-        model: 'nano-banana-2',
+        model,
         status: 'queued',
         raw: { source: 'home_chat_async', createdAt: Date.now() },
       },

@@ -1034,6 +1034,17 @@ type ParsedHomeParams = {
   qcEnabled: boolean
   imageCount: number
   refinementIntent: RefinementIntentParam
+  /** OpenAI 兼容出图 model id，由首页高级参数传入 */
+  imageModel: string
+}
+
+const DEFAULT_HOME_IMAGE_MODEL = 'nano-banana-2'
+
+function sanitizeHomeImageModel(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+  if (!s || s.length > 120) return DEFAULT_HOME_IMAGE_MODEL
+  if (!/^[a-zA-Z0-9._-]+$/.test(s)) return DEFAULT_HOME_IMAGE_MODEL
+  return s
 }
 
 function parseHomeParams(params: any, intentImageCount?: number): ParsedHomeParams {
@@ -1056,6 +1067,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
   const ri = String(params.refinementIntent || 'auto').toLowerCase()
   const refinementIntent: RefinementIntentParam =
     ri === 'iterative' || ri === 'fresh' || ri === 'auto' ? ri : 'auto'
+  const imageModel = sanitizeHomeImageModel(params.imageModel)
   return {
     aspectRatio,
     resolution,
@@ -1071,6 +1083,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
     qcEnabled,
     imageCount,
     refinementIntent,
+    imageModel,
   }
 }
 
@@ -1137,7 +1150,10 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     refinementIntent,
     newSubjectMediaThisTurn,
     generateOnlyHop,
+    imageModel,
   } = ctx
+
+  const genModel = String(imageModel || '').trim() || DEFAULT_HOME_IMAGE_MODEL
 
   if (!allowImageGenPerMinute(userId)) {
     res.status(200).json({ success: false, error: RATE_ERR, code: 'RATE_LIMITED' })
@@ -1188,7 +1204,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
             ]
       const optimizeMs = generateOnlyHop ? 22_000 : 45_000
       const opPromise = gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
-        '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
+        `你是电商图片生成提示词工程师，将用户需求改写为适配 ${genModel} 的高质量提示词。`,
         ...modeRules,
         '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
         '这是执行类出图任务：禁止只输出拍摄/修图教程文字，提示词必须能直接用于生成成品图。',
@@ -1276,7 +1292,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       resolution,
       refImage: nanoRefPreview,
       imageCount: 1,
-      model: 'nano-banana-2',
+      model: genModel,
     })
     const previewImage = { url: prev.imageUrl, ratio: aspectRatio, variant: 'preview', qcScore: 80, qcIssues: [] as string[] }
     void writeHomeTelemetry(userId, {
@@ -1297,7 +1313,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       nextQuestion: '预览方向已生成，是否按该方向生成高清正式图？',
       quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
       opsPack: undefined,
-      meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview', refinementMode },
+      meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview', refinementMode, imageModel: genModel },
     })
     return
   }
@@ -1347,7 +1363,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           resolution: resolutionToUse,
           refImage: nanoRefFinal,
           imageCount: 1,
-          model: 'nano-banana-2',
+          model: genModel,
         })
         let qc: QcResult = { score: 80, issues: [] }
         const qcBudgetOk = Date.now() - startedAt < 72_000
@@ -1405,6 +1421,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       multiRatio: multiRatio && ratioListSafe.length > 1,
       abVariant: abVariant && variantsSafe.length > 1,
       refinementMode,
+      imageModel: genModel,
     },
   })
 }
@@ -1622,7 +1639,7 @@ export default async function handler(req: any, res: any) {
             typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
               ? crypto.randomUUID()
               : `hj_${Date.now()}_${Math.random().toString(16).slice(2)}`
-          await insertQueuedHomeChatImageJob(userId, jobId)
+          await insertQueuedHomeChatImageJob(userId, jobId, parsedGen.imageModel)
           const authHdr = String(req.headers?.authorization || '')
           const idem0 =
             String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() ||

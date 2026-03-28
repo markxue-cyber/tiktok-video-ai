@@ -81,6 +81,8 @@ export type HomeChatTurnPayload = {
     previewToken?: string
     /** auto：服务端根据话术与是否链式参考上一张成图推断；iterative：在上一版基础上微调；fresh：按新要求整图重做 */
     refinementIntent?: 'auto' | 'iterative' | 'fresh'
+    /** OpenAI 兼容 images/generations 的 model id，须与后台 model_controls 中已启用的图像模型一致 */
+    imageModel?: string
   }
 }
 

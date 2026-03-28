@@ -35,6 +35,7 @@ import {
   type HomeChatImageItem,
   type HomeChatTurnResult,
 } from './api/homeChat'
+import { getModelAvailabilityAPI } from './api/modelAvailability'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 
 const STORAGE_KEY = 'tikgen.homeChat.sessions.v1'
@@ -128,6 +129,8 @@ export type HomeChatSession = {
     negativePrompt: boolean
     /** 缺省等同 auto，兼容旧版本地会话 */
     refinementIntent?: 'auto' | 'iterative' | 'fresh'
+    /** 出图模型 id（与聚合 API / model_controls 一致） */
+    imageModel: string
   }
 }
 
@@ -228,6 +231,7 @@ const defaultParams = (): HomeChatSession['params'] => ({
   hdEnhance: true,
   negativePrompt: true,
   refinementIntent: 'auto',
+  imageModel: 'nano-banana-2',
 })
 
 function newSession(): HomeChatSession {
@@ -253,7 +257,12 @@ function loadSessions(): HomeChatSession[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    const dp = defaultParams()
+    return (parsed as HomeChatSession[]).map((s) => ({
+      ...s,
+      params: { ...dp, ...s.params },
+    }))
   } catch {
     return []
   }
@@ -566,6 +575,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
+  const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>(() => [
+    { id: 'nano-banana-2', label: 'nano-banana-2' },
+  ])
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
@@ -620,6 +632,54 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       // ignore
     }
   }, [activeId])
+
+  /** 与后台 model_controls 对齐的可选出图模型；未登录时仅依赖公开 controls */
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const fallback = [{ id: 'nano-banana-2', label: 'nano-banana-2' }]
+      const unavailable: Record<string, string> = {}
+      try {
+        const token = localStorage.getItem('tikgen.accessToken') || ''
+        if (token) {
+          const r = await getModelAvailabilityAPI(token)
+          for (const x of r.image || []) unavailable[String(x.id)] = String(x.reason || '暂不可用')
+        }
+      } catch {
+        /* ignore */
+      }
+      const options: { id: string; label: string }[] = []
+      try {
+        const resp = await fetch('/api/model-controls?type=image')
+        const data = await resp.json()
+        if (data?.success && Array.isArray(data.controls)) {
+          for (const c of data.controls) {
+            const id = String(c.model_id || '').trim()
+            if (!id || c.enabled === false) continue
+            if (unavailable[id]) continue
+            const rec = c.recommended === true
+            options.push({ id, label: rec ? `${id}（推荐）` : id })
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      const finalOpts = options.length ? options : fallback
+      if (cancelled) return
+      setImageModelOptions(finalOpts)
+      setSessions((prev) =>
+        prev.map((s) => {
+          const cur = String(s.params.imageModel || 'nano-banana-2')
+          if (finalOpts.some((o) => o.id === cur)) return s
+          const preferred = finalOpts.find((o) => o.label.includes('推荐')) || finalOpts[0]
+          return { ...s, params: { ...s.params, imageModel: preferred.id } }
+        }),
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (showLanding) return
@@ -1027,6 +1087,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         hdEnhance: ep.hdEnhance,
         negativePrompt: ep.negativePrompt,
         refinementIntent: ep.refinementIntent ?? 'auto',
+        imageModel: ep.imageModel || 'nano-banana-2',
       }
 
       setBusyStage('analyze')
@@ -1861,6 +1922,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   {paramsOpen ? (
                     <div className="mt-2 p-1">
                       <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                        <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
+                          <span className="shrink-0 whitespace-nowrap">出图模型</span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.imageModel || 'nano-banana-2'}
+                            onChange={(e) => updateParams({ imageModel: e.target.value })}
+                          >
+                            {imageModelOptions.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                           <span className="shrink-0 whitespace-nowrap">分辨率</span>
                           <select
@@ -2327,6 +2402,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             {paramsOpen ? (
               <div className="mt-2 p-1">
                 <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                  <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
+                    <span className="shrink-0 whitespace-nowrap">出图模型</span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.imageModel || 'nano-banana-2'}
+                      onChange={(e) => updateParams({ imageModel: e.target.value })}
+                    >
+                      {imageModelOptions.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                     <span className="shrink-0 whitespace-nowrap">分辨率</span>
                     <select
