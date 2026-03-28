@@ -52,6 +52,11 @@ export type HomeChatTurnPayload = {
   splitPipeline?: boolean
   /** 第二轮：仅执行出图（须带 analysisText） */
   generateOnly?: boolean
+  /**
+   * 默认异步：Vercel 上 202 + imageJobId，由前端轮询 /api/home-chat-gen-status。
+   * 设为 false 则同步等待整段出图（易触发函数超时）。
+   */
+  asyncImageGen?: boolean
   analysisText?: string
   /** 分析阶段使用 SSE，首字更快（与 generateOnly 互斥） */
   streamAnalysis?: boolean
@@ -108,6 +113,32 @@ export type HomeChatTurnResult = {
     detailLead?: string
   }
   meta?: Record<string, unknown>
+  /** 异步出图：首轮响应 */
+  async?: boolean
+  imageJobId?: string
+}
+
+export type HomeChatGenStatusResult = {
+  success: boolean
+  status?: string
+  result?: HomeChatTurnResult | Record<string, unknown>
+  outputUrl?: string | null
+  error?: string
+  code?: string
+}
+
+export async function homeChatGenStatusAPI(
+  jobId: string,
+  init?: { signal?: AbortSignal },
+): Promise<HomeChatGenStatusResult> {
+  const token = localStorage.getItem('tikgen.accessToken') || ''
+  if (!token) throw new Error('请先登录')
+  const resp = await fetch(`/api/home-chat-gen-status?id=${encodeURIComponent(jobId)}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+    signal: init?.signal,
+  })
+  return readJsonOrText(resp) as Promise<HomeChatGenStatusResult>
 }
 
 export async function homeChatTurnAPI(

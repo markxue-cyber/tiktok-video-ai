@@ -4,6 +4,7 @@
  */
 import { requireUser } from './_supabase.js'
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
+import { insertQueuedHomeChatImageJob, patchHomeChatImageJob } from './_homeChatImageJob.js'
 
 const BLOCKED_VIDEO_EDIT_MSG =
   '当前对话模块暂不支持视频生成、剪辑、二次创作类功能，仅支持视频内容分析、脚本拆解、拍摄手法解读、台词提取等需求，请您调整提问内容后重试'
@@ -1386,6 +1387,123 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   })
 }
 
+/** 后台跑完出图后写入 generation_tasks；mockRes 承接原 res.json 负载 */
+async function executeHomeChatImageJobInBackground(opts: {
+  jobId: string
+  userId: string
+  authHdr: string
+  idempotencyKey: string
+  startedAt: number
+  apiKey: string
+  baseUrl: string
+  supabaseUrl: string
+  mediaType: MediaType
+  mediaUrl: string
+  refImageUrlIn: string
+  contextSummary: string
+  locale: string
+  hasSessionGenerated: boolean
+  sessionId: string
+  userMessage: string
+  analysisText: string
+  generateMode: GenerateMode
+  previewToken: string
+  newSubjectMediaThisTurn: boolean
+  parsedGen: ParsedHomeParams
+}): Promise<void> {
+  const {
+    jobId,
+    userId,
+    authHdr,
+    idempotencyKey,
+    startedAt,
+    apiKey,
+    baseUrl,
+    supabaseUrl,
+    mediaType,
+    mediaUrl,
+    refImageUrlIn,
+    contextSummary,
+    locale,
+    hasSessionGenerated,
+    sessionId,
+    userMessage,
+    analysisText,
+    generateMode,
+    previewToken,
+    newSubjectMediaThisTurn,
+    parsedGen,
+  } = opts
+
+  try {
+    await patchHomeChatImageJob(jobId, userId, { status: 'running' })
+  } catch {
+    return
+  }
+
+  const fakeReq = {
+    headers: {
+      authorization: authHdr,
+      'idempotency-key': idempotencyKey,
+      'Idempotency-Key': idempotencyKey,
+      'x-confirm-billable': 'true',
+      'X-Confirm-Billable': 'true',
+    },
+  }
+  let captured: Record<string, unknown> | null = null
+  const mockRes = {
+    status() {
+      return this
+    },
+    json(b: unknown) {
+      captured = b as Record<string, unknown>
+      return this
+    },
+  }
+
+  try {
+    await runImageGenerationAfterAnalysis({
+      req: fakeReq,
+      res: mockRes as any,
+      startedAt,
+      userId,
+      apiKey,
+      baseUrl,
+      supabaseUrl,
+      mediaType,
+      mediaUrl,
+      refImageUrl: refImageUrlIn,
+      contextSummary,
+      locale,
+      hasSessionGenerated,
+      sessionId,
+      userMessage,
+      analysisText,
+      generateMode,
+      previewToken,
+      newSubjectMediaThisTurn,
+      generateOnlyHop: true,
+      ...parsedGen,
+    } as ImageGenCtx)
+    const ok = captured?.success !== false
+    const imgs = (captured?.imageUrls as string[] | undefined) || []
+    await patchHomeChatImageJob(jobId, userId, {
+      status: ok ? 'succeeded' : 'failed',
+      output_url: imgs[0] || null,
+      raw: { source: 'home_chat_async', result: captured },
+    })
+  } catch (e: any) {
+    try {
+      await patchHomeChatImageJob(jobId, userId, {
+        status: 'failed',
+        raw: { source: 'home_chat_async', error: String(e?.message || e), result: captured },
+      })
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
@@ -1458,6 +1576,52 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ success: false, error: '缺少 analysisText', code: 'BAD_REQUEST' })
       }
       const parsedGen = parseHomeParams(params)
+
+      const forceSync = body.asyncImageGen === false || process.env.HOME_CHAT_SYNC_IMAGE_GEN === '1'
+      if (!forceSync) {
+        try {
+          const { waitUntil } = await import('@vercel/functions')
+          const jobId =
+            typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+              ? crypto.randomUUID()
+              : `hj_${Date.now()}_${Math.random().toString(16).slice(2)}`
+          await insertQueuedHomeChatImageJob(userId, jobId)
+          const authHdr = String(req.headers?.authorization || '')
+          const idem0 =
+            String(req.headers?.['idempotency-key'] || req.headers?.['Idempotency-Key'] || '').trim() ||
+            `home-${Date.now()}`
+          const idempotencyKey = `${idem0}:asyncjob:${jobId}`
+          waitUntil(
+            executeHomeChatImageJobInBackground({
+              jobId,
+              userId,
+              authHdr,
+              idempotencyKey,
+              startedAt: Date.now(),
+              apiKey,
+              baseUrl,
+              supabaseUrl,
+              mediaType,
+              mediaUrl,
+              refImageUrlIn,
+              contextSummary,
+              locale: localeRaw,
+              hasSessionGenerated,
+              sessionId,
+              userMessage,
+              analysisText: analysisTextOnly,
+              generateMode,
+              previewToken,
+              newSubjectMediaThisTurn,
+              parsedGen,
+            }),
+          )
+          return res.status(202).json({ success: true, async: true, imageJobId: jobId })
+        } catch {
+          // 本地或非 Vercel 运行时无 waitUntil 时走同步
+        }
+      }
+
       await runImageGenerationAfterAnalysis({
         req,
         res,

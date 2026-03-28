@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
 import {
+  homeChatGenStatusAPI,
   homeChatTurnAPI,
   homeChatTurnStreamAPI,
   postHomeTelemetry,
@@ -1207,9 +1208,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             '【商品主体】与参考图一致（继承会话上下文）。\n【说明】用户已发起改图/出图快捷指令；本节为简要占位，正式画面由下一步生成模型输出。\n【商用视觉诊断】仅基于参考图简述当前曝光与主体清晰度，禁止展开第三方修图教程。\n系统将基于参考图按你的指令生成新的商品图。'
           setBusyStage('optimize')
           setBusyStage('generate')
-          const data2 = await homeChatTurnAPI(
+          let data2 = await homeChatTurnAPI(
             {
               generateOnly: true,
+              asyncImageGen: true,
               analysisText: analysisForGen || analysisTextFallback,
               mediaType: primary.type,
               mediaUrl: primary.url,
@@ -1228,6 +1230,50 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             { signal: abortRef.current?.signal },
           )
 
+          /** Vercel：第二轮 202 + waitUntil 后台出图，浏览器短连接轮询状态，避免长时间占用单次 fetch */
+          if (data2?.async && data2?.imageJobId) {
+            const jid = String(data2.imageJobId)
+            const deadline = Date.now() + 320_000
+            let resolved: HomeChatTurnResult | null = null
+            while (Date.now() < deadline) {
+              if (abortRef.current?.signal.aborted) {
+                const err = new Error('Aborted')
+                err.name = 'AbortError'
+                throw err
+              }
+              await new Promise((r) => setTimeout(r, 2500))
+              const st = await homeChatGenStatusAPI(jid, { signal: abortRef.current?.signal })
+              if (st?.status === 'succeeded' && st.result && typeof st.result === 'object') {
+                resolved = { ...(st.result as HomeChatTurnResult) }
+                break
+              }
+              if (st?.status === 'failed') {
+                const r = st.result as HomeChatTurnResult | { error?: string } | undefined
+                if (r && typeof r === 'object' && 'success' in r) {
+                  resolved = r as HomeChatTurnResult
+                } else {
+                  resolved = {
+                    success: false,
+                    error: String((r as { error?: string })?.error || st.error || '出图失败'),
+                    code: 'IMAGE_JOB_FAILED',
+                  }
+                }
+                break
+              }
+              if (st?.success === false && st.code === 'NOT_FOUND') {
+                resolved = { success: false, error: '出图任务不存在或已过期', code: 'NOT_FOUND' }
+                break
+              }
+            }
+            data2 =
+              resolved ||
+              ({
+                success: false,
+                error: '出图等待超时，请重试或简化需求（如先 1 张预览）。',
+                code: 'UPSTREAM_TIMEOUT',
+              } as HomeChatTurnResult)
+          }
+
           if (!data2?.success) {
             const code = String(data2?.code || '')
             const msgRaw = String(data2?.error || '出图失败')
@@ -1243,6 +1289,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   ? '出图超时，请稍后重试或先生成预览图。'
                   : code === 'RATE_LIMITED'
                     ? '操作过于频繁，请稍后再试。'
+                  : code === 'IMAGE_JOB_FAILED'
+                    ? String(data2?.error || '出图任务失败，请重试。')
                     : msgRaw
             setSessions((prev) =>
               prev.map((session) => {

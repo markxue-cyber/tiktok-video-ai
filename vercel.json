@@ -6,6 +6,9 @@
     "api/home-chat-turn.ts": {
       "maxDuration": 300
     },
+    "api/home-chat-gen-status.ts": {
+      "maxDuration": 30
+    },
     "api/assets-create.ts": {
       "maxDuration": 60
     }
