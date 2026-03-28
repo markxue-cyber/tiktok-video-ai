@@ -37,6 +37,28 @@ function parseCountFromContentRange(cr) {
   return m ? Number.parseInt(m[1], 10) : null
 }
 
+/** usage_ledger.result_json 解析为对象 */
+function parseLedgerResultJson(rj) {
+  if (rj == null || rj === '') return null
+  if (typeof rj === 'string') {
+    try {
+      return JSON.parse(rj)
+    } catch {
+      return null
+    }
+  }
+  if (typeof rj === 'object') return rj
+  return null
+}
+
+/** 仅当存在可复用的图片地址时才视为幂等命中（避免 {} 等脏数据永久短路出图） */
+function ledgerResultHasReplayableImage(rj) {
+  const o = parseLedgerResultJson(rj)
+  if (!o || typeof o !== 'object') return false
+  const u = String(o.imageUrl || o.output_url || o.outputUrl || o.url || '').trim()
+  return u.length > 0
+}
+
 async function requireUser(req) {
   const auth = String(req.headers?.authorization || '')
   const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : ''
@@ -96,7 +118,9 @@ export async function checkAndConsume(req, opts) {
   )
   const existingJson = await fetchJsonOrText(existingResp)
   const existing = Array.isArray(existingJson) ? existingJson[0] : existingJson
-  if (existing?.result_json) return { user, subscription, already: true, result: existing.result_json }
+  if (ledgerResultHasReplayableImage(existing?.result_json)) {
+    return { user, subscription, already: true, result: parseLedgerResultJson(existing.result_json) }
+  }
 
   const planId = String(subscription.plan_id || 'trial')
   const limits = PLAN_LIMITS[planId] || PLAN_LIMITS.trial

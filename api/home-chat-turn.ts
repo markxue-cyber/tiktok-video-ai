@@ -706,32 +706,47 @@ function homeExecutionDirectives(userMessage: string): string {
   return parts.filter(Boolean).join('\n')
 }
 
-async function runNanoBananaGeneration(params: {
-  req: any
-  idempotencyKey: string
-  apiKey: string
-  baseUrl: string
-  userId: string
-  prompt: string
-  negative: string
-  aspectRatio: string
-  resolution: string
-  refImage?: string
-  imageCount: number
-  model: string
-}) {
+async function runNanoBananaGeneration(
+  params: {
+    req: any
+    idempotencyKey: string
+    apiKey: string
+    baseUrl: string
+    userId: string
+    prompt: string
+    negative: string
+    aspectRatio: string
+    resolution: string
+    refImage?: string
+    imageCount: number
+    model: string
+  },
+  /** 计费层曾误把无 url 的 result_json 当命中时使用新 key 重试一次 */
+  retryDepth = 0,
+): Promise<{ imageUrl: string; size?: string; cached?: boolean }> {
   const reqBill = forkReqWithIdem(params.req, params.idempotencyKey)
   const billableConfirmed = String(reqBill.headers?.['x-confirm-billable'] || '').toLowerCase() === 'true'
   if (!billableConfirmed) throw new Error('已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）')
 
   const consumed = await checkAndConsume(reqBill, { type: 'image' })
   if (consumed.already) {
-    const r = consumed.result as any
-    const cachedUrl = String(r?.imageUrl || '').trim()
-    if (!cachedUrl) {
-      throw new Error('计费记录中缺少有效图片地址，请稍后重试或联系客服')
+    let r = consumed.result as any
+    if (typeof r === 'string') {
+      try {
+        r = JSON.parse(r)
+      } catch {
+        r = {}
+      }
     }
-    return { imageUrl: cachedUrl, size: r?.size as string | undefined, cached: true as const }
+    const cachedUrl = String(r?.imageUrl || r?.output_url || r?.outputUrl || r?.url || '').trim()
+    if (cachedUrl) {
+      return { imageUrl: cachedUrl, size: r?.size as string | undefined, cached: true as const }
+    }
+    if (retryDepth < 1) {
+      const nk = `${params.idempotencyKey}:rebill:${Date.now()}`
+      return runNanoBananaGeneration({ ...params, idempotencyKey: nk }, retryDepth + 1)
+    }
+    throw new Error('计费幂等记录异常：未找到可复用的图片地址')
   }
 
   const aspect = String(params.aspectRatio || '1:1')
@@ -852,7 +867,13 @@ async function runNanoBananaGeneration(params: {
 
   const pick = (v: any) => (typeof v === 'string' ? v : '')
   const first = Array.isArray(data?.data) ? data.data[0] : null
-  const url = pick(first?.url) || pick(data?.output) || pick(data?.result?.url)
+  const url =
+    pick(first?.url) ||
+    pick(first?.image_url) ||
+    pick(data?.output) ||
+    pick(data?.result?.url) ||
+    pick(data?.image_url) ||
+    pick(data?.url)
   const b64 = pick(first?.b64_json) || pick(data?.b64_json) || pick(data?.image_base64)
 
   if (b64) {
