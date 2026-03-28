@@ -7452,7 +7452,7 @@ function ImageGenerator({
                 <ImageFormTip
                   wide
                   label="操作说明"
-                  text="点卡片切换爆款风格；悬停卡片可看完整「出图主描述」；点铅笔编辑。可添加「自定义方案」。
+                  text="点卡片切换爆款风格；悬停卡片可看完整「出图主描述」；点铅笔编辑。
 
 与 6 场景：这里写 DNA（材质、光型、色调、情绪），格子里写「本张背景/景别/构图」。叠提示时避免两处各写一套矛盾环境；细则与按格配合表见顶部「说明」。"
                 />
@@ -7505,17 +7505,6 @@ function ImageGenerator({
                   <div className="rounded-xl bg-black/20 py-6 text-center text-xs text-white/40 ring-1 ring-inset ring-white/[0.07]">
                     上传主参考图后，点击顶部或本行右侧「重新分析」生成爆款风格（标题建议 4 字）
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomStylePromptOnly('')
-                      setCustomStyleModalOpen(true)
-                    }}
-                    className="flex min-h-0 w-full flex-col items-center justify-center rounded-2xl bg-black/15 px-3.5 py-6 text-center ring-1 ring-inset ring-white/[0.08] transition-colors hover:bg-[#1e1e26] hover:ring-violet-400/25"
-                  >
-                    <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                    <span className="text-[10px] text-white/45 mt-1">用一段话描述你想要的画面与商品关系</span>
-                  </button>
                 </div>
               )
             ) : (
@@ -7603,19 +7592,6 @@ function ImageGenerator({
                     </p>
                   </div>
                 ))}
-                {!hotStyles.some((s) => s.isCustom) ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomStylePromptOnly('')
-                      setCustomStyleModalOpen(true)
-                    }}
-                    className="flex h-full min-h-0 flex-col items-center justify-center self-stretch rounded-2xl bg-[#16161c] px-3.5 py-3 text-center ring-1 ring-inset ring-white/[0.1] transition-colors hover:bg-[#1f1f28] hover:ring-violet-400/25"
-                  >
-                    <span className="text-sm font-semibold text-violet-200">自定义方案</span>
-                    <span className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-white/45">一段话描述画面、风格与卖点</span>
-                  </button>
-                ) : null}
               </div>
             )}
           </div>

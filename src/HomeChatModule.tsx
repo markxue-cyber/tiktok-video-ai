@@ -1078,13 +1078,25 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
     const sendText = trimmed || DEFAULT_SEND_TEXT
 
-    const refForGen =
+    /** 链式参考：上一张成图 URL。选「上一版微调」时必须带上，否则后端仍只认首轮附件，整图会被优化成白底商品图。 */
+    const canChainLastGen =
       primary.type === 'image' &&
       attachments.length === 0 &&
-      isPublicAssetUrl(s.lastGeneratedRefUrl || '') &&
-      (likelyGenerateIntent(sendText) || homeQuickForcePhrase(sendText))
-        ? s.lastGeneratedRefUrl
-        : undefined
+      isPublicAssetUrl(s.lastGeneratedRefUrl || '')
+    let refForGen: string | undefined
+    const refIntent = s.params.refinementIntent || 'auto'
+    if (canChainLastGen) {
+      if (refIntent === 'iterative') {
+        refForGen = s.lastGeneratedRefUrl
+      } else if (refIntent === 'fresh') {
+        refForGen = undefined
+      } else {
+        refForGen =
+          likelyGenerateIntent(sendText) || homeQuickForcePhrase(sendText)
+            ? s.lastGeneratedRefUrl
+            : undefined
+      }
+    }
     const hasGenPayload = hasSessionGeneratedMessages(s.messages)
     const localeStr =
       typeof navigator !== 'undefined' && navigator.language ? navigator.language : ''

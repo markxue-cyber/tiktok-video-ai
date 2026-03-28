@@ -1168,7 +1168,10 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   })
   const draftEarly = previewToken ? getPreviewDraft(previewToken, userId) : null
   const nanoRefEarly = pickNanoRefImage(mediaType, mediaUrl, clientRef, draftEarly?.refImageUrl, supabaseUrl)
-  if (nanoRefEarly) {
+  /** 用户显式「上一版微调」且带了上一张成图作 ref 时，可能是种草/人物场景，勿用「必须像商品主图」挡掉 */
+  const skipSellableVision =
+    refinementIntent === 'iterative' && !!clientRef && mediaType === 'image'
+  if (nanoRefEarly && !skipSellableVision) {
     const ok = await Promise.race([
       visionSellableProductRef(apiKey, baseUrl, nanoRefEarly),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 55_000)),
@@ -1203,12 +1206,16 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
               '核心原则：若有商品实拍参考，须保持款式/颜色/材质真实一致；背景与整体画面可整体重想。',
             ]
       const optimizeMs = generateOnlyHop ? 22_000 : 45_000
+      const commerceBias =
+        refinementMode === 'iterative'
+          ? '【上一版微调】以参考图（上一张成图）的整体场景、人物/环境/构图为准，仅落实用户点名的改动；禁止在无用户要求时改成纯白底静物棚拍、禁止擅自去掉人物或整体换景。仍须合规、无侵权、无未授权真实人像。'
+          : '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。'
       const opPromise = gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
         `你是电商图片生成提示词工程师，将用户需求改写为适配 ${genModel} 的高质量提示词。`,
         ...modeRules,
         '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
         '这是执行类出图任务：禁止只输出拍摄/修图教程文字，提示词必须能直接用于生成成品图。',
-        '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。',
+        commerceBias,
         `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
         localeEn
           ? 'User locale is English: put English visual keywords first, keep necessary Chinese only if user wrote Chinese.'
@@ -1245,14 +1252,22 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   const execBlock = homeExecutionDirectives(userMessage)
   const refinementTail =
     refinementMode === 'iterative'
-      ? '【改图约束】在上一版/参考图基础上微调：除用户要求的变化外，保持画面结构与主体摆放基本一致。'
+      ? '【改图约束】以参考图（上一张成图）为基准：除用户要求的变化外，保持场景、机位、人物/环境与商品在画面中的关系；禁止擅自换成白底棚拍或静物商品目录风。'
       : '【改图约束】按用户最新需求重新构想画面；无需与上一版成图保持同一构图。'
+  const commerceExtra =
+    refinementMode === 'iterative'
+      ? 'commercial-ready output, preserve scene continuity and product appearance from reference'
+      : 'ecommerce product photography, preserve product geometry and color fidelity'
+  const bgExtra =
+    refinementMode === 'iterative'
+      ? 'no unauthorized text or logos beyond user request, no watermark'
+      : 'clean premium background, no extra text, no watermark, no irrelevant objects'
   const extra = [
     styleKeywords(style),
     `画幅比例 ${aspectRatio}`,
     hdEnhance ? 'high detail, sharp focus, clean texture' : '',
-    'ecommerce product photography, preserve product geometry and color fidelity',
-    'clean premium background, no extra text, no watermark, no irrelevant objects',
+    commerceExtra,
+    bgExtra,
     preserveLine,
     `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
     refinementTail,
