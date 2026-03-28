@@ -6,14 +6,12 @@
     "api/home-chat-turn.ts": {
       "maxDuration": 300
     },
-    "api/home-chat-gen-status.ts": {
-      "maxDuration": 30
-    },
     "api/assets-create.ts": {
       "maxDuration": 60
     }
   },
   "rewrites": [
+    { "source": "/api/home-chat-gen-status", "destination": "/api/home-chat-turn" },
     { "source": "/api/assets/create", "destination": "/api/assets-create" },
     { "source": "/api/assets/list", "destination": "/api/assets-list" },
     { "source": "/api/assets/update", "destination": "/api/assets-update" },

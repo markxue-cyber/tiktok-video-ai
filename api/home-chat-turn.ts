@@ -5,6 +5,7 @@
 import { requireUser } from './_supabase.js'
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
 import { insertQueuedHomeChatImageJob, patchHomeChatImageJob } from './_homeChatImageJob.js'
+import { handleHomeChatGenStatus } from './_homeChatGenStatusRoute.js'
 
 const BLOCKED_VIDEO_EDIT_MSG =
   '当前对话模块暂不支持视频生成、剪辑、二次创作类功能，仅支持视频内容分析、脚本拆解、拍摄手法解读、台词提取等需求，请您调整提问内容后重试'
@@ -1536,6 +1537,11 @@ async function executeHomeChatImageJobInBackground(opts: {
 }
 
 export default async function handler(req: any, res: any) {
+  /** GET + id：异步出图轮询（经 vercel rewrite 与 /api/home-chat-gen-status 共用本函数，省 Hobby 函数个数） */
+  if (req.method === 'GET') {
+    await handleHomeChatGenStatus(req, res)
+    return
+  }
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {

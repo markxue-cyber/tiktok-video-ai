@@ -43,7 +43,7 @@
 
 - `api/home-chat-turn.ts` — 异步分支、`executeHomeChatImageJobInBackground`  
 - `api/_homeChatImageJob.ts` — `generation_tasks` 读写  
-- `api/home-chat-gen-status.ts` — 轮询查询  
+- `GET /api/home-chat-gen-status`（`vercel.json` rewrite 到 `home-chat-turn`，与 POST 共用同一函数）— 轮询查询  
 - `src/api/homeChat.ts` — `homeChatGenStatusAPI`  
 - `src/HomeChatModule.tsx` — 轮询与错误码  
 - `vercel.json` — `maxDuration`  
