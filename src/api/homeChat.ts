@@ -35,6 +35,14 @@ export type HomeChatTurnPayload = {
   mediaType: 'image' | 'video'
   mediaUrl: string
   userMessage: string
+  /** 链式改图：上一张成品图 URL（须为资产库公开链接） */
+  refImageUrl?: string
+  /** 会话内最近一次商品分析摘要，供第二轮提示词优化 */
+  contextSummary?: string
+  /** 是否本会话已产出过图（用于动态快捷指令） */
+  hasSessionGenerated?: boolean
+  sessionId?: string
+  locale?: string
   /** 先分析后出图：首轮仅返回分析，需配合 generateOnly 第二轮 */
   splitPipeline?: boolean
   /** 第二轮：仅执行出图（须带 analysisText） */
@@ -131,6 +139,24 @@ export async function homeChatTurnAPI(
     }
   }
   return data as HomeChatTurnResult
+}
+
+/** 首页专用埋点/反馈：写入服务端任务表 raw 字段，不计入出图计费 */
+export async function postHomeTelemetry(homeTelemetry: Record<string, unknown>): Promise<void> {
+  const token = localStorage.getItem('tikgen.accessToken') || ''
+  if (!token) return
+  try {
+    await fetch('/api/home-chat-turn', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ homeTelemetryOnly: true, homeTelemetry }),
+    })
+  } catch {
+    // ignore
+  }
 }
 
 type StreamHandlers = {

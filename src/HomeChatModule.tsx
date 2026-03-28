@@ -12,14 +12,20 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Folder,
   ImagePlus,
   Pencil,
   Pin,
   Plus,
+  Redo2,
+  Share2,
   SlidersHorizontal,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
+  Undo2,
   Upload,
   X,
   ZoomIn,
@@ -29,6 +35,7 @@ import { createAssetAPI, listAssetsAPI, type AssetItem } from './api/assets'
 import {
   homeChatTurnAPI,
   homeChatTurnStreamAPI,
+  postHomeTelemetry,
   type HomeChatImageItem,
   type HomeChatTurnResult,
 } from './api/homeChat'
@@ -96,6 +103,12 @@ export type HomeChatSession = {
   updatedAt: number
   title: string
   pinned?: boolean
+  /** 最近一次成功生成的图片 URL（资产库链接），用于链式改图参考 */
+  lastGeneratedRefUrl?: string
+  /** 最近一次结构化分析摘要，供第二轮出图上下文 */
+  productAnalysisSummary?: string
+  undoStack?: HomeChatMsg[][]
+  redoStack?: HomeChatMsg[][]
   /** 兼容旧版：仅用于迁移与会话筛选兜底 */
   media?: null | {
     type: 'image' | 'video'
@@ -336,6 +349,61 @@ function getVideoDurationSec(file: File): Promise<number> {
 
 const ASSISTANT_FOLLOWUPS = ['能再详细说明一下吗？', '请列出可执行要点', '还有需要注意的吗？']
 
+const HOME_QUICK_FORCE_PHRASES = [
+  '换场景',
+  '更亮一点',
+  '改成白底主图',
+  '改成信息流风格',
+  '生成同款风格图片',
+  '确认高清生成',
+  '换背景',
+  '调亮',
+  '提亮',
+  '生成白底',
+  '白底图',
+  '白底主图',
+]
+
+function homeQuickForcePhrase(txt: string): boolean {
+  const raw = String(txt || '')
+  return HOME_QUICK_FORCE_PHRASES.some((p) => raw.includes(p))
+}
+
+function likelyGenerateIntent(txt: string): boolean {
+  return /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(String(txt || ''))
+}
+
+function isPublicAssetUrl(url: string): boolean {
+  const u = String(url || '').trim()
+  if (!u.startsWith('http')) return false
+  try {
+    const parsed = new URL(u)
+    return parsed.pathname.includes('/storage/v1/object/public/assets/')
+  } catch {
+    return false
+  }
+}
+
+function hasSessionGeneratedMessages(messages: HomeChatMsg[]): boolean {
+  return messages.some((m) => m.role === 'assistant' && !!(m.images?.length || m.imageItems?.length))
+}
+
+function extractOptimizedPromptBlock(text: string): string {
+  const m = String(text || '').match(/【优化后提示词】\n([\s\S]*?)(?=\n\n【|$)/)
+  return m ? m[1].trim() : ''
+}
+
+async function downloadImageUrl(url: string, filename: string) {
+  const r = await fetch(url)
+  const blob = await r.blob()
+  const href = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = href
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(href)
+}
+
 function UserBubble({
   children,
   className = '',
@@ -362,6 +430,112 @@ function AssistantBubble({
   return (
     <div className={`max-w-[min(85%,40rem)] px-1 py-1 text-sm leading-relaxed ${className}`}>
       {children}
+    </div>
+  )
+}
+
+function HomeGeneratedImageActions({
+  imageUrl,
+  index,
+  assistantText,
+  sessionId,
+  messageId,
+}: {
+  imageUrl: string
+  index: number
+  assistantText: string
+  sessionId: string
+  messageId: string
+}) {
+  const label = `首页生成_${index + 1}`
+  const prompt = extractOptimizedPromptBlock(assistantText)
+  const onCopyPrompt = () => {
+    void navigator.clipboard.writeText(prompt || assistantText.slice(0, 8000))
+  }
+  const onDownload = () => void downloadImageUrl(imageUrl, `${label}.png`)
+  const onShare = async () => {
+    try {
+      const r = await fetch(imageUrl)
+      const blob = await r.blob()
+      const file = new File([blob], `${label}.png`, { type: blob.type || 'image/png' })
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: label })
+        return
+      }
+      if (navigator.share) {
+        await navigator.share({ title: label, text: prompt || label, url: imageUrl })
+      }
+    } catch {
+      // ignore
+    }
+  }
+  const onFeedback = (satisfied: boolean) => {
+    void postHomeTelemetry({
+      event: 'home_feedback',
+      satisfied,
+      sessionId,
+      messageId,
+      imageUrl,
+      index,
+    })
+  }
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      <button
+        type="button"
+        title="下载图片"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
+        onClick={(e) => {
+          e.stopPropagation()
+          void onDownload()
+        }}
+      >
+        <Download className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="复制提示词"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
+        onClick={(e) => {
+          e.stopPropagation()
+          onCopyPrompt()
+        }}
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="分享"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-white/75 transition hover:border-white/22 hover:bg-white/[0.08]"
+        onClick={(e) => {
+          e.stopPropagation()
+          void onShare()
+        }}
+      >
+        <Share2 className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="满意"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-emerald-200/90 transition hover:border-white/22 hover:bg-white/[0.08]"
+        onClick={(e) => {
+          e.stopPropagation()
+          onFeedback(true)
+        }}
+      >
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        title="不满意"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/12 bg-black/40 text-rose-200/90 transition hover:border-white/22 hover:bg-white/[0.08]"
+        onClick={(e) => {
+          e.stopPropagation()
+          onFeedback(false)
+        }}
+      >
+        <ThumbsDown className="h-3.5 w-3.5" />
+      </button>
     </div>
   )
 }
@@ -772,10 +946,26 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       return
     }
     if (!pendingDone.length && trimmed && !hasThreadMedia) {
-      setError('请先上传图片或视频，再发起对话')
+      setError(
+        homeQuickForcePhrase(trimmed)
+          ? '快捷改图需要先在本对话中上传过商品图；请先上传素材，或从历史消息中保留的附件继续。'
+          : '请先上传图片或视频，再发起对话',
+      )
       return
     }
     const sendText = trimmed || DEFAULT_SEND_TEXT
+
+    const refForGen =
+      primary.type === 'image' &&
+      attachments.length === 0 &&
+      isPublicAssetUrl(s.lastGeneratedRefUrl || '') &&
+      (likelyGenerateIntent(sendText) || homeQuickForcePhrase(sendText))
+        ? s.lastGeneratedRefUrl
+        : undefined
+    const hasGenPayload = hasSessionGeneratedMessages(s.messages)
+    const localeStr =
+      typeof navigator !== 'undefined' && navigator.language ? navigator.language : ''
+    const contextSummary = String(s.productAnalysisSummary || '').slice(0, 2500)
 
     const conn =
       typeof navigator !== 'undefined'
@@ -816,6 +1006,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     setSessions((prev) =>
       prev.map((x) => {
         if (x.id !== activeId) return x
+        const snap = JSON.parse(JSON.stringify(x.messages)) as HomeChatMsg[]
+        const undoStack = [...(x.undoStack || []), snap].slice(-8)
         const nextMsgs = [...x.messages, userMsg].slice(-MAX_STORED_MESSAGES)
         const title =
           x.messages.length === 0 ? sessionTitleFrom(sendText, primary.type) : x.title
@@ -825,6 +1017,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           updatedAt: Date.now(),
           messages: nextMsgs,
           media: null,
+          undoStack,
+          redoStack: [],
         }
       }),
     )
@@ -893,6 +1087,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           mediaType: primary.type,
           mediaUrl: primary.url,
           userMessage: `${paramLine}\n${sendText}`,
+          refImageUrl: refForGen,
+          contextSummary,
+          hasSessionGenerated: hasGenPayload,
+          sessionId: s.id,
+          locale: localeStr,
           generateMode,
           previewToken: generateMode === 'final' ? previewToken : '',
           history: hist.slice(-API_HISTORY_MAX),
@@ -932,15 +1131,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         const msg =
           code === 'BAD_MEDIA'
             ? '素材读取失败，请重新上传图片/视频后重试。'
-            : code === 'UPSTREAM_FAILED'
-              ? '模型服务繁忙，请稍后重试；建议先简化需求或减少生成张数。'
-              : code === 'UPSTREAM_TIMEOUT'
-                ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
-              : code === 'RATE_LIMITED'
-                ? '请求过于频繁，请等待 10-20 秒后重试。'
-                : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
+            : code === 'NOT_PRODUCT_IMAGE'
+              ? String(data?.error || '当前参考图不太像可上架商品主体，请上传清晰商品图或使用「仅分析」。')
+              : code === 'UPSTREAM_FAILED'
+                ? '模型服务繁忙，请稍后重试；建议先简化需求或减少生成张数。'
+                : code === 'UPSTREAM_TIMEOUT'
                   ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
-                  : msgRaw
+                  : code === 'RATE_LIMITED'
+                    ? '请求过于频繁，请等待 10-20 秒后重试。'
+                    : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
+                      ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
+                      : msgRaw
         if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
         if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()
         setSessions((prev) =>
@@ -998,6 +1199,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             return {
               ...x,
               updatedAt: Date.now(),
+              productAnalysisSummary: data.analysisText
+                ? String(data.analysisText).slice(0, 2000)
+                : x.productAnalysisSummary,
               messages: x.messages.map((m) =>
                 m.id === assistantMsgId
                   ? {
@@ -1024,6 +1228,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               mediaType: primary.type,
               mediaUrl: primary.url,
               userMessage: `${paramLine}\n${sendText}`,
+              refImageUrl: refForGen,
+              contextSummary,
+              hasSessionGenerated: hasGenPayload,
+              sessionId: s.id,
+              locale: localeStr,
               generateMode,
               previewToken: generateMode === 'final' ? previewToken : '',
               history: hist.slice(-API_HISTORY_MAX),
@@ -1036,11 +1245,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             const code = String(data2?.code || '')
             const msgRaw = String(data2?.error || '出图失败')
             const msg =
-              code === 'UPSTREAM_TIMEOUT'
-                ? '出图超时，请稍后重试或先生成预览图。'
-                : code === 'RATE_LIMITED'
-                  ? '操作过于频繁，请稍后再试。'
-                  : msgRaw
+              code === 'NOT_PRODUCT_IMAGE'
+                ? String(data2?.error || '参考图不太像商品主体，请换图或先仅分析。')
+                : code === 'UPSTREAM_TIMEOUT'
+                  ? '出图超时，请稍后重试或先生成预览图。'
+                  : code === 'RATE_LIMITED'
+                    ? '操作过于频繁，请稍后再试。'
+                    : msgRaw
             setSessions((prev) =>
               prev.map((session) => {
                 if (session.id !== activeId) return session
@@ -1087,7 +1298,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     }
                   : m,
               )
-              return { ...session, updatedAt: Date.now(), messages: msgs }
+              const firstImg = imgs[0]
+              return {
+                ...session,
+                updatedAt: Date.now(),
+                messages: msgs,
+                lastGeneratedRefUrl:
+                  firstImg && isPublicAssetUrl(firstImg) ? firstImg : session.lastGeneratedRefUrl,
+              }
             }),
           )
 
@@ -1134,9 +1352,15 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         setSessions((prev) =>
           prev.map((x) => {
             if (x.id !== activeId) return x
+            const firstImg = imgs[0]
             return {
               ...x,
               updatedAt: Date.now(),
+              productAnalysisSummary: data.analysisText
+                ? String(data.analysisText).slice(0, 2000)
+                : x.productAnalysisSummary,
+              lastGeneratedRefUrl:
+                firstImg && isPublicAssetUrl(firstImg) ? firstImg : x.lastGeneratedRefUrl,
               messages: x.messages.map((m) =>
                 m.id === assistantMsgId
                   ? {
@@ -1386,10 +1610,57 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     return full.slice(0, n)
   }
 
-  const likelyGenerateIntent = (txt: string) =>
-    /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(
-      String(txt || ''),
+  const undoLastTurn = useCallback(() => {
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id !== activeId) return session
+        const stack = [...(session.undoStack || [])]
+        if (!stack.length) return session
+        const restored = stack.pop()!
+        const currentSnap = JSON.parse(JSON.stringify(session.messages)) as HomeChatMsg[]
+        const redoStack = [...(session.redoStack || []), currentSnap].slice(-8)
+        return {
+          ...session,
+          messages: restored,
+          undoStack: stack,
+          redoStack,
+          updatedAt: Date.now(),
+        }
+      }),
     )
+  }, [activeId])
+
+  const redoLastTurn = useCallback(() => {
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id !== activeId) return session
+        const rstack = [...(session.redoStack || [])]
+        if (!rstack.length) return session
+        const restored = rstack.pop()!
+        const currentSnap = JSON.parse(JSON.stringify(session.messages)) as HomeChatMsg[]
+        const undoStack = [...(session.undoStack || []), currentSnap].slice(-8)
+        return {
+          ...session,
+          messages: restored,
+          undoStack,
+          redoStack: rstack,
+          updatedAt: Date.now(),
+        }
+      }),
+    )
+  }, [activeId])
+
+  const exportActiveSessionJson = useCallback(() => {
+    const row = sessions.find((x) => x.id === activeId)
+    if (!row) return
+    const blob = new Blob([JSON.stringify(row, null, 2)], { type: 'application/json' })
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = `home-chat-${row.id.slice(0, 8)}.json`
+    a.click()
+    URL.revokeObjectURL(href)
+  }, [sessions, activeId])
 
   return (
     <div className="home-chat-module-root flex h-[calc(100vh-6.75rem)] max-h-[calc(100vh-6.75rem)] gap-3 overflow-hidden">
@@ -1739,7 +2010,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           {m.pendingAnalysis && !String(m.text || '').trim() ? (
                             <div className="home-chat-typing-row flex items-center gap-2.5">
                               <TypingDots />
-                              <span className="text-sm">正在输出商用分析...</span>
+                              <span className="text-sm">正在输出商用分析与卖点结构...</span>
                             </div>
                           ) : (
                             <div className="home-chat-assistant-body whitespace-pre-wrap">
@@ -1747,25 +2018,37 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             </div>
                           )}
                           {m.images?.length ? (
-                            <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
+                            <div className="mt-3 flex max-w-full gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
                               {m.images.map((u, i) => {
                                 const meta = m.imageItems?.[i]
                                 return (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  className="relative h-24 w-24 shrink-0 snap-start overflow-hidden rounded-xl border border-white/12 bg-black/40"
-                                  onClick={() => openPreview(u, 'image', `生成 ${i + 1}`, m.images)}
-                                >
-                                  <img src={u} alt="" className="h-full w-full object-cover" />
-                                  {(meta?.ratio || meta?.variant || Number.isFinite(meta?.qcScore)) ? (
-                                    <span className="home-chat-thumb-caption absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px]">
-                                      {[meta?.ratio, meta?.variant && meta.variant !== 'normal' ? meta.variant : '', Number.isFinite(meta?.qcScore) ? `QC ${meta!.qcScore}` : '']
-                                        .filter(Boolean)
-                                        .join(' · ')}
-                                    </span>
-                                  ) : null}
-                                </button>
+                                  <div key={i} className="flex w-24 shrink-0 snap-start flex-col gap-1">
+                                    <button
+                                      type="button"
+                                      className="relative h-24 w-24 overflow-hidden rounded-xl border border-white/12 bg-black/40"
+                                      onClick={() => openPreview(u, 'image', `生成 ${i + 1}`, m.images)}
+                                    >
+                                      <img src={u} alt="" className="h-full w-full object-cover" />
+                                      {meta?.ratio || meta?.variant || Number.isFinite(meta?.qcScore) ? (
+                                        <span className="home-chat-thumb-caption absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px]">
+                                          {[
+                                            meta?.ratio,
+                                            meta?.variant && meta.variant !== 'normal' ? meta.variant : '',
+                                            Number.isFinite(meta?.qcScore) ? `QC ${meta!.qcScore}` : '',
+                                          ]
+                                            .filter(Boolean)
+                                            .join(' · ')}
+                                        </span>
+                                      ) : null}
+                                    </button>
+                                    <HomeGeneratedImageActions
+                                      imageUrl={u}
+                                      index={i}
+                                      assistantText={m.text}
+                                      sessionId={active?.id || ''}
+                                      messageId={m.id}
+                                    />
+                                  </div>
                                 )
                               })}
                             </div>
@@ -1833,12 +2116,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <TypingDots />
                     <span className="text-sm">
                       {busyStage === 'identify'
-                        ? '正在识别商品主体...'
+                        ? '正在识别商品特征…'
                         : busyStage === 'optimize'
-                          ? '正在优化提示词...'
+                          ? '正在优化出图提示词…'
                           : busyStage === 'generate'
-                            ? '正在生成图片...'
-                            : 'AI 正在处理...'}
+                            ? '正在调用模型生成商品图…'
+                            : 'AI 正在处理…'}
                     </span>
                   </div>
                 </AssistantBubble>
@@ -2113,6 +2396,37 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               >
                 <Plus className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2" />
                 <span className="block text-center">新建对话</span>
+              </button>
+            </div>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                title="撤销上一步"
+                disabled={!active?.undoStack?.length}
+                onClick={undoLastTurn}
+                className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 text-[11px] text-white/80 transition hover:border-violet-400/35 hover:text-violet-100 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                撤销
+              </button>
+              <button
+                type="button"
+                title="重做"
+                disabled={!active?.redoStack?.length}
+                onClick={redoLastTurn}
+                className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 text-[11px] text-white/80 transition hover:border-violet-400/35 hover:text-violet-100 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+                重做
+              </button>
+              <button
+                type="button"
+                title="导出当前会话 JSON"
+                onClick={exportActiveSessionJson}
+                className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 text-[11px] text-white/80 transition hover:border-violet-400/35 hover:text-violet-100"
+              >
+                <Folder className="h-3.5 w-3.5" />
+                导出
               </button>
             </div>
             <div className="mb-2 text-sm font-semibold text-white/90">历史对话</div>

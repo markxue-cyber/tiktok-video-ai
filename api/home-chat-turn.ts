@@ -11,6 +11,10 @@ const BLOCKED_VIDEO_EDIT_MSG =
 const DEFAULT_NEG =
   '模糊、低分辨率、变形、失真、水印、多余文字、过曝、欠曝、构图混乱、肢体畸形、画面杂乱'
 
+/** 拼入最终出图 prompt，降低明显违规与虚假宣传风险（首页专用） */
+const COMPLIANCE_TAIL =
+  '【合规】商品外观真实一致，禁止虚假功效与极限用语；画面不含低俗、侵权或明显仿冒元素；不生成可识别真实人物肖像。'
+
 const RATE_ERR = '请求过于频繁，请稍后再试'
 const ECOM_ANALYSIS_FORMAT = [
   '请严格按以下结构输出，中文，分点简洁，不写无关寒暄：',
@@ -55,6 +59,8 @@ type PreviewDraft = {
   userId: string
   mediaType: MediaType
   mediaUrl: string
+  /** 出图时传给上游的参考图（可与 mediaUrl 不同，用于链式改图） */
+  refImageUrl?: string
   optimizedPrompt: string
   finalPrompt: string
   createdAt: number
@@ -408,11 +414,190 @@ function quickActionsFor(mediaType: MediaType): string[] {
   return ['换场景', '更亮一点', '改成白底主图', '改成信息流风格']
 }
 
+/** 结合上一轮指令与会话是否已出过图，动态排序快捷指令（仅首页） */
+function quickActionsDynamic(
+  mediaType: MediaType,
+  userMessage: string,
+  opts?: { hasSessionGenerated?: boolean },
+): string[] {
+  const base = quickActionsFor(mediaType)
+  if (mediaType !== 'video' && opts?.hasSessionGenerated) {
+    const core = stripHomeParamLine(userMessage)
+    const extras: string[] = []
+    if (/白底|纯白|#fff|#ffffff/i.test(core)) {
+      extras.push('换场景', '生成同款风格图片')
+    } else if (/场景|换场景|换背景/.test(core)) {
+      extras.push('改成白底主图', '更亮一点')
+    } else {
+      extras.push('改成白底主图', '换场景', '生成同款风格图片')
+    }
+    return [...new Set([...extras, ...base])].slice(0, 8)
+  }
+  return base
+}
+
+async function writeHomeTelemetry(userId: string, payload: Record<string, unknown>) {
+  await writeTaskRow({
+    user_id: userId,
+    type: 'image',
+    model: 'home_telemetry',
+    status: 'succeeded',
+    provider_task_id: null,
+    output_url: null,
+    raw: { source: 'home_chat', ...payload, at: Date.now() },
+  })
+}
+
+function normalizeOptionalRefUrl(
+  urlStr: string,
+  supabaseBase: string,
+): string {
+  const u = String(urlStr || '').trim()
+  if (!u || !isAllowedPublicAssetUrl(u, supabaseBase)) return ''
+  return u
+}
+
+function pickNanoRefImage(
+  mediaType: MediaType,
+  mediaUrl: string,
+  clientRefUrl: string,
+  draftRefUrl: string | undefined,
+  supabaseBase: string,
+): string | undefined {
+  if (mediaType !== 'image') return undefined
+  const ordered = [clientRefUrl, draftRefUrl, mediaUrl].map((x) => normalizeOptionalRefUrl(String(x || ''), supabaseBase))
+  for (const x of ordered) {
+    if (x) return x
+  }
+  return undefined
+}
+
+/** 轻量判断参考图是否像可上架商品主体；失败返回 null 不拦截 */
+async function visionSellableProductRef(
+  apiKey: string,
+  baseUrl: string,
+  imageUrl: string,
+): Promise<boolean | null> {
+  try {
+    const multimodal: ChatMessage[] = [
+      {
+        role: 'system',
+        content:
+          'You classify e-commerce reference images. Reply with JSON only: {"sellable":true|false}. sellable=true if a clear physical product (or sellable item) is the main subject suitable as a listing main image. sellable=false for landscapes-only, documents/screenshots, memes, portraits with no product, abstract noise.',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageUrl } },
+          { type: 'text', text: 'sellable for e-commerce main image?' },
+        ],
+      },
+    ]
+    const txt = await gpt4oChat(apiKey, baseUrl, multimodal, 0.05)
+    const m = txt.match(/\{[\s\S]*\}/)
+    const parsed = JSON.parse(m?.[0] || '{}')
+    if (typeof parsed?.sellable === 'boolean') return parsed.sellable
+    return null
+  } catch {
+    return null
+  }
+}
+
 function nextQuestionFor(mediaType: MediaType): string {
   if (mediaType === 'video') {
     return '需要拆解脚本、总结风格或上架文案时，可直接点下方快捷指令。'
   }
   return '需要继续生成或微调画面时，可直接点下方快捷指令。'
+}
+
+/** 去掉首页 composer 注入的参数行，避免干扰意图判断 */
+function stripHomeParamLine(text: string): string {
+  return String(text || '')
+    .replace(/^【[^】]{1,160}】\s*/u, '')
+    .trim()
+}
+
+/** 界面快捷指令与强动作词：必须走出图（仅首页模块使用） */
+const HOME_FORCE_IMAGE_PHRASES: string[] = [
+  '换场景',
+  '更亮一点',
+  '改成白底主图',
+  '改成信息流风格',
+  '生成同款风格图片',
+  '确认高清生成',
+  '换背景',
+  '调亮',
+  '提亮',
+  '生成白底',
+  '白底图',
+  '白底主图',
+]
+
+/**
+ * 首页意图兜底：修正模型把「执行出图」误判为纯咨询的问题。
+ * 不修改其他模块；与 LLM 意图并存时，执行类优先于 consultOnly。
+ */
+function inferHomeIntentOverride(
+  userMessage: string,
+  mediaType: MediaType,
+): { needsImageGen?: true; consultOnly?: true } {
+  const raw = String(userMessage || '')
+  const core = stripHomeParamLine(raw)
+
+  if (
+    /仅分析|只要分析|不要生成|不要出图|不生成图|只分析|只要文案|不制图|别生成|无需出图/.test(raw)
+  ) {
+    return { consultOnly: true }
+  }
+
+  for (const p of HOME_FORCE_IMAGE_PHRASES) {
+    if (raw.includes(p)) return { needsImageGen: true }
+  }
+
+  const execRe =
+    /(生成|出图|做图|来一张|做一张|来张|做张|张图|改成|换场景|换背景|换一换|更亮|调亮|提亮|白底|主图|信息流|9\s*:\s*16|竖版|制作|去除|去掉|加字|加品牌|加logo|同款|确认高清|高清正式|p图|修图|重绘|加水印|去水印)/i
+  if (execRe.test(core) || execRe.test(raw)) return { needsImageGen: true }
+
+  if (mediaType === 'video') {
+    const wantStillFromVideo = /(生成|做|出).{0,8}(图|张|画面|海报|主图|同款)/i.test(core)
+    if (wantStillFromVideo) return { needsImageGen: true }
+  }
+
+  return {}
+}
+
+/** 快捷指令绑定的出图约束，写入最终 prompt（仅首页出图链路） */
+function homeExecutionDirectives(userMessage: string): string {
+  const m = String(userMessage || '')
+  const parts: string[] = []
+
+  if (m.includes('改成白底主图') || /白底主图|纯\s*白\s*底|#FFFFFF|#fff\b/i.test(m)) {
+    parts.push(
+      '【执行模板·白底主图】背景必须为纯白#FFFFFF；商品主体居中，约占画面70%-80%；无投影、无杂物、无文字水印；符合国内电商平台主图常见规范；商品款式/颜色/材质/图案必须与参考图一致，禁止换款或变形。',
+    )
+  }
+  if (m.includes('换场景') || m.includes('换背景')) {
+    parts.push(
+      '【执行模板·换场景】仅替换背景与环境氛围，商品主体、款式、颜色、细节必须与参考图一致，禁止换款、变形或改变商品本体。',
+    )
+  }
+  if (m.includes('更亮一点') || m.includes('调亮') || m.includes('提亮')) {
+    parts.push(
+      '【执行模板·提亮】适度提升整体曝光与明暗层次，保留材质与色彩准确，商品外形与细节不变。',
+    )
+  }
+  if (m.includes('信息流') || m.includes('改成信息流')) {
+    parts.push(
+      '【执行模板·信息流】信息流广告风格，主体突出、画面干净；禁止虚假夸大文案与违规元素；商品外观真实一致。',
+    )
+  }
+  if (m.includes('生成同款风格图片') || (m.includes('同款') && /风格|样式/.test(m))) {
+    parts.push(
+      '【执行模板·同款风格】在保持商品主体与参考图一致的前提下，统一整体色调与质感，使新图与原商品视觉风格协调。',
+    )
+  }
+
+  return parts.filter(Boolean).join('\n')
 }
 
 async function runNanoBananaGeneration(params: {
@@ -740,8 +925,16 @@ type ImageGenCtx = {
   userId: string
   apiKey: string
   baseUrl: string
+  supabaseUrl: string
   mediaType: MediaType
   mediaUrl: string
+  /** 链式改图：上一张成品图作为参考（须为同域公开资产 URL） */
+  refImageUrl?: string
+  /** 会话内商品分析摘要，供第二轮优化提示词 */
+  contextSummary?: string
+  locale?: string
+  hasSessionGenerated?: boolean
+  sessionId?: string
   userMessage: string
   analysisText: string
   generateMode: GenerateMode
@@ -756,8 +949,14 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     userId,
     apiKey,
     baseUrl,
+    supabaseUrl,
     mediaType,
     mediaUrl,
+    refImageUrl: refImageUrlRaw,
+    contextSummary,
+    locale,
+    hasSessionGenerated,
+    sessionId,
     userMessage,
     analysisText,
     generateMode,
@@ -782,23 +981,48 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     return
   }
 
+  const clientRef = normalizeOptionalRefUrl(String(refImageUrlRaw || ''), supabaseUrl)
+  const draftEarly = previewToken ? getPreviewDraft(previewToken, userId) : null
+  const nanoRefEarly = pickNanoRefImage(mediaType, mediaUrl, clientRef, draftEarly?.refImageUrl, supabaseUrl)
+  if (nanoRefEarly) {
+    const ok = await visionSellableProductRef(apiKey, baseUrl, nanoRefEarly)
+    if (ok === false) {
+      res.status(200).json({
+        success: false,
+        code: 'NOT_PRODUCT_IMAGE',
+        error:
+          '参考图不太像可上架的商品主体（如风景、文档、人像等）。请上传清晰的商品图后再试，或先使用「仅分析」获取建议。',
+      })
+      return
+    }
+  }
+
   let optimizedPrompt = userMessage
   let finalPrompt = userMessage
+  const localeStr = String(locale || '').trim()
+  const localeEn = /^en\b/i.test(localeStr)
 
   if (optimizePrompt) {
     try {
+      const execDir = homeExecutionDirectives(userMessage)
       const op = await gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
         '你是电商图片生成提示词工程师，将用户需求改写为适配 nano-banana-2 的高质量提示词。',
         '核心原则：严格保留商品主体结构/颜色/比例，不变形、不换款；仅按用户意图做局部修改。',
         '若用户是“换场景/更亮一点/突出质感/改白底主图”等微调意图，只改指定部分，不重做无关元素。',
+        '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
+        '这是执行类出图任务：禁止只输出拍摄/修图教程文字，提示词必须能直接用于生成成品图。',
         '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。',
         `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
-        '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
+        localeEn
+          ? 'User locale is English: put English visual keywords first, keep necessary Chinese only if user wrote Chinese.'
+          : '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
         '输出 JSON：{"optimized":"..."}',
       ].join('\n'),
         JSON.stringify({
           baseAnalysis: analysisText.slice(0, 2000),
+          sessionProductSummary: String(contextSummary || '').slice(0, 1200) || undefined,
           userMessage,
+          executionDirectives: execDir || undefined,
           style: styleKeywords(style),
           aspectRatio,
           refWeight,
@@ -816,6 +1040,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       ? '严格锁定商品主体结构、颜色与比例，仅对背景与光影做改动，不可换款/变形'
       : '尽量保持商品主体结构、颜色与比例，允许轻微构图变化'
 
+  const execBlock = homeExecutionDirectives(userMessage)
   const extra = [
     styleKeywords(style),
     `画幅比例 ${aspectRatio}`,
@@ -824,17 +1049,22 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     'clean premium background, no extra text, no watermark, no irrelevant objects',
     preserveLine,
     `参考图权重约 ${refWeight.toFixed(2)}（请在构图中体现参考关系）`,
+    execBlock,
+    COMPLIANCE_TAIL,
   ]
     .filter(Boolean)
     .join('；')
 
   finalPrompt = [optimizedPrompt, extra].join('\n\n')
 
+  const nanoRefPreview = pickNanoRefImage(mediaType, mediaUrl, clientRef, undefined, supabaseUrl)
+
   if (generateMode === 'preview') {
     const previewId = putPreviewDraft({
       userId,
       mediaType,
       mediaUrl,
+      refImageUrl: nanoRefPreview,
       optimizedPrompt,
       finalPrompt,
       createdAt: Date.now(),
@@ -853,11 +1083,17 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       negative: useNeg ? DEFAULT_NEG : '',
       aspectRatio,
       resolution,
-      refImage: mediaType === 'image' ? mediaUrl : undefined,
+      refImage: nanoRefPreview,
       imageCount: 1,
       model: 'nano-banana-2',
     })
     const previewImage = { url: prev.imageUrl, ratio: aspectRatio, variant: 'preview', qcScore: 80, qcIssues: [] as string[] }
+    void writeHomeTelemetry(userId, {
+      event: 'home_image_gen_ok',
+      mode: 'preview',
+      sessionId: sessionId || undefined,
+      hasSessionGenerated: !!hasSessionGenerated,
+    })
     res.status(200).json({
       success: true,
       kind: 'mixed',
@@ -867,7 +1103,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       images: [previewImage],
       previewToken: previewId,
       nextQuestion: '预览方向已生成，是否按该方向生成高清正式图？',
-      quickActions: quickActionsFor(mediaType),
+      quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
       opsPack: undefined,
       meta: { aspectRatio, resolution, style, refWeight, imageCount: 1, mode: 'preview' },
     })
@@ -880,6 +1116,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   const mediaUrlToUse = draft?.mediaUrl || mediaUrl
   const styleToUse = draft?.style || style
   const resolutionToUse = draft?.resolution || resolution
+  const nanoRefFinal = pickNanoRefImage(mediaTypeToUse, mediaUrlToUse, clientRef, draft?.refImageUrl, supabaseUrl)
 
   const ratioListSafe = ratioList.slice(0, 2)
   const variants = abVariant ? (['conservative', 'aggressive'] as const) : (['normal'] as const)
@@ -915,7 +1152,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           negative: negBase,
           aspectRatio: ratio,
           resolution: resolutionToUse,
-          refImage: mediaTypeToUse === 'image' ? mediaUrlToUse : undefined,
+          refImage: nanoRefFinal,
           imageCount: 1,
           model: 'nano-banana-2',
         })
@@ -934,6 +1171,14 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     }
   }
 
+  void writeHomeTelemetry(userId, {
+    event: 'home_image_gen_ok',
+    mode: 'final',
+    sessionId: sessionId || undefined,
+    imageCount: images.length,
+    hasSessionGenerated: !!hasSessionGenerated,
+  })
+
   res.status(200).json({
     success: true,
     kind: 'mixed',
@@ -942,7 +1187,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     imageUrls: images.map((x) => x.url),
     images,
     nextQuestion: nextQuestionFor(mediaTypeToUse),
-    quickActions: quickActionsFor(mediaTypeToUse),
+    quickActions: quickActionsDynamic(mediaTypeToUse, userMessage, { hasSessionGenerated }),
     opsPack: undefined,
     meta: {
       aspectRatio: ratioList.length === 1 ? ratioList[0] : ratioList,
@@ -971,6 +1216,16 @@ export default async function handler(req: any, res: any) {
     const userId = user.id || user.sub
 
     const body = req.body || {}
+
+    if (body.homeTelemetryOnly === true) {
+      const ht = body.homeTelemetry
+      if (!ht || typeof ht !== 'object') {
+        return res.status(200).json({ success: false, error: '缺少 homeTelemetry', code: 'BAD_REQUEST' })
+      }
+      await writeHomeTelemetry(userId, ht as Record<string, unknown>)
+      return res.status(200).json({ success: true })
+    }
+
     const mediaType = String(body.mediaType || '') as MediaType
     const mediaUrl = String(body.mediaUrl || '').trim()
     const userMessage = String(body.userMessage || '').trim()
@@ -978,6 +1233,16 @@ export default async function handler(req: any, res: any) {
     const params = body.params || {}
     const generateMode = String(body.generateMode || params.generateMode || 'final') as GenerateMode
     const previewToken = String(body.previewToken || params.previewToken || '').trim()
+    const refImageUrlIn = String(body.refImageUrl || '').trim()
+    const contextSummary = String(body.contextSummary || '').trim().slice(0, 2500)
+    const localeRaw =
+      String(body.locale || '').trim() ||
+      String(req.headers?.['accept-language'] || '')
+        .split(',')[0]
+        ?.trim() ||
+      ''
+    const hasSessionGenerated = body.hasSessionGenerated === true
+    const sessionId = String(body.sessionId || '').trim().slice(0, 120)
 
     if (mediaType !== 'image' && mediaType !== 'video') {
       return res.status(200).json({ success: false, error: 'mediaType 无效', code: 'BAD_REQUEST' })
@@ -1014,8 +1279,14 @@ export default async function handler(req: any, res: any) {
         userId,
         apiKey,
         baseUrl,
+        supabaseUrl,
         mediaType,
         mediaUrl,
+        refImageUrl: refImageUrlIn,
+        contextSummary,
+        locale: localeRaw,
+        hasSessionGenerated,
+        sessionId,
         userMessage,
         analysisText: analysisTextOnly,
         generateMode,
@@ -1027,15 +1298,19 @@ export default async function handler(req: any, res: any) {
 
     // --- 意图识别（快速 JSON）---
     const intentSystem = [
-      '你是意图分类器。根据用户上传媒体类型与用户问题，输出 JSON。',
+      '你是首页「电商商品图」模块的意图分类器。根据用户上传媒体与用户问题输出 JSON。',
       '字段：blockedVideoEdit(boolean), needsAnalysis(boolean), needsImageGen(boolean), imageCount(number 1-4)。',
-      'blockedVideoEdit=true：当用户主要诉求是「生成视频、剪辑视频、拼接、转场、加字幕导出成片、改视频画面、视频特效合成」等视频生成/编辑类动作。',
-      'blockedVideoEdit=false：纯分析类、或「根据视频风格生成若干张图片」等允许的组合。',
-      '若仅想分析视频脚本/镜头/台词/节奏，needsAnalysis=true，needsImageGen=false。',
-      '若需要出图（文生图/参考图二创），needsImageGen=true；并结合用户要求设置 imageCount。',
+      'blockedVideoEdit=true：用户主要诉求是「生成视频、剪辑视频、拼接、转场、加字幕导出成片、改视频画面、视频特效合成」等视频生成/编辑类动作。',
+      'blockedVideoEdit=false：纯分析、或「根据视频/参考生成商品图、改图、换背景」等允许组合。',
+      '【执行类·必须 needsImageGen=true】用户要产出图片/修改图片，包括：界面快捷指令（换场景、更亮一点、改成白底主图、改成信息流风格、生成同款风格等）、以及含「生成、出图、做图、改成、换、加、修改、制作、去除、白底、主图、同款、确认高清」等动作且目标是得到新图的诉求。',
+      '【咨询类·needsImageGen=false】用户只要方法说明/教程/技巧，明确不要求出图，例如仅问「怎么拍、如何布光、为什么模糊」且无任何出图动作词。',
+      '若执行类与咨询类同时出现，以执行类为准（必须先满足出图）。',
+      '视频：若用户要从视频生成静态商品图、海报、同款画面，needsImageGen=true。',
+      '若仅分析视频脚本/镜头/台词/节奏且不要图，needsAnalysis=true，needsImageGen=false。',
+      'imageCount：按用户要求取 1-4，未说明则 1-2。',
       mediaType === 'video'
-        ? '当前媒体为视频：禁止满足任何视频生成/剪辑类诉求（blockedVideoEdit）。'
-        : '当前媒体为图片：允许图片分析与出图、修图类诉求（不涉及视频）。',
+        ? '当前媒体为视频：禁止满足任何视频生成/剪辑成片类诉求（blockedVideoEdit）；但允许基于视频出静态商品图。'
+        : '当前媒体为图片：允许分析、出图、修图、换背景、白底主图等（不涉及视频剪辑）。',
     ].join('\n')
 
     const intentUser = JSON.stringify({
@@ -1062,6 +1337,10 @@ export default async function handler(req: any, res: any) {
     let needsAnalysis = intent.needsAnalysis !== false
     let needsImageGen = !!intent.needsImageGen
     const splitPipeline = body.splitPipeline === true
+
+    const homeIo = inferHomeIntentOverride(userMessage, mediaType)
+    if (homeIo.needsImageGen) needsImageGen = true
+    else if (homeIo.consultOnly) needsImageGen = false
 
     // 首页要求：用户上传媒体后默认先做结构化商用分析；生成诉求可与分析并行返回
     needsAnalysis = true
@@ -1106,7 +1385,7 @@ export default async function handler(req: any, res: any) {
                 analysisText,
                 opsPack,
                 nextQuestion: nextQuestionFor(mediaType),
-                quickActions: quickActionsFor(mediaType),
+                quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
                 deferredImageGen: true,
               })}\n\n`,
             )
@@ -1122,7 +1401,7 @@ export default async function handler(req: any, res: any) {
               analysisText,
               opsPack,
               nextQuestion: nextQuestionFor(mediaType),
-              quickActions: quickActionsFor(mediaType),
+              quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
               deferredImageGen: false,
             })}\n\n`,
           )
@@ -1164,7 +1443,7 @@ export default async function handler(req: any, res: any) {
         analysisText,
         opsPack,
         nextQuestion: nextQuestionFor(mediaType),
-        quickActions: quickActionsFor(mediaType),
+        quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
         deferredImageGen: true,
       })
     }
@@ -1177,8 +1456,14 @@ export default async function handler(req: any, res: any) {
         userId,
         apiKey,
         baseUrl,
+        supabaseUrl,
         mediaType,
         mediaUrl,
+        refImageUrl: refImageUrlIn,
+        contextSummary,
+        locale: localeRaw,
+        hasSessionGenerated,
+        sessionId,
         userMessage,
         analysisText,
         generateMode,
@@ -1193,7 +1478,7 @@ export default async function handler(req: any, res: any) {
       kind: 'analysis',
       analysisText,
       nextQuestion: nextQuestionFor(mediaType),
-      quickActions: quickActionsFor(mediaType),
+      quickActions: quickActionsDynamic(mediaType, userMessage, { hasSessionGenerated }),
       opsPack,
     })
   } catch (e: any) {
