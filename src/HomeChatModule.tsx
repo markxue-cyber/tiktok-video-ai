@@ -1254,7 +1254,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 } else {
                   resolved = {
                     success: false,
-                    error: String((r as { error?: string })?.error || st.error || '出图失败'),
+                    error: String(
+                      (r as { error?: string })?.error ||
+                        st.jobError ||
+                        st.error ||
+                        '出图失败',
+                    ),
                     code: 'IMAGE_JOB_FAILED',
                   }
                 }

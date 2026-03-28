@@ -28,12 +28,20 @@ export default async function handler(req: any, res: any) {
     const status = String(row.status || '')
     const raw = (row.raw as Record<string, unknown>) || {}
     const result = raw.result
+    const rawErr = typeof raw.error === 'string' ? raw.error.trim() : ''
+    const jobError =
+      rawErr ||
+      (status === 'failed' && result && typeof result === 'object' && result !== null && 'error' in result
+        ? String((result as { error?: unknown }).error || '').trim()
+        : '')
     const updatedAt = row.updated_at != null ? String(row.updated_at) : null
     const createdAt = row.created_at != null ? String(row.created_at) : null
     return res.status(200).json({
       success: true,
       status,
       result,
+      /** 异步任务异常或上游超时时写在 raw.error，便于前端展示（result 可能为 null） */
+      jobError: jobError || null,
       outputUrl: row.output_url ? String(row.output_url) : null,
       updatedAt,
       createdAt,

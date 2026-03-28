@@ -122,6 +122,8 @@ export type HomeChatGenStatusResult = {
   success: boolean
   status?: string
   result?: HomeChatTurnResult | Record<string, unknown>
+  /** failed 且 result 为空时，服务端从 raw.error 透出 */
+  jobError?: string | null
   outputUrl?: string | null
   /** 便于排查：任务行 updated_at / created_at（ISO） */
   updatedAt?: string | null
