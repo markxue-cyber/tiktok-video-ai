@@ -28,11 +28,15 @@ export default async function handler(req: any, res: any) {
     const status = String(row.status || '')
     const raw = (row.raw as Record<string, unknown>) || {}
     const result = raw.result
+    const updatedAt = row.updated_at != null ? String(row.updated_at) : null
+    const createdAt = row.created_at != null ? String(row.created_at) : null
     return res.status(200).json({
       success: true,
       status,
       result,
       outputUrl: row.output_url ? String(row.output_url) : null,
+      updatedAt,
+      createdAt,
     })
   } catch (e: any) {
     return res.status(200).json({ success: false, error: e?.message || '服务器错误' })

@@ -707,6 +707,23 @@ function homeExecutionDirectives(userMessage: string): string {
   return parts.filter(Boolean).join('\n')
 }
 
+/** 豆包/LinkAPI 出图无默认 fetch 超时时会无限挂起，轮询将一直看到 running */
+function imageUpstreamAbortSignal(): AbortSignal {
+  const raw = process.env.HOME_IMAGE_UPSTREAM_TIMEOUT_MS
+  const parsed = raw ? Number.parseInt(String(raw), 10) : NaN
+  const cap =
+    Number.isFinite(parsed) && parsed >= 30_000 ? Math.min(parsed, 270_000) : 240_000
+  try {
+    const T = (AbortSignal as any)?.timeout
+    if (typeof T === 'function') return T(cap) as AbortSignal
+  } catch {
+    /* ignore */
+  }
+  const ac = new AbortController()
+  setTimeout(() => ac.abort(new Error(`出图上游超时（约 ${Math.round(cap / 1000)}s），请重试`)), cap)
+  return ac.signal
+}
+
 async function runNanoBananaGeneration(
   params: {
     req: any
@@ -828,6 +845,7 @@ async function runNanoBananaGeneration(
       Authorization: `Bearer ${params.apiKey}`,
       'Content-Type': 'application/json',
     },
+    signal: imageUpstreamAbortSignal(),
     body: JSON.stringify({
       prompt: params.prompt,
       ...negativeFields,
@@ -1134,7 +1152,10 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   const draftEarly = previewToken ? getPreviewDraft(previewToken, userId) : null
   const nanoRefEarly = pickNanoRefImage(mediaType, mediaUrl, clientRef, draftEarly?.refImageUrl, supabaseUrl)
   if (nanoRefEarly) {
-    const ok = await visionSellableProductRef(apiKey, baseUrl, nanoRefEarly)
+    const ok = await Promise.race([
+      visionSellableProductRef(apiKey, baseUrl, nanoRefEarly),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 55_000)),
+    ])
     if (ok === false) {
       res.status(200).json({
         success: false,
@@ -1437,7 +1458,17 @@ async function executeHomeChatImageJobInBackground(opts: {
 
   try {
     await patchHomeChatImageJob(jobId, userId, { status: 'running' })
-  } catch {
+  } catch (e: any) {
+    const msg = String(e?.message || e || 'mark_running')
+    console.error('[home-chat-async] mark running failed', jobId, msg)
+    try {
+      await patchHomeChatImageJob(jobId, userId, {
+        status: 'failed',
+        raw: { source: 'home_chat_async', phase: 'mark_running', error: msg },
+      })
+    } catch {
+      /* ignore */
+    }
     return
   }
 

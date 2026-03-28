@@ -23,7 +23,10 @@ function serviceHeaders(extra: Record<string, string> = {}) {
 export async function insertQueuedHomeChatImageJob(userId: string, jobId: string): Promise<void> {
   const resp = await fetch(`${supabaseBaseUrl()}/rest/v1/generation_tasks`, {
     method: 'POST',
-    headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+    headers: serviceHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
     body: JSON.stringify([
       {
         id: jobId,
@@ -35,9 +38,13 @@ export async function insertQueuedHomeChatImageJob(userId: string, jobId: string
       },
     ]),
   })
+  const inserted = await resp.json().catch(() => null)
   if (!resp.ok) {
-    const t = await resp.text()
-    throw new Error(`创建出图任务失败: ${t.slice(0, 200)}`)
+    const t = typeof inserted === 'string' ? inserted : JSON.stringify(inserted)
+    throw new Error(`创建出图任务失败: ${String(t || '').slice(0, 200)}`)
+  }
+  if (!Array.isArray(inserted) || inserted.length < 1) {
+    throw new Error('创建出图任务失败: 未返回插入行（请检查 generation_tasks 与 user_id 外键）')
   }
 }
 
@@ -51,13 +58,22 @@ export async function patchHomeChatImageJob(
     `${supabaseBaseUrl()}/rest/v1/generation_tasks?id=eq.${encodeURIComponent(jobId)}&user_id=eq.${encodeURIComponent(userId)}`,
     {
       method: 'PATCH',
-      headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+      headers: serviceHeaders({
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      }),
       body: JSON.stringify(body),
     },
   )
+  const updated = await resp.json().catch(() => null)
   if (!resp.ok) {
-    const t = await resp.text()
-    throw new Error(`更新出图任务失败: ${t.slice(0, 200)}`)
+    const t = typeof updated === 'string' ? updated : JSON.stringify(updated)
+    throw new Error(`更新出图任务失败: ${String(t || '').slice(0, 200)}`)
+  }
+  if (!Array.isArray(updated) || updated.length < 1) {
+    throw new Error(
+      '更新出图任务未影响任何行：请核对 job id 与用户 id 是否与插入时一致（常见于 JWT user 与 public.users 不一致）',
+    )
   }
 }
 

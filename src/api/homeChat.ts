@@ -123,6 +123,9 @@ export type HomeChatGenStatusResult = {
   status?: string
   result?: HomeChatTurnResult | Record<string, unknown>
   outputUrl?: string | null
+  /** 便于排查：任务行 updated_at / created_at（ISO） */
+  updatedAt?: string | null
+  createdAt?: string | null
   error?: string
   code?: string
 }
