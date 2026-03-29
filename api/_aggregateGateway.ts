@@ -4,6 +4,7 @@
  * 方舟首页出图走 OpenAI 兼容 POST …/images/generations：须 **ep-m-…** 推理接入点。
  * 「ep-20260329…」类常不支持该路由（会报底层 doubao-seedream-* does not support this api）；勿填模型版本名。
  * 将支持该路由的 ep-m- 接入点写入 BYTEDANCE_ARK_IMAGE_MODEL。
+ * 可选 BYTEDANCE_ARK_IMAGE_MODEL_LABEL=展示名（如「Seedream 4.0 出图」），高级里出图模型下拉里显示该名称而非裸 ep。
  * BYTEDANCE_ARK_VISION_CHAT_MODEL 须为能看图/视频的对话模型（如 ep-m-… 的 vision-pro），勿与 IMAGE_MODEL 填同一个 Seedream 出图接入点。
  */
 
@@ -51,6 +52,8 @@ export type ResolvedAggregateGateway = {
   chatModel: string
   /** 方舟 OpenAI 出图：须 ep-m-… 接入点 id（BYTEDANCE_ARK_IMAGE_MODEL） */
   defaultImageModel?: string
+  /** 可选：出图接入点在界面上的展示名（BYTEDANCE_ARK_IMAGE_MODEL_LABEL） */
+  defaultImageModelLabel?: string
 }
 
 /**
@@ -80,6 +83,7 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
     /** 多为推理接入点 ID（ep-）或模型名，请与控制台一致 */
     const chatModel = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || 'doubao-1-5-vision-pro-32k').trim()
     const defaultImageModel = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL || '').trim()
+    const defaultImageModelLabel = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL_LABEL || '').trim()
     return {
       id,
       label: '字节跳动(方舟)',
@@ -87,6 +91,7 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
       baseUrl,
       chatModel,
       ...(defaultImageModel ? { defaultImageModel } : {}),
+      ...(defaultImageModelLabel ? { defaultImageModelLabel } : {}),
     }
   }
   const apiKey = normalizeApiKeySecret(process.env.XIAO_DOU_BAO_API_KEY)

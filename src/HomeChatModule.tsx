@@ -62,6 +62,8 @@ const DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL = 'doubao-seededit-3-0-t2i-250628'
 
 /** GET /api/models 成功时写入；方舟出图默认优先用服务端 BYTEDANCE_ARK_IMAGE_MODEL */
 let bytedanceHomeImageModelFromServer: string | null = null
+/** 可选 BYTEDANCE_ARK_IMAGE_MODEL_LABEL，用于下拉里展示友好名称 */
+let bytedanceHomeImageLabelFromServer: string | null = null
 
 function defaultHomeChatModelForGateway(gw: HomeGatewayProvider): string {
   if (gw === 'siliconflow') return 'Qwen/Qwen3-VL-8B-Instruct'
@@ -146,6 +148,18 @@ function isArkBareCatalogImageModelId(id: string): boolean {
   if (/^ep-/i.test(s)) return false
   if (!/^doubao-/i.test(s)) return false
   return /seedream|seededit|t2i|jimeng/i.test(s)
+}
+
+/** 方舟 GET /models 返回项里可用的展示名（字段名因版本略有差异） */
+function extractArkModelListDisplayName(m: { id?: string; [key: string]: unknown }): string {
+  const id = String(m?.id || '').trim()
+  const meta = m.metadata as { name?: string } | undefined
+  const candidates = [m.name, m.model_name, m.display_name, m.title, meta?.name]
+  for (const c of candidates) {
+    const s = String(c ?? '').trim()
+    if (s && s !== id) return s
+  }
+  return ''
 }
 
 function looksLikeHomeImageModel(id: string): boolean {
@@ -935,16 +949,23 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           const img = modelsJson?.gatewayDefaults?.imageModel
           bytedanceHomeImageModelFromServer =
             modelsJson?.success && typeof img === 'string' && img.trim() ? img.trim() : null
+          const lbl = modelsJson?.gatewayDefaults?.imageModelLabel
+          bytedanceHomeImageLabelFromServer =
+            modelsJson?.success && typeof lbl === 'string' && lbl.trim() ? lbl.trim() : null
         } else {
           bytedanceHomeImageModelFromServer = null
+          bytedanceHomeImageLabelFromServer = null
         }
 
+        const modelLabelById = new Map<string, string>()
         if (modelsJson?.success) {
           const root = modelsJson?.data
           const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
           for (const m of list) {
             const id = String(m?.id || '').trim()
             if (!id) continue
+            const disp = extractArkModelListDisplayName(m as { id?: string; [key: string]: unknown })
+            if (disp) modelLabelById.set(id, disp)
             const { image: isImage, chat: isChat } = classifyModelForHomeDropdowns(m)
             if (isImage) imageIds.push(id)
             if (isChat) chatIds.push(id)
@@ -1002,7 +1023,20 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           if (unavailableImage[id]) tags.push('近期失败记录')
           if (disabledImage.has(id)) tags.push('后台已关闭')
           const tagStr = tags.length ? `（${tags.join('，')}）` : ''
-          const name = friendlyImg.get(id) || id
+          let name =
+            friendlyImg.get(id) ||
+            modelLabelById.get(id) ||
+            (gw === 'bytedance' &&
+            bytedanceHomeImageModelFromServer &&
+            id === bytedanceHomeImageModelFromServer &&
+            bytedanceHomeImageLabelFromServer
+              ? bytedanceHomeImageLabelFromServer
+              : '')
+          if (!name) {
+            if (gw === 'bytedance' && /^ep-m-/i.test(id)) name = '豆包·图像生成（推理接入点）'
+            else if (gw === 'bytedance' && /^ep-/i.test(id)) name = '方舟推理接入点'
+            else name = id
+          }
           let base = recommendedImage.has(id) ? `${name}（推荐）` : name
           if (gw === 'bytedance' && /^ep-/i.test(id) && !/^ep-m-/i.test(id)) {
             base = `${base}（OpenAI 出图优先 ep-m-）`
@@ -1030,7 +1064,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         for (const id of mergedChat) {
           if (!id) continue
           const tagStr = disabledLlm.has(id) ? '（后台已关闭）' : ''
-          const name = friendlyChat.get(id) || id
+          const name = friendlyChat.get(id) || modelLabelById.get(id) || id
           const base = recommendedLlm.has(id) ? `${name}（推荐）` : name
           chatOptions.push({ id, label: `${base}${tagStr}` })
         }
@@ -1096,10 +1130,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
   }, [active?.params.gatewayProvider])
 
-  useEffect(() => {
+  /** 流式输出时 messages 引用随字变化，用 auto 滚动避免 smooth 跟不上 */
+  useLayoutEffect(() => {
     if (showLanding) return
-    listEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [active?.messages.length, busy, pendingUploads.length, dragOver, showLanding])
+    listEndRef.current?.scrollIntoView({ behavior: busy ? 'auto' : 'smooth', block: 'nearest' })
+  }, [active?.messages, showLanding, busy, pendingUploads.length, dragOver])
 
   useEffect(() => {
     if (!plusMenuOpen && !paramsOpen) return

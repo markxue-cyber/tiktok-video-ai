@@ -46,6 +46,9 @@ export default async function handler(req, res) {
       gatewayDefaults: {
         chatModel: gw.chatModel,
         ...(arkImg ? { imageModel: arkImg } : {}),
+        ...(gw.id === 'bytedance' && gw.defaultImageModelLabel
+          ? { imageModelLabel: gw.defaultImageModelLabel }
+          : {}),
       },
     })
   } catch (e: any) {
