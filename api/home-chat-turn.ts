@@ -960,11 +960,19 @@ async function runNanoBananaGeneration(
   })()
 
   if (!resp.ok) {
-    const msg =
+    let msg =
       data?.error?.message ||
       data?.message ||
       (typeof raw === 'string' && raw.slice(0, 1000)) ||
       `上游错误(${resp.status})`
+    if (
+      gw === 'bytedance' &&
+      typeof msg === 'string' &&
+      /does not support|不支持/i.test(msg)
+    ) {
+      msg +=
+        ' 【火山方舟出图】请在部署环境设置 BYTEDANCE_ARK_IMAGE_MODEL 为控制台「图像生成」推理接入点 id（形如 ep-m-xxxx）；或在高级设置里选择以 ep- 开头的出图模型。裸 doubao-seedream 等模型名常与 /images/generations 不匹配。'
+    }
     await writeTaskRow({
       user_id: params.userId,
       type: 'image',
@@ -1153,6 +1161,18 @@ function sanitizeHomeImageModel(raw: unknown): string {
   return s
 }
 
+/**
+ * 火山方舟：OpenAI 兼容 POST …/images/generations 通常只认「图像生成」推理接入点（ep- 开头）。
+ * 客户端/localStorage 里常见的 doubao-seedream-* 会报「不支持此 API」；配置了 BYTEDANCE_ARK_IMAGE_MODEL 时用它覆盖非 ep- 选项。
+ */
+function resolveBytedanceUpstreamImageModel(clientModel: string): string {
+  const c = String(clientModel || '').trim()
+  if (/^ep-/i.test(c)) return c
+  const env = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL || '').trim()
+  if (env) return env
+  return c
+}
+
 /** 首页传入的对话模型；非法则回退各网关环境变量默认 */
 function sanitizeOptionalChatModel(raw: unknown): string | null {
   const s = String(raw ?? '').trim()
@@ -1322,7 +1342,10 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     gatewayProvider,
   } = ctx
 
-  const genModel = String(imageModel || '').trim() || DEFAULT_HOME_IMAGE_MODEL
+  let genModel = String(imageModel || '').trim() || DEFAULT_HOME_IMAGE_MODEL
+  if (gatewayProvider === 'bytedance') {
+    genModel = resolveBytedanceUpstreamImageModel(genModel) || DEFAULT_HOME_IMAGE_MODEL
+  }
 
   if (!allowImageGenPerMinute(userId)) {
     res.status(200).json({ success: false, error: RATE_ERR, code: 'RATE_LIMITED' })
@@ -1844,7 +1867,7 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({
           success: false,
           error:
-            '未配置字节跳动(火山方舟)：请在服务端设置环境变量 BYTEDANCE_ARK_API_KEY（可选 BYTEDANCE_ARK_BASE_URL、BYTEDANCE_ARK_CHAT_MODEL；看图/视频分析可设 BYTEDANCE_ARK_VISION_CHAT_MODEL）',
+            '未配置字节跳动(火山方舟)：请在服务端设置环境变量 BYTEDANCE_ARK_API_KEY（可选 BYTEDANCE_ARK_BASE_URL、BYTEDANCE_ARK_CHAT_MODEL、BYTEDANCE_ARK_VISION_CHAT_MODEL；出图须 BYTEDANCE_ARK_IMAGE_MODEL=控制台「图像生成」ep- 接入点，否则易报模型不支持 images/generations）',
           code: 'BYTEDANCE_ARK_NOT_CONFIGURED',
         })
       }
