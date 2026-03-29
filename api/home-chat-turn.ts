@@ -73,6 +73,38 @@ type IntentJson = {
   imageCount?: number
 }
 
+function isSiliconFlowBaseUrl(baseUrl: string): boolean {
+  return String(baseUrl || '').toLowerCase().includes('siliconflow')
+}
+
+function llmUpstreamAuthHint(baseUrl: string, status: number): string {
+  if (status !== 401 && status !== 403) return ''
+  if (isSiliconFlowBaseUrl(baseUrl)) {
+    return ' 【硅基流动】请核对 SILICONFLOW_API_KEY（完整复制、无引号/空格）、SILICONFLOW_AI_BASE_URL 与控制台区域一致（国际常用 https://api.siliconflow.com/v1 ），以及「对话模型」为控制台可用 id。'
+  }
+  return ''
+}
+
+/** 意图 LLM 失败时（如 401）用规则兜底，避免整段请求卡在 INTENT_FAILED；后续分析仍依赖同一密钥。 */
+function localIntentFallback(mediaType: MediaType, userMessage: string): IntentJson {
+  const raw = String(userMessage || '')
+  const io = inferHomeIntentOverride(userMessage, mediaType)
+  let blockedVideoEdit = false
+  if (mediaType === 'video') {
+    if (
+      /(剪辑成片|导出成片|加字幕导出|生成视频|做一条视频|ai\s*视频|视频特效|时间线|转场合成)/i.test(raw)
+    ) {
+      blockedVideoEdit = true
+    }
+  }
+  return {
+    blockedVideoEdit,
+    needsAnalysis: true,
+    needsImageGen: io.consultOnly ? false : io.needsImageGen === true,
+    imageCount: 1,
+  }
+}
+
 type GenerateMode = 'preview' | 'final'
 
 type PreviewDraft = {
@@ -223,18 +255,21 @@ async function gpt4oJson<T>(
   chatModel: string,
 ): Promise<T> {
   const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
+  const body: Record<string, unknown> = {
+    model: chatModel,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+  }
+  if (!isSiliconFlowBaseUrl(baseUrl)) {
+    body.response_format = { type: 'json_object' }
+  }
   const resp = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: chatModel,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
+    body: JSON.stringify(body),
   })
   const rawText = await resp.text()
   const data = (() => {
@@ -244,7 +279,12 @@ async function gpt4oJson<T>(
       return null
     }
   })()
-  if (!resp.ok) throw new Error((data as any)?.error?.message || (data as any)?.message || `LLM请求失败(${resp.status})`)
+  if (!resp.ok) {
+    const hint = llmUpstreamAuthHint(baseUrl, resp.status)
+    throw new Error(
+      (data as any)?.error?.message || (data as any)?.message || `LLM请求失败(${resp.status})` + hint,
+    )
+  }
   const content = (data as any)?.choices?.[0]?.message?.content
   if (typeof content !== 'string') throw new Error('LLM响应为空')
   const m = content.match(/\{[\s\S]*\}/)
@@ -276,7 +316,12 @@ async function gpt4oChat(
       return null
     }
   })()
-  if (!resp.ok) throw new Error((data as any)?.error?.message || (data as any)?.message || `LLM请求失败(${resp.status})`)
+  if (!resp.ok) {
+    const hint = llmUpstreamAuthHint(baseUrl, resp.status)
+    throw new Error(
+      (data as any)?.error?.message || (data as any)?.message || `LLM请求失败(${resp.status})` + hint,
+    )
+  }
   return extractAssistantText(data)
 }
 
@@ -308,7 +353,7 @@ async function* streamGpt4oChat(
     } catch {
       msg = errText.slice(0, 500) || msg
     }
-    throw new Error(msg)
+    throw new Error(msg + llmUpstreamAuthHint(baseUrl, resp.status))
   }
   if (!resp.body) throw new Error('上游未返回流式 body')
   const reader = resp.body.getReader()
@@ -1835,7 +1880,15 @@ export default async function handler(req: any, res: any) {
     try {
       intent = await gpt4oJson<IntentJson>(apiKey, baseUrl, intentSystem, intentUser, chatModel)
     } catch (e: any) {
-      return res.status(200).json({ success: false, error: e?.message || '意图识别失败', code: 'INTENT_FAILED' })
+      const msg = String(e?.message || '')
+      if (/LLM请求失败\(40[13]\)/.test(msg) || /\b401\b|\b403\b/.test(msg)) {
+        return res.status(200).json({
+          success: false,
+          error: msg || '对话上游鉴权失败',
+          code: 'INTENT_FAILED',
+        })
+      }
+      intent = localIntentFallback(mediaType, userMessage)
     }
 
     if (intent.blockedVideoEdit) {
