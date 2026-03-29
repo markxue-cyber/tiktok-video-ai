@@ -1172,10 +1172,23 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
   }, [active?.params.gatewayProvider])
 
-  /** 流式输出时 messages 引用随字变化，用 auto 滚动避免 smooth 跟不上 */
+  /** 跟到底：忙时 / 正文逐字揭示时用 instant，避免 smooth 追不上增长中的气泡 */
   useLayoutEffect(() => {
     if (showLanding) return
-    listEndRef.current?.scrollIntoView({ behavior: busy ? 'auto' : 'smooth', block: 'nearest' })
+    const last = active?.messages?.length ? active.messages[active.messages.length - 1] : null
+    let instant = busy
+    if (
+      last?.role === 'assistant' &&
+      !last.blocked &&
+      typeof last.streamLen === 'number' &&
+      String(last.text || '').length > 0
+    ) {
+      const fullLen = String(last.text || '').length
+      if (last.streamLen < fullLen) instant = true
+    }
+    listEndRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'end' })
+    const wrap = chatScrollRef.current
+    if (wrap && instant) wrap.scrollTop = wrap.scrollHeight
   }, [active?.messages, showLanding, busy, pendingUploads.length, dragOver])
 
   useEffect(() => {
@@ -1207,26 +1220,34 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     return () => window.removeEventListener('keydown', onKey)
   }, [preview])
 
-  /** 流式展示：逐字显示最后一条助手消息 */
+  /** 整包 JSON 等场景：streamLen 小于全文时逐段「打字」揭示（SSE onDelta 仍保持 streamLen 与 text 同步、不经过此逻辑追赶） */
   useEffect(() => {
     if (!active?.messages.length) return
     const last = active.messages[active.messages.length - 1]
     if (last.role !== 'assistant' || last.blocked) return
     const full = String(last.text || '')
     if (!full.length) return
-    const len = last.streamLen ?? 0
+    if (typeof last.streamLen !== 'number') return
+    const len = last.streamLen
     if (len >= full.length) return
+    const perTick = Math.max(2, Math.min(56, Math.ceil(full.length / 28)))
+    const delayMs = full.length > 1200 ? 9 : full.length > 400 ? 11 : 14
     const t = window.setTimeout(() => {
       setSessions((prev) =>
         prev.map((s) => {
           if (s.id !== activeId) return s
           const msgs = s.messages.map((m) =>
-            m.id === last.id ? { ...m, streamLen: Math.min(full.length, (m.streamLen ?? 0) + Math.max(2, Math.ceil(full.length / 80))) } : m,
+            m.id === last.id
+              ? {
+                  ...m,
+                  streamLen: Math.min(full.length, (m.streamLen ?? 0) + perTick),
+                }
+              : m,
           )
           return { ...s, messages: msgs }
         }),
       )
-    }, 18)
+    }, delayMs)
     return () => window.clearTimeout(t)
   }, [active?.messages, activeId])
 
@@ -1773,7 +1794,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   ? {
                       ...m,
                       text: assistantTextFinal,
-                      streamLen: assistantTextFinal.length,
+                      streamLen: 0,
                       pendingAnalysis: false,
                       followUps: data.quickActions?.length ? [...data.quickActions] : ASSISTANT_FOLLOWUPS,
                     }
@@ -1975,7 +1996,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       return {
                         ...m,
                         text: nextText,
-                        streamLen: nextText.length,
+                        streamLen:
+                          typeof m.streamLen === 'number'
+                            ? Math.min(m.streamLen, m.text.length)
+                            : m.text.length,
                         images: imgs.length ? imgs : undefined,
                         imageItems: imageItems.length ? imageItems : undefined,
                         followUps:
@@ -2056,7 +2080,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       text: assistantTextFinal,
                       images: imgs.length ? imgs : undefined,
                       imageItems: imageItems.length ? imageItems : undefined,
-                      streamLen: assistantTextFinal.length,
+                      streamLen: 0,
                       pendingAnalysis: false,
                       followUps:
                         data.quickActions && data.quickActions.length
@@ -2293,9 +2317,19 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
   const displayAssistantText = (m: HomeChatMsg) => {
     if (m.role !== 'assistant') return m.text
-    const full = m.text
-    const n = m.streamLen ?? full.length
-    return full.slice(0, n)
+    const full = String(m.text ?? '')
+    if (m.blocked) return full
+    const sl = m.streamLen
+    if (typeof sl !== 'number') return full
+    return full.slice(0, Math.min(Math.max(0, sl), full.length))
+  }
+
+  const assistantRevealCursor = (m: HomeChatMsg) => {
+    if (m.role !== 'assistant' || m.blocked) return false
+    const full = String(m.text ?? '')
+    if (!full.length) return false
+    if (typeof m.streamLen !== 'number') return false
+    return m.streamLen < full.length
   }
 
   return (
@@ -2685,6 +2719,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           ) : (
                             <div className="home-chat-assistant-body whitespace-pre-wrap">
                               {displayAssistantText(m)}
+                              {assistantRevealCursor(m) ? (
+                                <span
+                                  className="ml-0.5 inline-block w-2 animate-pulse border-l-2 border-violet-300/90 align-text-bottom text-transparent"
+                                  aria-hidden
+                                >
+                                  |
+                                </span>
+                              ) : null}
                             </div>
                           )}
                           {m.images?.length ? (
