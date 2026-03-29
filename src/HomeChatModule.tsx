@@ -2162,7 +2162,53 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     onRemove={removePending}
                     onRetry={retryPending}
                   />
-                  <div className="flex items-end">
+                  <div className="flex items-stretch gap-2">
+                    <div className="relative flex shrink-0 flex-col justify-center self-stretch" ref={plusMenuRef}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPlusMenuOpen((v) => !v)
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
+                        title="上传"
+                      >
+                        <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
+                      </button>
+                      {plusMenuOpen ? (
+                        <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                            onClick={() => {
+                              setPlusMenuOpen(false)
+                              uploadInputRef.current?.click()
+                            }}
+                          >
+                            从本地上传
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                            onClick={() => openAssetPicker('both')}
+                          >
+                            从资产库选择
+                          </button>
+                        </div>
+                      ) : null}
+                      <input
+                        ref={uploadInputRef}
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                        className="hidden"
+                        onChange={(e) => {
+                          void validateAndUploadFiles(e.target.files)
+                          e.target.value = ''
+                        }}
+                      />
+                    </div>
                     <textarea
                       ref={inputRef}
                       value={input}
@@ -2175,66 +2221,19 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       }}
                       placeholder={composerPlaceholder}
                       rows={1}
-                      className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
+                      className="home-chat-composer-textarea min-h-[2.75rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent py-2 pl-0 pr-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
                     />
                   </div>
 
-                  <div className="mt-2 flex items-center gap-2 pt-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <div className="relative shrink-0" ref={plusMenuRef}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setPlusMenuOpen((v) => !v)
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/[0.06] hover:text-violet-100 active:scale-95 disabled:opacity-45"
-                          title="上传"
-                        >
-                          <ImagePlus className="pointer-events-none h-[17px] w-[17px] stroke-[2]" />
-                        </button>
-                        {plusMenuOpen ? (
-                          <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
-                            <button
-                              type="button"
-                              className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                              onClick={() => {
-                                setPlusMenuOpen(false)
-                                uploadInputRef.current?.click()
-                              }}
-                            >
-                              从本地上传
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                              onClick={() => openAssetPicker('both')}
-                            >
-                              从资产库选择
-                            </button>
-                          </div>
-                        ) : null}
-                        <input
-                          ref={uploadInputRef}
-                          type="file"
-                          multiple
-                          accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                          className="hidden"
-                          onChange={(e) => {
-                            void validateAndUploadFiles(e.target.files)
-                            e.target.value = ''
-                          }}
-                        />
-                      </div>
-
+                  <div className="mt-2 flex items-center gap-2 border-t border-white/[0.06] pt-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-0">
                       <button
                         type="button"
                         onClick={() => {
                           setPlusMenuOpen(false)
                           setParamsOpen((v) => !v)
                         }}
-                        className={`inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs transition ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs transition ${
                           paramsOpen
                             ? 'bg-violet-500/20 text-violet-100'
                             : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
@@ -2246,7 +2245,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       </button>
 
                       <div className="min-w-0 flex-1 overflow-x-auto">
-                        <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
+                        <div className="flex min-w-max items-center gap-1.5 pr-0 text-[11px] text-white/65">
                           <span>比例</span>
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
@@ -2707,26 +2706,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               onRemove={removePending}
               onRetry={retryPending}
             />
-            <div className="flex items-end">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (canSend) void handleSend()
-                  }
-                }}
-                placeholder={composerPlaceholder}
-                rows={1}
-                className="home-chat-composer-textarea min-h-[2.625rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
-              />
-            </div>
-
-            <div className="mt-2 flex items-center gap-2 pt-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-              <div className="relative shrink-0" ref={plusMenuRef}>
+            <div className="flex items-stretch gap-2">
+              <div className="relative flex shrink-0 flex-col justify-center self-stretch" ref={plusMenuRef}>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -2734,10 +2715,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     setPlusMenuOpen((v) => !v)
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition hover:bg-white/[0.06] hover:text-violet-100 active:scale-95 disabled:opacity-45"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
                   title="上传"
                 >
-                  <ImagePlus className="pointer-events-none h-[17px] w-[17px] stroke-[2]" />
+                  <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
                 </button>
                 {plusMenuOpen ? (
                   <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
@@ -2772,51 +2753,68 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   }}
                 />
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPlusMenuOpen(false)
-                  setParamsOpen((v) => !v)
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (canSend) void handleSend()
+                  }
                 }}
-                className={`inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs transition ${
-                  paramsOpen
-                    ? 'bg-violet-500/20 text-violet-100'
-                    : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
-                }`}
-                title="高级设置"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                高级
-              </button>
+                placeholder={composerPlaceholder}
+                rows={1}
+                className="home-chat-composer-textarea min-h-[2.75rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent py-2 pl-0 pr-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
+              />
+            </div>
 
-              <div className="min-w-0 flex-1 overflow-x-auto">
-                <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
-                  <span>比例</span>
-                  <select
-                    className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
-                    value={active?.params.aspectRatio || '3:4'}
-                    onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
-                  >
-                    <option value="1:1">1:1</option>
-                    <option value="3:4">3:4</option>
-                    <option value="9:16">9:16</option>
-                  </select>
-                  <span className="text-white/25">·</span>
-                  <span>张数</span>
-                  <select
-                    className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
-                    value={active?.params.imageCount ?? 2}
-                    onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
-                  >
-                    <option value={1}>1</option>
-                    <option value={2}>2</option>
-                    <option value={4}>4</option>
-                  </select>
-                  <span className="text-white/25">·</span>
-                  <span>{active?.params.subjectLock === 'high' ? '高保真' : '标准保真'}</span>
+            <div className="mt-2 flex items-center gap-2 border-t border-white/[0.06] pt-2">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlusMenuOpen(false)
+                    setParamsOpen((v) => !v)
+                  }}
+                  className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs transition ${
+                    paramsOpen
+                      ? 'bg-violet-500/20 text-violet-100'
+                      : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
+                  }`}
+                  title="高级设置"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  高级
+                </button>
+
+                <div className="min-w-0 flex-1 overflow-x-auto">
+                  <div className="flex min-w-max items-center gap-1.5 pr-0 text-[11px] text-white/65">
+                    <span>比例</span>
+                    <select
+                      className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                      value={active?.params.aspectRatio || '3:4'}
+                      onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
+                    >
+                      <option value="1:1">1:1</option>
+                      <option value="3:4">3:4</option>
+                      <option value="9:16">9:16</option>
+                    </select>
+                    <span className="text-white/25">·</span>
+                    <span>张数</span>
+                    <select
+                      className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                      value={active?.params.imageCount ?? 2}
+                      onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={4}>4</option>
+                    </select>
+                    <span className="text-white/25">·</span>
+                    <span>{active?.params.subjectLock === 'high' ? '高保真' : '标准保真'}</span>
+                  </div>
                 </div>
-              </div>
               </div>
               <button
                 type="button"
