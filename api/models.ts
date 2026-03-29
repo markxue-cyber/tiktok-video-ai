@@ -1,11 +1,25 @@
+import { normalizeGatewayId, resolveAggregateGateway } from './_aggregateGateway.js'
+
 // Vercel Serverless Function - Proxy: list available models (OpenAI-compatible)
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
   try {
-    const apiKey = process.env.XIAO_DOU_BAO_API_KEY
-    const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
-    if (!apiKey) return res.status(500).json({ success: false, error: 'API Key未配置' })
+    const q = (req.query?.gateway || req.query?.provider || '') as string
+    const gw = resolveAggregateGateway(normalizeGatewayId(q || 'xiaodoubao'))
+    const apiKey = gw.apiKey
+    const baseUrl = gw.baseUrl
+    if (!apiKey) {
+      return res.status(200).json({
+        success: false,
+        error:
+          gw.id === 'siliconflow'
+            ? '硅基流动未配置：请设置环境变量 SILICONFLOW_API_KEY'
+            : '小豆包未配置：请设置环境变量 XIAO_DOU_BAO_API_KEY',
+        code: 'API_KEY_MISSING',
+        gateway: gw.id,
+      })
+    }
 
     const url = baseUrl.replace(/\/$/, '') + '/models'
     const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } })

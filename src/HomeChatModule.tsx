@@ -169,6 +169,8 @@ export type HomeChatSession = {
     refinementIntent?: 'auto' | 'iterative' | 'fresh'
     /** 出图模型 id（与聚合 API / model_controls 一致） */
     imageModel: string
+    /** 聚合服务商：小豆包 / 硅基流动 */
+    gatewayProvider: 'xiaodoubao' | 'siliconflow'
   }
 }
 
@@ -270,6 +272,7 @@ const defaultParams = (): HomeChatSession['params'] => ({
   negativePrompt: true,
   refinementIntent: 'auto',
   imageModel: 'nano-banana-2',
+  gatewayProvider: 'xiaodoubao',
 })
 
 function newSession(): HomeChatSession {
@@ -673,16 +676,24 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   }, [activeId])
 
   /**
-   * 出图模型下拉：仅展示当前 XIAO_DOU_BAO 网关 /models 返回、且判定为图模的 id（与账号权限一致）。
-   * model_controls 中 enabled=false 的剔除（显式下架）；不在列表中的网关模型仍展示。
-   * 登录用户叠 model-availability 不可用项。无可用项时兜底 nano-banana-2 并提示。
+   * 出图模型下拉：按所选服务商请求 /api/models?gateway= ，展示网关返回的图模 id。
+   * model_controls 中 enabled=false 的剔除；登录用户叠 model-availability 不可用项。
    */
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setImageModelListLoading(true)
       try {
-      const fallback = [{ id: 'nano-banana-2', label: 'Nano Banana 2（网关未返回图模时的兜底）' }]
+      const gw = active?.params.gatewayProvider || 'xiaodoubao'
+      const fallback =
+        gw === 'siliconflow'
+          ? [
+              {
+                id: 'black-forest-labs/FLUX.1-schnell',
+                label: 'FLUX.1-schnell（兜底示例，请以硅基控制台模型名为准）',
+              },
+            ]
+          : [{ id: 'nano-banana-2', label: 'Nano Banana 2（网关未返回图模时的兜底）' }]
       const unavailable: Record<string, string> = {}
       try {
         const token = localStorage.getItem('tikgen.accessToken') || ''
@@ -698,7 +709,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
       const apiIds: string[] = []
       try {
-        const resp = await fetch('/api/models')
+        const resp = await fetch(`/api/models?gateway=${encodeURIComponent(gw)}`)
         const text = await resp.text()
         const data = (() => {
           try {
@@ -780,7 +791,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [active?.params.gatewayProvider])
 
   useEffect(() => {
     if (showLanding) return
@@ -1222,6 +1233,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         negativePrompt: ep.negativePrompt,
         refinementIntent: ep.refinementIntent ?? 'auto',
         imageModel: ep.imageModel || 'nano-banana-2',
+        gatewayProvider: ep.gatewayProvider ?? 'xiaodoubao',
       }
 
       setBusyStage('analyze')
@@ -2057,6 +2069,21 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <div className="mt-2 p-1">
                       <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
                         <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
+                          <span className="shrink-0 whitespace-nowrap">服务商</span>
+                          <select
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                            value={active?.params.gatewayProvider ?? 'xiaodoubao'}
+                            onChange={(e) =>
+                              updateParams({
+                                gatewayProvider: e.target.value as 'xiaodoubao' | 'siliconflow',
+                              })
+                            }
+                          >
+                            <option value="xiaodoubao">小豆包</option>
+                            <option value="siliconflow">硅基流动</option>
+                          </select>
+                        </label>
+                        <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
                           <span className="shrink-0 whitespace-nowrap">出图模型</span>
                           <select
                             disabled={imageModelListLoading}
@@ -2547,6 +2574,21 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             {paramsOpen ? (
               <div className="mt-2 p-1">
                 <div className="grid max-h-[36vh] grid-cols-1 gap-2 overflow-y-auto pr-1 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                  <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
+                    <span className="shrink-0 whitespace-nowrap">服务商</span>
+                    <select
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
+                      value={active?.params.gatewayProvider ?? 'xiaodoubao'}
+                      onChange={(e) =>
+                        updateParams({
+                          gatewayProvider: e.target.value as 'xiaodoubao' | 'siliconflow',
+                        })
+                      }
+                    >
+                      <option value="xiaodoubao">小豆包</option>
+                      <option value="siliconflow">硅基流动</option>
+                    </select>
+                  </label>
                   <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
                     <span className="shrink-0 whitespace-nowrap">出图模型</span>
                     <select

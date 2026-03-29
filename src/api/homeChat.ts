@@ -83,6 +83,8 @@ export type HomeChatTurnPayload = {
     refinementIntent?: 'auto' | 'iterative' | 'fresh'
     /** OpenAI 兼容 images/generations 的 model id，须与后台 model_controls 中已启用的图像模型一致 */
     imageModel?: string
+    /** 聚合 API 服务商：xiaodoubao | siliconflow */
+    gatewayProvider?: string
   }
 }
 

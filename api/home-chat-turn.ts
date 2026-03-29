@@ -6,6 +6,7 @@ import { requireUser } from './_supabase.js'
 import { checkAndConsume, finalizeConsumption } from './_billing.js'
 import { insertQueuedHomeChatImageJob, patchHomeChatImageJob } from './_homeChatImageJob.js'
 import { handleHomeChatGenStatus } from './_homeChatGenStatusRoute.js'
+import { normalizeGatewayId, resolveAggregateGateway, type AggregateGatewayId } from './_aggregateGateway.js'
 
 const BLOCKED_VIDEO_EDIT_MSG =
   '当前对话模块暂不支持视频生成、剪辑、二次创作类功能，仅支持视频内容分析、脚本拆解、拍摄手法解读、台词提取等需求，请您调整提问内容后重试'
@@ -210,13 +211,19 @@ function extractAssistantText(data: any): string {
   return typeof t === 'string' ? t.trim() : ''
 }
 
-async function gpt4oJson<T>(apiKey: string, baseUrl: string, system: string, user: string): Promise<T> {
+async function gpt4oJson<T>(
+  apiKey: string,
+  baseUrl: string,
+  system: string,
+  user: string,
+  chatModel: string,
+): Promise<T> {
   const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
   const resp = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o',
+      model: chatModel,
       temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [
@@ -244,14 +251,15 @@ async function gpt4oChat(
   apiKey: string,
   baseUrl: string,
   messages: ChatMessage[],
-  temperature = 0.35,
+  temperature: number,
+  chatModel: string,
 ): Promise<string> {
   const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
   const resp = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o',
+      model: chatModel,
       temperature,
       messages,
     }),
@@ -273,14 +281,15 @@ async function* streamGpt4oChat(
   apiKey: string,
   baseUrl: string,
   messages: ChatMessage[],
-  temperature = 0.35,
+  temperature: number,
+  chatModel: string,
 ): AsyncGenerator<string, void, unknown> {
   const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
   const resp = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: process.env.XIAO_DOU_BAO_GPT_MODEL || 'gpt-4o',
+      model: chatModel,
       temperature,
       messages,
       stream: true,
@@ -528,6 +537,7 @@ async function visionSellableProductRef(
   apiKey: string,
   baseUrl: string,
   imageUrl: string,
+  chatModel: string,
 ): Promise<boolean | null> {
   try {
     const multimodal: ChatMessage[] = [
@@ -544,7 +554,7 @@ async function visionSellableProductRef(
         ],
       },
     ]
-    const txt = await gpt4oChat(apiKey, baseUrl, multimodal, 0.05)
+    const txt = await gpt4oChat(apiKey, baseUrl, multimodal, 0.05, chatModel)
     const m = txt.match(/\{[\s\S]*\}/)
     const parsed = JSON.parse(m?.[0] || '{}')
     if (typeof parsed?.sellable === 'boolean') return parsed.sellable
@@ -942,6 +952,7 @@ async function buildOpsPack(
   baseUrl: string,
   analysisText: string,
   userMessage: string,
+  chatModel: string,
 ): Promise<{ titles: string[]; sellingPoints: string[]; detailLead: string }> {
   try {
     const j = await gpt4oJson<{
@@ -957,6 +968,7 @@ async function buildOpsPack(
         '要求：简洁、可商用、避免夸张违规词。',
       ].join('\n'),
       JSON.stringify({ analysisText: analysisText.slice(0, 2200), userMessage: userMessage.slice(0, 800) }),
+      chatModel,
     )
     const titles = (Array.isArray(j.titles) ? j.titles : [])
       .map((x) => String(x || '').trim())
@@ -991,6 +1003,7 @@ async function runLightQc(
   apiKey: string,
   baseUrl: string,
   imageUrl: string,
+  chatModel: string,
 ): Promise<QcResult> {
   try {
     const multimodal: ChatMessage[] = [
@@ -1006,7 +1019,7 @@ async function runLightQc(
         ],
       },
     ]
-    const txt = await gpt4oChat(apiKey, baseUrl, multimodal, 0.1)
+    const txt = await gpt4oChat(apiKey, baseUrl, multimodal, 0.1, chatModel)
     const m = txt.match(/\{[\s\S]*\}/)
     const parsed = JSON.parse(m?.[0] || '{}')
     const score = Math.max(0, Math.min(100, Math.floor(Number(parsed?.score) || 0)))
@@ -1036,14 +1049,17 @@ type ParsedHomeParams = {
   refinementIntent: RefinementIntentParam
   /** OpenAI 兼容出图 model id，由首页高级参数传入 */
   imageModel: string
+  /** 聚合 API 服务商（与密钥环境变量对应） */
+  gatewayProvider: AggregateGatewayId
 }
 
 const DEFAULT_HOME_IMAGE_MODEL = 'nano-banana-2'
 
 function sanitizeHomeImageModel(raw: unknown): string {
   const s = String(raw ?? '').trim()
-  if (!s || s.length > 120) return DEFAULT_HOME_IMAGE_MODEL
-  if (!/^[a-zA-Z0-9._-]+$/.test(s)) return DEFAULT_HOME_IMAGE_MODEL
+  if (!s || s.length > 200) return DEFAULT_HOME_IMAGE_MODEL
+  // 硅基等厂商常用 org/model 形式，允许 /
+  if (!/^[a-zA-Z0-9._\/-]+$/.test(s)) return DEFAULT_HOME_IMAGE_MODEL
   return s
 }
 
@@ -1068,6 +1084,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
   const refinementIntent: RefinementIntentParam =
     ri === 'iterative' || ri === 'fresh' || ri === 'auto' ? ri : 'auto'
   const imageModel = sanitizeHomeImageModel(params.imageModel)
+  const gatewayProvider = normalizeGatewayId(params.gatewayProvider)
   return {
     aspectRatio,
     resolution,
@@ -1084,6 +1101,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
     imageCount,
     refinementIntent,
     imageModel,
+    gatewayProvider,
   }
 }
 
@@ -1112,6 +1130,8 @@ type ImageGenCtx = {
   newSubjectMediaThisTurn?: boolean
   /** 前端分支出图的第二轮请求：省略轻量 QC、提示词优化限时，降低 Vercel 120s 超时风险 */
   generateOnlyHop?: boolean
+  /** 随 gatewayProvider 解析的 Chat Completions 模型 */
+  chatModel: string
 } & ParsedHomeParams
 
 async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> {
@@ -1151,6 +1171,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     newSubjectMediaThisTurn,
     generateOnlyHop,
     imageModel,
+    chatModel,
   } = ctx
 
   const genModel = String(imageModel || '').trim() || DEFAULT_HOME_IMAGE_MODEL
@@ -1173,7 +1194,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     refinementIntent === 'iterative' && !!clientRef && mediaType === 'image'
   if (nanoRefEarly && !skipSellableVision) {
     const ok = await Promise.race([
-      visionSellableProductRef(apiKey, baseUrl, nanoRefEarly),
+      visionSellableProductRef(apiKey, baseUrl, nanoRefEarly, chatModel),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 55_000)),
     ])
     if (ok === false) {
@@ -1210,18 +1231,21 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
         refinementMode === 'iterative'
           ? '【上一版微调】以参考图（上一张成图）的整体场景、人物/环境/构图为准，仅落实用户点名的改动；禁止在无用户要求时改成纯白底静物棚拍、禁止擅自去掉人物或整体换景。仍须合规、无侵权、无未授权真实人像。'
           : '优先商业可用图：白底主图、场景图、氛围种草图、信息流图；画面干净高级、无多余文字、无侵权元素。'
-      const opPromise = gpt4oJson<{ optimized?: string }>(apiKey, baseUrl, [
-        `你是电商图片生成提示词工程师，将用户需求改写为适配 ${genModel} 的高质量提示词。`,
-        ...modeRules,
-        '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
-        '这是执行类出图任务：禁止只输出拍摄/修图教程文字，提示词必须能直接用于生成成品图。',
-        commerceBias,
-        `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
-        localeEn
-          ? 'User locale is English: put English visual keywords first, keep necessary Chinese only if user wrote Chinese.'
-          : '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
-        '输出 JSON：{"optimized":"..."}',
-      ].join('\n'),
+      const opPromise = gpt4oJson<{ optimized?: string }>(
+        apiKey,
+        baseUrl,
+        [
+          `你是电商图片生成提示词工程师，将用户需求改写为适配 ${genModel} 的高质量提示词。`,
+          ...modeRules,
+          '若输入中含 executionDirectives 非空，必须完整并入 optimized，不得忽略。',
+          '这是执行类出图任务：禁止只输出拍摄/修图教程文字，提示词必须能直接用于生成成品图。',
+          commerceBias,
+          `比例优先使用 ${aspectRatio}（已做平台适配，常用 1:1 / 3:4 / 9:16）。`,
+          localeEn
+            ? 'User locale is English: put English visual keywords first, keep necessary Chinese only if user wrote Chinese.'
+            : '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
+          '输出 JSON：{"optimized":"..."}',
+        ].join('\n'),
         JSON.stringify({
           baseAnalysis: analysisText.slice(0, 2000),
           sessionProductSummary: String(contextSummary || '').slice(0, 1200) || undefined,
@@ -1232,6 +1256,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           refWeight,
           refinementMode,
         }),
+        chatModel,
       )
       const op = (await Promise.race([
         opPromise,
@@ -1383,7 +1408,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
         let qc: QcResult = { score: 80, issues: [] }
         const qcBudgetOk = Date.now() - startedAt < 72_000
         if (qcEnabled && !generateOnlyHop && images.length < 1 && qcBudgetOk) {
-          qc = await runLightQc(apiKey, baseUrl, r.imageUrl)
+          qc = await runLightQc(apiKey, baseUrl, r.imageUrl, chatModel)
         }
         images.push({
           url: r.imageUrl,
@@ -1448,8 +1473,6 @@ async function executeHomeChatImageJobInBackground(opts: {
   authHdr: string
   idempotencyKey: string
   startedAt: number
-  apiKey: string
-  baseUrl: string
   supabaseUrl: string
   mediaType: MediaType
   mediaUrl: string
@@ -1471,8 +1494,6 @@ async function executeHomeChatImageJobInBackground(opts: {
     authHdr,
     idempotencyKey,
     startedAt,
-    apiKey,
-    baseUrl,
     supabaseUrl,
     mediaType,
     mediaUrl,
@@ -1488,6 +1509,26 @@ async function executeHomeChatImageJobInBackground(opts: {
     newSubjectMediaThisTurn,
     parsedGen,
   } = opts
+
+  const gw = resolveAggregateGateway(parsedGen.gatewayProvider)
+  if (!gw.apiKey) {
+    const msg =
+      gw.id === 'siliconflow'
+        ? '未配置 SILICONFLOW_API_KEY'
+        : '未配置 XIAO_DOU_BAO_API_KEY'
+    try {
+      await patchHomeChatImageJob(jobId, userId, {
+        status: 'failed',
+        raw: { source: 'home_chat_async', phase: 'gateway', error: msg },
+      })
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+  const apiKey = gw.apiKey
+  const baseUrl = gw.baseUrl
+  const chatModel = gw.chatModel
 
   try {
     await patchHomeChatImageJob(jobId, userId, { status: 'running' })
@@ -1533,6 +1574,7 @@ async function executeHomeChatImageJobInBackground(opts: {
       userId,
       apiKey,
       baseUrl,
+      chatModel,
       supabaseUrl,
       mediaType,
       mediaUrl,
@@ -1578,8 +1620,6 @@ export default async function handler(req: any, res: any) {
 
   try {
     const startedAt = Date.now()
-    const apiKey = process.env.XIAO_DOU_BAO_API_KEY
-    const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const supabaseUrl = process.env.SUPABASE_URL || ''
 
     const { user } = await requireUser(req)
@@ -1603,6 +1643,10 @@ export default async function handler(req: any, res: any) {
       .normalize('NFC')
     const history = (Array.isArray(body.history) ? body.history : []) as ChatTurn[]
     const params = body.params || {}
+    const gw = resolveAggregateGateway(params.gatewayProvider)
+    const apiKey = gw.apiKey
+    const baseUrl = gw.baseUrl
+    const chatModel = gw.chatModel
     const generateMode = String(body.generateMode || params.generateMode || 'final') as GenerateMode
     const previewToken = String(body.previewToken || params.previewToken || '').trim()
     const refImageUrlIn = String(body.refImageUrl || '').trim()
@@ -1628,6 +1672,13 @@ export default async function handler(req: any, res: any) {
     }
 
     if (!apiKey) {
+      if (gw.id === 'siliconflow') {
+        return res.status(200).json({
+          success: false,
+          error: '未配置硅基流动：请在服务端设置环境变量 SILICONFLOW_API_KEY（及可选 SILICONFLOW_AI_BASE_URL、SILICONFLOW_CHAT_MODEL）',
+          code: 'SILICONFLOW_NOT_CONFIGURED',
+        })
+      }
       return res.status(200).json({
         success: true,
         kind: 'mock',
@@ -1667,8 +1718,6 @@ export default async function handler(req: any, res: any) {
               authHdr,
               idempotencyKey,
               startedAt: Date.now(),
-              apiKey,
-              baseUrl,
               supabaseUrl,
               mediaType,
               mediaUrl,
@@ -1698,6 +1747,7 @@ export default async function handler(req: any, res: any) {
         userId,
         apiKey,
         baseUrl,
+        chatModel,
         supabaseUrl,
         mediaType,
         mediaUrl,
@@ -1742,7 +1792,7 @@ export default async function handler(req: any, res: any) {
 
     let intent: IntentJson
     try {
-      intent = await gpt4oJson<IntentJson>(apiKey, baseUrl, intentSystem, intentUser)
+      intent = await gpt4oJson<IntentJson>(apiKey, baseUrl, intentSystem, intentUser, chatModel)
     } catch (e: any) {
       return res.status(200).json({ success: false, error: e?.message || '意图识别失败', code: 'INTENT_FAILED' })
     }
@@ -1810,14 +1860,14 @@ export default async function handler(req: any, res: any) {
           res.setHeader('X-Accel-Buffering', 'no')
 
           analysisText = ''
-          for await (const piece of streamGpt4oChat(apiKey, baseUrl, messages, 0.35)) {
+          for await (const piece of streamGpt4oChat(apiKey, baseUrl, messages, 0.35, chatModel)) {
             analysisText += piece
             res.write(`data: ${JSON.stringify({ type: 'delta', text: piece })}\n\n`)
           }
 
           // 已要走分支出图时，opsPack 易把「修图教程」包装成标题卖点，干扰用户；仅纯分析轮再生成 opsPack
           if (!needsImageGen) {
-            opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
+            opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage, chatModel)
             res.write(`data: ${JSON.stringify({ type: 'ops', opsPack })}\n\n`)
           }
 
@@ -1876,9 +1926,9 @@ export default async function handler(req: any, res: any) {
           newSubjectMediaThisTurn,
           needsImageGen,
         })
-        analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35)
+        analysisText = await gpt4oChat(apiKey, baseUrl, messages, 0.35, chatModel)
         if (!needsImageGen) {
-          opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage)
+          opsPack = await buildOpsPack(apiKey, baseUrl, analysisText, userMessage, chatModel)
         }
       } catch (e: any) {
         return res.status(200).json({ success: false, error: e?.message || '分析失败', code: 'ANALYSIS_FAILED' })
@@ -1906,6 +1956,7 @@ export default async function handler(req: any, res: any) {
         userId,
         apiKey,
         baseUrl,
+        chatModel,
         supabaseUrl,
         mediaType,
         mediaUrl,
