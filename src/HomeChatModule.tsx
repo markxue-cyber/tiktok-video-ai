@@ -1033,9 +1033,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               ? bytedanceHomeImageLabelFromServer
               : '')
           if (!name) {
-            if (gw === 'bytedance' && /^ep-m-/i.test(id)) name = '豆包·图像生成（推理接入点）'
-            else if (gw === 'bytedance' && /^ep-/i.test(id)) name = '方舟推理接入点'
-            else name = id
+            if (gw === 'bytedance' && /^ep-m-/i.test(id)) {
+              const tail = id.length > 16 ? `…${id.slice(-12)}` : id
+              name = `图像生成 · ${tail}`
+            } else if (gw === 'bytedance' && /^ep-/i.test(id)) {
+              name = `方舟接入点 · ${id.length > 20 ? `…${id.slice(-14)}` : id}`
+            } else name = id
           }
           let base = recommendedImage.has(id) ? `${name}（推荐）` : name
           if (gw === 'bytedance' && /^ep-/i.test(id) && !/^ep-m-/i.test(id)) {

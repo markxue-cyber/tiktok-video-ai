@@ -1,5 +1,28 @@
 import { normalizeGatewayId, resolveAggregateGateway } from './_aggregateGateway.js'
 
+function modelsListRows(parsed: any): any[] {
+  const inner = parsed?.data
+  if (Array.isArray(inner?.data)) return inner.data
+  if (Array.isArray(inner)) return inner
+  if (Array.isArray(parsed?.data)) return parsed.data
+  return []
+}
+
+/** 方舟 /models 单条：尽量取出控制台可见的模型名（非裸 id） */
+function arkModelRowDisplayName(m: any): string {
+  if (!m || typeof m !== 'object') return ''
+  const id = String(m.id || '').trim()
+  const meta = m.metadata && typeof m.metadata === 'object' ? (m.metadata as { name?: string }).name : ''
+  const candidates = [m.name, m.model_name, m.display_name, m.title, meta]
+  for (const c of candidates) {
+    const s = String(c ?? '').trim()
+    if (s && s !== id && s.length <= 120) return s
+  }
+  const ob = String(m.owned_by || '').trim()
+  if (ob && ob !== id && ob.length < 80 && !/^organization/i.test(ob)) return ob
+  return ''
+}
+
 // Vercel Serverless Function - Proxy: list available models (OpenAI-compatible)
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ success: false, error: 'Method not allowed' })
@@ -40,15 +63,27 @@ export default async function handler(req, res) {
       gw.id === 'bytedance' && gw.defaultImageModel && /^ep-/i.test(String(gw.defaultImageModel).trim())
         ? String(gw.defaultImageModel).trim()
         : undefined
+
+    /** 出图下拉里展示名：优先 BYTEDANCE_ARK_IMAGE_MODEL_LABEL；否则在 /models 里按接入点 id 反查名称（如 Doubao-Seedream-4.0） */
+    let arkImageLabel: string | undefined
+    if (gw.id === 'bytedance' && arkImg) {
+      const envLabel = String(gw.defaultImageModelLabel || '').trim()
+      if (envLabel) {
+        arkImageLabel = envLabel
+      } else {
+        const hit = modelsListRows(data).find((x: any) => String(x?.id || '').trim() === arkImg)
+        const fromList = hit ? arkModelRowDisplayName(hit) : ''
+        arkImageLabel = fromList || undefined
+      }
+    }
+
     return res.status(200).json({
       success: true,
       data,
       gatewayDefaults: {
         chatModel: gw.chatModel,
         ...(arkImg ? { imageModel: arkImg } : {}),
-        ...(gw.id === 'bytedance' && gw.defaultImageModelLabel
-          ? { imageModelLabel: gw.defaultImageModelLabel }
-          : {}),
+        ...(arkImageLabel ? { imageModelLabel: arkImageLabel } : {}),
       },
     })
   } catch (e: any) {
