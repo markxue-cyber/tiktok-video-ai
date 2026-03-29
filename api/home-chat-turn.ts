@@ -374,8 +374,17 @@ async function* streamGpt4oChat(
         if (!payload || payload === '[DONE]') continue
         try {
           const json = JSON.parse(payload)
-          const piece = json?.choices?.[0]?.delta?.content
-          if (typeof piece === 'string' && piece) yield piece
+          const d = json?.choices?.[0]?.delta
+          if (!d || typeof d !== 'object') continue
+          let piece = ''
+          if (typeof d.content === 'string' && d.content) piece = d.content
+          else if (Array.isArray(d.content)) {
+            for (const p of d.content) {
+              if (p?.type === 'text' && typeof p.text === 'string') piece += p.text
+            }
+          }
+          if (!piece && typeof d.reasoning_content === 'string' && d.reasoning_content) piece = d.reasoning_content
+          if (piece) yield piece
         } catch {
           // 单行非 JSON 时忽略
         }
@@ -1971,7 +1980,9 @@ export default async function handler(req: any, res: any) {
     let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
     const streamAnalysis = body.streamAnalysis === true
     /** 单次请求内同时出图（非 split）仍走整包 JSON，避免与出图响应混流 */
-    const useStreamForAnalysis = streamAnalysis && !(needsImageGen && !splitPipeline)
+    /** 硅基流式经 CDN/网关时易出现尾包丢失，前端只收到 delta 无 done →「流式响应未完整」，故强制整包分析 */
+    const useStreamForAnalysis =
+      streamAnalysis && !(needsImageGen && !splitPipeline) && !isSiliconFlowBaseUrl(baseUrl)
 
     if (needsAnalysis) {
       if (useStreamForAnalysis) {
