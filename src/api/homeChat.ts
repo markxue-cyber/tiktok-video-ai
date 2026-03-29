@@ -237,7 +237,8 @@ function parseSseBuffer(
   buffer: string,
   handlers: StreamHandlers,
 ): { buffer: string; done: HomeChatTurnResult | null; error: Error | null } {
-  const parts = buffer.split('\n\n')
+  const normalized = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const parts = normalized.split('\n\n')
   const rest = parts.pop() ?? ''
   let done: HomeChatTurnResult | null = null
   let error: Error | null = null
@@ -281,6 +282,11 @@ export async function homeChatTurnStreamAPI(
 
   const callOnce = async (t: string): Promise<HomeChatTurnResult> => {
     const { onDelta, onOps, signal } = init || {}
+    let deltaAccum = ''
+    const wrapDelta = (chunk: string) => {
+      if (chunk) deltaAccum += chunk
+      onDelta?.(chunk)
+    }
     const resp = await fetch('/api/home-chat-turn', {
       method: 'POST',
       headers: {
@@ -308,15 +314,25 @@ export async function homeChatTurnStreamAPI(
       const { done, value } = await reader.read()
       if (done) break
       buf += decoder.decode(value, { stream: true })
-      const parsed = parseSseBuffer(buf, { onDelta, onOps })
+      const parsed = parseSseBuffer(buf, { onDelta: wrapDelta, onOps })
       buf = parsed.buffer
       if (parsed.error) throw parsed.error
       if (parsed.done) result = parsed.done
     }
-    const tail = parseSseBuffer(buf + '\n\n', { onDelta, onOps })
+    const tail = parseSseBuffer(buf + '\n\n', { onDelta: wrapDelta, onOps })
     if (tail.error) throw tail.error
     if (tail.done) result = tail.done
 
+    const recovered = deltaAccum.trim()
+    if (!result && recovered) {
+      return {
+        success: true,
+        kind: 'analysis',
+        analysisText: recovered,
+        nextQuestion: '若分析似乎被截断，可点击重试，或换较短/较低清预览后再试。',
+        quickActions: ['重试', '补充一句需求'],
+      }
+    }
     if (!result) return { success: false, error: '流式响应未完整' }
     return result
   }

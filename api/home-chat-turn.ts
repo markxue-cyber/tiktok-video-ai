@@ -79,6 +79,15 @@ function isOpenAiCompatGatewayNeedingHomeChatWorkarounds(baseUrl: string): boole
   return u.includes('siliconflow') || u.includes('volces.com') || u.includes('volcengine.com')
 }
 
+/** 这些网关走 SSE 分析时易出现尾包丢失（前端只收到 delta、收不到 done）；改走整包 gpt4oChat */
+function isHomeChatSseAnalysisUnreliableGateway(baseUrl: string): boolean {
+  const u = String(baseUrl || '').toLowerCase()
+  return (
+    isOpenAiCompatGatewayNeedingHomeChatWorkarounds(u) ||
+    u.includes('linkapi.org')
+  )
+}
+
 function llmUpstreamAuthHint(baseUrl: string, status: number): string {
   if (status !== 401 && status !== 403) return ''
   const u = String(baseUrl || '').toLowerCase()
@@ -97,8 +106,11 @@ function localIntentFallback(mediaType: MediaType, userMessage: string): IntentJ
   const io = inferHomeIntentOverride(userMessage, mediaType)
   let blockedVideoEdit = false
   if (mediaType === 'video') {
+    // 「生成视频脚本」是文案/结构产出，不等于生成成片；勿用「生成视频」子串误伤
     if (
-      /(剪辑成片|导出成片|加字幕导出|生成视频|做一条视频|ai\s*视频|视频特效|时间线|转场合成)/i.test(raw)
+      /(剪辑成片|导出成片|加字幕导出|生成视频(?!脚本)|做一条视频|ai\s*视频|视频特效|时间线|转场合成)/i.test(
+        raw,
+      )
     ) {
       blockedVideoEdit = true
     }
@@ -693,6 +705,29 @@ function inferHomeIntentOverride(
   }
 
   return {}
+}
+
+/**
+ * 模型易把「脚本/台词/拉片」类读解需求误判为 blockedVideoEdit（成片剪辑）。
+ * 命中下列语义时强制放行分析，与提示词中的「仅分析脚本」一致。
+ */
+function isVideoContentAnalysisNotEditingIntent(userMessage: string): boolean {
+  const s = stripHomeParamLine(String(userMessage || '')).trim()
+  if (!s) return false
+  if (
+    /(剪辑成片|导出成片|加字幕导出成片|做一条完整视频|渲一段视频|导出\s*mp4|时间线剪辑|转场合成成片)/i.test(s)
+  ) {
+    return false
+  }
+  return (
+    /(分析|解读|拆解|提取|总结|梳理|讲讲|说说|看一下|看下|点评|评价|讲评|帮忙看|帮看|看看).{0,40}(视频脚本|脚本|台词|分镜|镜头|拍摄|手法|节奏|结构|内容)/i.test(
+      s,
+    ) ||
+    /(视频脚本|台词|分镜|镜头语言|拉片|脚本结构).{0,28}(分析|解读|拆解|提取|怎么|如何|好不好|评价|讲讲)/i.test(
+      s,
+    ) ||
+    (/^(帮我)?(分析|拆解|解读|提取)/i.test(s) && /(脚本|台词|分镜|镜头)/i.test(s))
+  )
 }
 
 type RefinementIntentParam = 'auto' | 'iterative' | 'fresh'
@@ -1997,8 +2032,8 @@ export default async function handler(req: any, res: any) {
     const intentSystem = [
       '你是首页「电商商品图」模块的意图分类器。根据用户上传媒体与用户问题输出 JSON。',
       '字段：blockedVideoEdit(boolean), needsAnalysis(boolean), needsImageGen(boolean), imageCount(number 1-4)。',
-      'blockedVideoEdit=true：用户主要诉求是「生成视频、剪辑视频、拼接、转场、加字幕导出成片、改视频画面、视频特效合成」等视频生成/编辑类动作。',
-      'blockedVideoEdit=false：纯分析、或「根据视频/参考生成商品图、改图、换背景」等允许组合。',
+      'blockedVideoEdit=true：用户主要诉求是「生成可播放的视频成片、剪辑时间线、拼接转场、加字幕导出成片、改视频画面、视频特效合成」等；不含「只想要脚本文案/大纲」类。',
+      'blockedVideoEdit=false：纯分析/拆解/提取，包括「分析视频脚本、拆解脚本、拉片、台词提取、拍摄手法解读」等；以及「写视频脚本/脚本文案」（文本产出，非渲染成片）；或「根据视频出静态商品图、改图」。',
       '【执行类·必须 needsImageGen=true】用户要产出图片/修改图片，包括：界面快捷指令（换场景、更亮一点、改成白底主图、改成信息流风格、生成同款风格等）、以及含「生成、出图、做图、改成、换、加、修改、制作、去除、白底、主图、同款、确认高清」等动作且目标是得到新图的诉求。',
       '【咨询类·needsImageGen=false】用户只要方法说明/教程/技巧，明确不要求出图，例如仅问「怎么拍、如何布光、为什么模糊」且无任何出图动作词。',
       '若执行类与咨询类同时出现，以执行类为准（必须先满足出图）。',
@@ -2029,6 +2064,10 @@ export default async function handler(req: any, res: any) {
         })
       }
       intent = localIntentFallback(mediaType, userMessage)
+    }
+
+    if (mediaType === 'video' && isVideoContentAnalysisNotEditingIntent(userMessage)) {
+      intent = { ...intent, blockedVideoEdit: false }
     }
 
     if (intent.blockedVideoEdit) {
@@ -2075,9 +2114,11 @@ export default async function handler(req: any, res: any) {
     let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
     const streamAnalysis = body.streamAnalysis === true
     /** 单次请求内同时出图（非 split）仍走整包 JSON，避免与出图响应混流 */
-    /** 硅基 / 方舟等流式经 CDN/网关时易出现尾包丢失，前端只收到 delta 无 done →「流式响应未完整」，故强制整包分析 */
+    /** 硅基 / 方舟 / 小豆包(linkapi) 等流式经 CDN/网关时易出现尾包丢失，前端只收到 delta 无 done →「流式响应未完整」，故对这些 baseUrl 强制整包分析 */
     const useStreamForAnalysis =
-      streamAnalysis && !(needsImageGen && !splitPipeline) && !isOpenAiCompatGatewayNeedingHomeChatWorkarounds(baseUrl)
+      streamAnalysis &&
+      !(needsImageGen && !splitPipeline) &&
+      !isHomeChatSseAnalysisUnreliableGateway(baseUrl)
 
     if (needsAnalysis) {
       if (useStreamForAnalysis) {

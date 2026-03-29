@@ -150,15 +150,29 @@ function isArkBareCatalogImageModelId(id: string): boolean {
   return /seedream|seededit|t2i|jimeng/i.test(s)
 }
 
-/** 方舟 GET /models 返回项里可用的展示名（字段名因版本略有差异） */
-function extractArkModelListDisplayName(m: { id?: string; [key: string]: unknown }): string {
+/** 与 api/models.ts 中 modelsListRows 一致，避免方舟返回 { data: { data: [...] } } 时下拉解析不到名称 */
+function modelsListRowsFromGatewayPayload(parsed: { data?: unknown } | null | undefined): unknown[] {
+  const inner = parsed?.data as { data?: unknown } | unknown[] | undefined
+  if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+    const nested = (inner as { data?: unknown }).data
+    if (Array.isArray(nested)) return nested
+  }
+  if (Array.isArray(inner)) return inner
+  if (Array.isArray(parsed?.data)) return parsed.data as unknown[]
+  return []
+}
+
+/** 方舟 GET /models 返回项里可用的展示名（与 api/models.ts arkModelRowDisplayName 对齐） */
+function extractArkModelListDisplayName(m: { id?: string; owned_by?: string; [key: string]: unknown }): string {
   const id = String(m?.id || '').trim()
   const meta = m.metadata as { name?: string } | undefined
   const candidates = [m.name, m.model_name, m.display_name, m.title, meta?.name]
   for (const c of candidates) {
     const s = String(c ?? '').trim()
-    if (s && s !== id) return s
+    if (s && s !== id && s.length <= 120) return s
   }
+  const ob = String(m?.owned_by ?? '').trim()
+  if (ob && ob !== id && ob.length < 80 && !/^organization/i.test(ob)) return ob
   return ''
 }
 
@@ -960,13 +974,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         const modelLabelById = new Map<string, string>()
         if (modelsJson?.success) {
           const root = modelsJson?.data
-          const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
+          const list = modelsListRowsFromGatewayPayload(root)
           for (const m of list) {
-            const id = String(m?.id || '').trim()
+            const row = m as { id?: string; [key: string]: unknown }
+            const id = String(row?.id || '').trim()
             if (!id) continue
-            const disp = extractArkModelListDisplayName(m as { id?: string; [key: string]: unknown })
+            const disp = extractArkModelListDisplayName(row)
             if (disp) modelLabelById.set(id, disp)
-            const { image: isImage, chat: isChat } = classifyModelForHomeDropdowns(m)
+            const { image: isImage, chat: isChat } = classifyModelForHomeDropdowns(row)
             if (isImage) imageIds.push(id)
             if (isChat) chatIds.push(id)
           }
