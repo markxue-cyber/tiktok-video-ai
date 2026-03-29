@@ -1,6 +1,8 @@
 // NOTE: avoid relying on @supabase/supabase-js at runtime.
 // We call Supabase Auth REST + PostgREST directly via fetch.
 
+import { ensureMonthlyCreditsForActivePaidPlan, PAID_SUBSCRIPTION_PLANS } from './_billing.js'
+
 const nowIso = () => new Date().toISOString()
 
 function sendJson(res: any, status: number, payload: any) {
@@ -121,11 +123,19 @@ export default async function handler(req, res) {
     } catch {
       ordJson = null
     }
-    const hasPaidProduct = Array.isArray(ordJson) && ordJson.length > 0
+    const hasPaidOrder = Array.isArray(ordJson) && ordJson.length > 0
+    const paidPlanActive =
+      active && sub?.plan_id != null && PAID_SUBSCRIPTION_PLANS.has(String(sub.plan_id))
+    const hasPaidProduct = hasPaidOrder || paidPlanActive
 
-    const creditsRaw = profile?.credits
-    const creditsNum = Number(creditsRaw)
-    const credits = Number.isFinite(creditsNum) ? Math.max(0, Math.floor(creditsNum)) : 0
+    let credits = 0
+    try {
+      credits = await ensureMonthlyCreditsForActivePaidPlan(userId, sub)
+    } catch {
+      const creditsRaw = profile?.credits
+      const creditsNum = Number(creditsRaw)
+      credits = Number.isFinite(creditsNum) ? Math.max(0, Math.floor(creditsNum)) : 0
+    }
 
     return sendJson(res, 200, {
       success: true,
@@ -138,7 +148,10 @@ export default async function handler(req, res) {
         credits,
       },
       subscription: safeSub,
+      /** 是否有过付费订单，或当前为 basic/pro/enterprise 且订阅有效（营销/权益文案用） */
       hasPaidProduct,
+      /** 当前订阅是否有效（含试用）：生图/视频能力门槛用 */
+      hasAppAccess: active,
     })
   } catch (e: any) {
     return sendJson(res, 200, { success: false, error: e?.message || '未登录' })

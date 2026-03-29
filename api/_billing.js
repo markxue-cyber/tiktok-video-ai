@@ -9,6 +9,10 @@ const PLAN_LIMITS = {
 export const CREDITS_PER_IMAGE = 4
 export const CREDITS_PER_VIDEO = 8
 
+/** 付费档每月发放积分（与 api/payments-webhook、package 文案一致） */
+export const PLAN_MONTHLY_CREDITS = { trial: 0, basic: 99, pro: 880, enterprise: 2850 }
+export const PAID_SUBSCRIPTION_PLANS = new Set(['basic', 'pro', 'enterprise'])
+
 function mustEnv(name) {
   const v = process.env[name]
   if (!v) throw new Error(`缺少环境变量 ${name}`)
@@ -174,6 +178,48 @@ export async function grantUserCredits(userId, amount) {
     const pj = await fetchJsonOrText(patchResp)
     throw new Error(pj?.message || '增加积分失败')
   }
+}
+
+/**
+ * 当前订阅周期内仅加一次月积分（依赖 DB 函数 grant_subscription_credits_once）。
+ * 与 webhook 共用，避免重复发放。
+ */
+export async function grantSubscriptionCreditsOnce(userId, periodStartIso, amount) {
+  const amt = Math.floor(Number(amount))
+  if (!Number.isFinite(amt) || amt <= 0) return fetchUserCredits(userId)
+  const ps = String(periodStartIso || '').trim()
+  if (!ps) return fetchUserCredits(userId)
+
+  const r = await fetch(`${baseUrl()}/rest/v1/rpc/grant_subscription_credits_once`, {
+    method: 'POST',
+    headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ p_user_id: userId, p_period_start: ps, p_amount: amt }),
+  })
+  const j = await fetchJsonOrText(r)
+  if (!r.ok) {
+    const msg = String(j?.message || j?.hint || '')
+    if (/grant_subscription_credits_once|function.*does not exist|42883/i.test(msg)) {
+      throw new Error(
+        '数据库缺少 grant_subscription_credits_once：请在 Supabase 执行 supabase/migrations/20260330120000_subscription_credits_idempotent.sql',
+      )
+    }
+    throw new Error(j?.message || '发放订阅积分失败')
+  }
+  if (typeof j === 'number' && Number.isFinite(j)) return Math.max(0, Math.floor(j))
+  const n = Number(j)
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : fetchUserCredits(userId)
+}
+
+/** 有效付费订阅且未过期时，确保本周期月积分已发放（幂等） */
+export async function ensureMonthlyCreditsForActivePaidPlan(userId, subscription) {
+  if (!subscription || subscription.status !== 'active') return fetchUserCredits(userId)
+  const endMs = new Date(subscription.current_period_end).getTime()
+  if (!Number.isFinite(endMs) || endMs <= Date.now()) return fetchUserCredits(userId)
+  const planId = String(subscription.plan_id || '')
+  if (!PAID_SUBSCRIPTION_PLANS.has(planId)) return fetchUserCredits(userId)
+  const grant = PLAN_MONTHLY_CREDITS[planId]
+  if (!grant || grant <= 0) return fetchUserCredits(userId)
+  return grantSubscriptionCreditsOnce(userId, subscription.current_period_start, grant)
 }
 
 async function insertBillingHold(userId, type, idem, creditsCost, relatedTaskId) {

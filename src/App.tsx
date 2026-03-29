@@ -1169,8 +1169,10 @@ function App() {
     credits: number
     package: string
     packageExpiresAt: string
-    /** 是否在本产品内至少有一条已支付订单（生图/视频权限） */
+    /** 是否在本产品内至少有一条已支付订单，或当前为付费档有效订阅 */
     hasPaidProduct?: boolean
+    /** 当前订阅是否有效（含试用），用于生图/视频权限 */
+    hasAppAccess?: boolean
   } | null>(null)
   const [accessToken, setAccessToken] = useState<string>(() => {
     const stored = localStorage.getItem('tikgen.accessToken')
@@ -1449,10 +1451,11 @@ function App() {
           id: me?.user?.id,
           name: me?.user?.name || me?.user?.email || '用户',
           email: me?.user?.email,
-          credits: 0,
+          credits: Math.max(0, Math.floor(Number(me?.user?.credits) || 0)),
           package: plan,
           packageExpiresAt: end,
           hasPaidProduct: !!me?.hasPaidProduct,
+          hasAppAccess: !!me?.hasAppAccess,
         })
         setPage('home')
         // Keep "处理中..." until we leave the auth page.
@@ -1476,10 +1479,11 @@ function App() {
             id: me?.user?.id,
             name: me?.user?.name || me?.user?.email || '用户',
             email: me?.user?.email,
-            credits: 0,
+            credits: Math.max(0, Math.floor(Number(me?.user?.credits) || 0)),
             package: plan,
             packageExpiresAt: end,
             hasPaidProduct: !!me?.hasPaidProduct,
+            hasAppAccess: !!me?.hasAppAccess,
           })
           setPage('home')
           // Keep "处理中..." until we leave the auth page.
@@ -1970,10 +1974,11 @@ function App() {
         id: me?.user?.id,
         name: me?.user?.name || me?.user?.email || '用户',
         email: me?.user?.email,
-        credits: 0,
+        credits: Math.max(0, Math.floor(Number(me?.user?.credits) || 0)),
         package: plan,
         packageExpiresAt: end,
         hasPaidProduct: !!me?.hasPaidProduct,
+        hasAppAccess: !!me?.hasAppAccess,
       })
     } catch {
       // ignore refresh failures in manual action
@@ -1981,7 +1986,7 @@ function App() {
   }
 
   const isAdminBypass = String(user?.email || '').trim().toLowerCase() === 'haoxue2027@gmail.com'
-  const canGenerateMedia = isAdminBypass || Boolean(user?.hasPaidProduct)
+  const canGenerateMedia = isAdminBypass || Boolean(user?.hasAppAccess)
 
   return (
     <div className="min-h-screen min-w-[1280px] bg-gray-50 flex workbench-root">
