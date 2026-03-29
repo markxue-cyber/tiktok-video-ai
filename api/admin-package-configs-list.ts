@@ -1,10 +1,46 @@
 import { baseUrl, parseJson, requireAdmin, sendJson, serviceHeaders } from './_admin.js'
 
 const FALLBACK = [
-  { plan_id: 'trial', name: '试用版', price_cents: 0, currency: 'CNY', daily_quota: 3, features: ['每天3次', '基础功能'], model_whitelist: [], enabled: true },
-  { plan_id: 'basic', name: '基础版', price_cents: 6900, currency: 'CNY', daily_quota: 20, features: ['每天20次', '全部模型'], model_whitelist: [], enabled: true },
-  { plan_id: 'pro', name: '专业版', price_cents: 24900, currency: 'CNY', daily_quota: 999999, features: ['高配额', '4K输出'], model_whitelist: [], enabled: true },
-  { plan_id: 'enterprise', name: '旗舰版', price_cents: 119900, currency: 'CNY', daily_quota: 999999, features: ['企业级', 'API接入'], model_whitelist: [], enabled: true },
+  {
+    plan_id: 'trial',
+    name: '试用版',
+    price_cents: 0,
+    currency: 'CNY',
+    daily_quota: 9,
+    features: ['0 元开通', '赠送 9 积分', '体验全功能'],
+    model_whitelist: [],
+    enabled: true,
+  },
+  {
+    plan_id: 'basic',
+    name: '基础版',
+    price_cents: 990,
+    currency: 'CNY',
+    daily_quota: 99,
+    features: ['9.9 元/月', '每月 99 积分', '生图 4 积分/张、视频 8 积分/条'],
+    model_whitelist: [],
+    enabled: true,
+  },
+  {
+    plan_id: 'pro',
+    name: '专业版',
+    price_cents: 7900,
+    currency: 'CNY',
+    daily_quota: 880,
+    features: ['79 元/月', '每月 880 积分', '高频出图与测款'],
+    model_whitelist: [],
+    enabled: true,
+  },
+  {
+    plan_id: 'enterprise',
+    name: '旗舰版',
+    price_cents: 24900,
+    currency: 'CNY',
+    daily_quota: 2850,
+    features: ['249 元/月', '每月 2850 积分', '团队与大量素材'],
+    model_whitelist: [],
+    enabled: true,
+  },
 ]
 
 export default async function handler(req, res) {

@@ -124,6 +124,7 @@ import { ImageToolWorkbench } from './ImageToolWorkbench'
 import { RemoveBackgroundWorkbench } from './RemoveBackgroundWorkbench'
 import { LandingV2 } from './LandingV2'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
+import { CREDITS_PER_IMAGE, CREDITS_PER_VIDEO, creditsForImageCount } from './lib/billingCredits'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
 const VIDEO_MODELS = [
@@ -2367,6 +2368,7 @@ function App() {
               templatePreset={imageTemplatePreset}
               onTemplateApplied={() => setImageTemplatePreset(null)}
               canGenerate={canGenerateMedia}
+              onRefreshUser={refreshCurrentUser}
             />
           </div>
           <div className={mainNav === 'image' && imageSubNav === 'ecommerce' ? '' : 'hidden'}>
@@ -2376,21 +2378,28 @@ function App() {
               templatePreset={imageTemplatePreset}
               onTemplateApplied={() => setImageTemplatePreset(null)}
               canGenerate={canGenerateMedia}
+              onRefreshUser={refreshCurrentUser}
             />
           </div>
           {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
           <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
-            <ImageToolsWorkbench tab={imageToolsTab} onTabChange={onWorkbenchImageTabChange} canGenerate={canGenerateMedia} />
+            <ImageToolsWorkbench
+              tab={imageToolsTab}
+              onTabChange={onWorkbenchImageTabChange}
+              canGenerate={canGenerateMedia}
+              onRefreshUser={refreshCurrentUser}
+            />
           </div>
           <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
             <VideoGenerator
               templatePreset={videoTemplatePreset}
               onTemplateApplied={() => setVideoTemplatePreset(null)}
               canGenerate={canGenerateMedia}
+              onRefreshUser={refreshCurrentUser}
             />
           </div>
           <div className={mainNav === 'video' && videoSubNav === 'upscale' ? '' : 'hidden'}>
-            <VideoUpscaleWorkbench canGenerate={canGenerateMedia} />
+            <VideoUpscaleWorkbench canGenerate={canGenerateMedia} onRefreshUser={refreshCurrentUser} />
           </div>
           {mainNav === 'creativePlaza' ? <CreativePlazaPage /> : null}
           {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && (
@@ -2480,26 +2489,28 @@ function ImageToolsWorkbench({
   tab,
   onTabChange,
   canGenerate,
+  onRefreshUser,
 }: {
   tab: ImageToolsTabId
   onTabChange: (t: ImageToolsTabId) => void
   canGenerate: boolean
+  onRefreshUser?: () => void | Promise<void>
 }) {
   return (
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="图片工具" items={IMAGE_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
       {/* 保持挂载，避免切换 Tab 时 React 状态与未落盘的 IDB 写入丢失 */}
       <div className={tab === 'removeBg' ? 'block' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
-        <RemoveBackgroundWorkbench canGenerate={canGenerate} />
+        <RemoveBackgroundWorkbench canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
       </div>
       <div className={tab === 'upscale' ? 'block' : 'hidden'} aria-hidden={tab !== 'upscale'}>
-        <ImageToolWorkbench tool="upscale" canGenerate={canGenerate} />
+        <ImageToolWorkbench tool="upscale" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
       </div>
       <div className={tab === 'compress' ? 'block' : 'hidden'} aria-hidden={tab !== 'compress'}>
-        <ImageToolWorkbench tool="compress" canGenerate={canGenerate} />
+        <ImageToolWorkbench tool="compress" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
       </div>
       <div className={tab === 'translate' ? 'block' : 'hidden'} aria-hidden={tab !== 'translate'}>
-        <ImageToolWorkbench tool="translate" canGenerate={canGenerate} />
+        <ImageToolWorkbench tool="translate" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
       </div>
     </div>
   )
@@ -2994,10 +3005,12 @@ function VideoGenerator({
   templatePreset,
   onTemplateApplied,
   canGenerate,
+  onRefreshUser,
 }: {
   templatePreset: VideoTemplatePreset | null
   onTemplateApplied: () => void
   canGenerate: boolean
+  onRefreshUser?: () => void | Promise<void>
 }) {
   type VideoGenTaskItem = {
     id: string
@@ -3679,6 +3692,7 @@ function VideoGenerator({
               name: `video-${Date.now()}.mp4`,
               metadata: { from: 'video_generator', model: meta.model, size: meta.size, resolution: meta.resolution, durationSec: meta.durationSec },
             })
+            void onRefreshUser?.()
             return
           }
 
@@ -3704,7 +3718,7 @@ function VideoGenerator({
         pollRunningRef.current.delete(submitTaskId)
       }
     },
-    [updateVideoTask],
+    [updateVideoTask, onRefreshUser],
   )
 
   useEffect(() => {
@@ -4165,7 +4179,11 @@ function VideoGenerator({
             title={!canGenerate ? '请先完成本产品内付费（购买套餐）后再生成视频' : undefined}
             className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
           >
-            {processingCount > 0 ? <>再提交一个（进行中 {processingCount}）</> : '生成视频'}
+            {processingCount > 0 ? (
+              <>再提交一个（进行中 {processingCount}，每次 {CREDITS_PER_VIDEO} 积分）</>
+            ) : (
+              <>生成视频（{CREDITS_PER_VIDEO} 积分）</>
+            )}
           </button>
           {!canGenerate ? (
             <div className="mt-2 text-xs text-amber-300/95 text-center">请开通会员</div>
@@ -4388,6 +4406,7 @@ function ImageGenerator({
   variant = 'ecommerce',
   visible = true,
   canGenerate,
+  onRefreshUser,
 }: {
   templatePreset: ImageTemplatePreset | null
   onTemplateApplied: () => void
@@ -4397,6 +4416,7 @@ function ImageGenerator({
   visible?: boolean
   /** 是否已完成本产品内付费（生图 API 权限） */
   canGenerate: boolean
+  onRefreshUser?: () => void | Promise<void>
 }) {
   const isSimpleImageGen = variant === 'simple'
   const idbWorkspaceKey = isSimpleImageGen ? TIKGEN_IG_IDB.workspaceSimple : TIKGEN_IG_IDB.workspace
@@ -4521,6 +4541,19 @@ function ImageGenerator({
     [imageModels, unavailableImageMap],
   )
   const MAX_REF_IMAGES = 5
+
+  const simpleStartCredits = useMemo(
+    () => creditsForImageCount(Math.min(6, Math.max(1, imageGenerateCount))),
+    [imageGenerateCount],
+  )
+
+  const ecommercePendingCredits = useMemo(() => {
+    if (isSimpleImageGen || !sceneRunBoard) return 0
+    const n = sceneRunBoard.slots.filter(
+      (s) => s.selected && (s.status === 'pending' || s.status === 'failed'),
+    ).length
+    return n * CREDITS_PER_IMAGE
+  }, [isSimpleImageGen, sceneRunBoard])
 
   useEffect(() => {
     let cancelled = false
@@ -6568,6 +6601,7 @@ function ImageGenerator({
         upsertImageHistoryFromBoard(boardLive)
       })
       await Promise.all(tasks)
+      void onRefreshUser?.()
     } finally {
       if (isSimpleImageGen && imageGenSimpleBatchAbortRef.current?.signal === batchSignal) {
         imageGenSimpleBatchAbortRef.current = null
@@ -7712,7 +7746,7 @@ function ImageGenerator({
                 ) : (
                   <>
                     <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
-                    <span className="relative">开始生成</span>
+                    <span className="relative">开始生成（约 {simpleStartCredits} 积分）</span>
                   </>
                 )}
               </button>
@@ -7776,7 +7810,9 @@ function ImageGenerator({
                       ? '多种原因'
                       : genErrorCode === 'QUOTA_EXHAUSTED'
                         ? '今日额度已用尽'
-                        : genErrorCode === 'PAYMENT_REQUIRED'
+                        : genErrorCode === 'INSUFFICIENT_CREDITS'
+                          ? '积分不足，请充值或升级套餐'
+                          : genErrorCode === 'PAYMENT_REQUIRED'
                           ? '需先完成付费'
                           : genErrorCode === 'UNKNOWN'
                             ? ''
@@ -7786,7 +7822,9 @@ function ImageGenerator({
                 ) : null
               })()}
             </span>
-            {genErrorCode !== 'QUOTA_EXHAUSTED' && genErrorCode !== 'PAYMENT_REQUIRED' ? (
+            {genErrorCode !== 'QUOTA_EXHAUSTED' &&
+            genErrorCode !== 'PAYMENT_REQUIRED' &&
+            genErrorCode !== 'INSUFFICIENT_CREDITS' ? (
               <button
                 type="button"
                 onClick={() => void handleRetryGenBanner()}
@@ -7861,8 +7899,10 @@ function ImageGenerator({
                         <RefreshCw className="w-3.5 h-3.5 inline mr-1 animate-spin" />
                         生成中…
                       </>
+                    ) : ecommercePendingCredits > 0 ? (
+                      <>一键生成图片（约 {ecommercePendingCredits} 积分）</>
                     ) : (
-                      '一键生成图片'
+                      <>一键生成图片（每张 {CREDITS_PER_IMAGE} 积分）</>
                     )}
                   </button>
                   <button

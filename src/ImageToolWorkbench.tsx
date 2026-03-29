@@ -28,6 +28,7 @@ import {
   tryLocalStorageSetJson,
 } from './tikgenImageGenPersistence'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
+import { CREDITS_PER_IMAGE } from './lib/billingCredits'
 
 const MAX_IMAGES = 5
 const HISTORY_MAX = 80
@@ -489,7 +490,15 @@ async function maybeToJpeg(imageUrl: string, quality = 0.88): Promise<string> {
   })
 }
 
-export function ImageToolWorkbench({ tool, canGenerate }: { tool: ImageToolMode; canGenerate: boolean }) {
+export function ImageToolWorkbench({
+  tool,
+  canGenerate,
+  onRefreshUser,
+}: {
+  tool: ImageToolMode
+  canGenerate: boolean
+  onRefreshUser?: () => void | Promise<void>
+}) {
   const rt = RUNTIME[tool]
   const [images, setImages] = useState<Array<{ id: string; url: string; name?: string }>>([])
   const [resolution, setResolution] = useState<'1024' | '2048'>('1024')
@@ -828,6 +837,7 @@ export function ImageToolWorkbench({ tool, canGenerate }: { tool: ImageToolMode;
           ),
         )
         if (clearImagesOnComplete) setImages([])
+        void onRefreshUser?.()
       } finally {
         stopProgressTicker(taskId)
         setSubmittingCount((n) => Math.max(0, n - 1))
@@ -845,6 +855,7 @@ export function ImageToolWorkbench({ tool, canGenerate }: { tool: ImageToolMode;
       targetLang,
       startProgressTicker,
       stopProgressTicker,
+      onRefreshUser,
     ],
   )
 
@@ -1628,6 +1639,9 @@ export function ImageToolWorkbench({ tool, canGenerate }: { tool: ImageToolMode;
               >
                 {submittingCount > 0 ? <RefreshCw className="w-4 h-4 animate-spin" /> : <SubmitIcon className="w-4 h-4" />}
                 {rt.submitLabel}
+                {images.length > 0
+                  ? `（约 ${images.length * CREDITS_PER_IMAGE} 积分）`
+                  : `（每张 ${CREDITS_PER_IMAGE} 积分）`}
               </button>
             </div>
           </div>

@@ -18,6 +18,7 @@ import {
   type VideoUpscaleWorkspaceV1,
 } from './tikgenImageGenPersistence'
 import { buildDownloadProxyUrl } from './utils/downloadProxy'
+import { CREDITS_PER_VIDEO } from './lib/billingCredits'
 
 const VIDEO_UPSCALE_LS = 'tikgen.videoUpscale.history.v1'
 const VIDEO_UPSCALE_MAX = 100
@@ -110,7 +111,13 @@ function saveHistorySlice(tasks: VideoUpscaleHistoryTask[]) {
   tryLocalStorageSetJson(VIDEO_UPSCALE_LS, slice)
 }
 
-export function VideoUpscaleWorkbench({ canGenerate }: { canGenerate: boolean }) {
+export function VideoUpscaleWorkbench({
+  canGenerate,
+  onRefreshUser,
+}: {
+  canGenerate: boolean
+  onRefreshUser?: () => void | Promise<void>
+}) {
   const [file, setFile] = useState<File | null>(null)
   /** 本机文件名或资产库视频名（无 File 对象时展示） */
   const [sourceVideoName, setSourceVideoName] = useState('')
@@ -476,7 +483,7 @@ export function VideoUpscaleWorkbench({ canGenerate }: { canGenerate: boolean })
         if (upscalePollRunningRef.current === taskId) upscalePollRunningRef.current = null
       }
     },
-    [patchHistory],
+    [patchHistory, onRefreshUser],
   )
 
   /** 刷新/返回页面后：历史中有「处理中」且带 taskId 时自动续轮询 */
@@ -746,7 +753,7 @@ export function VideoUpscaleWorkbench({ canGenerate }: { canGenerate: boolean })
               提升中...
             </>
           ) : (
-            '开始提升'
+            <>开始提升（{CREDITS_PER_VIDEO} 积分）</>
           )}
         </button>
       </div>
