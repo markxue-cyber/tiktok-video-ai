@@ -15,7 +15,9 @@ export default async function handler(req, res) {
         error:
           gw.id === 'siliconflow'
             ? '硅基流动未配置：请设置环境变量 SILICONFLOW_API_KEY'
-            : '小豆包未配置：请设置环境变量 XIAO_DOU_BAO_API_KEY',
+            : gw.id === 'bytedance'
+              ? '字节跳动(方舟)未配置：请设置环境变量 BYTEDANCE_ARK_API_KEY'
+              : '小豆包未配置：请设置环境变量 XIAO_DOU_BAO_API_KEY',
         code: 'API_KEY_MISSING',
         gateway: gw.id,
       })

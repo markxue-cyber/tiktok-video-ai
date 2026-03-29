@@ -85,7 +85,7 @@ export type HomeChatTurnPayload = {
     imageModel?: string
     /** Chat Completions 的 model id，与所选 gateway 一致 */
     chatModel?: string
-    /** 聚合 API 服务商：xiaodoubao | siliconflow */
+    /** 聚合 API 服务商：xiaodoubao | siliconflow | bytedance */
     gatewayProvider?: string
   }
 }

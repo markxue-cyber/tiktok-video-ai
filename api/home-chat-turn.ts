@@ -73,14 +73,20 @@ type IntentJson = {
   imageCount?: number
 }
 
-function isSiliconFlowBaseUrl(baseUrl: string): boolean {
-  return String(baseUrl || '').toLowerCase().includes('siliconflow')
+/** 部分 OpenAI 兼容网关对流式分析或 json_object 支持不稳定，与硅基、火山方舟对齐处理 */
+function isOpenAiCompatGatewayNeedingHomeChatWorkarounds(baseUrl: string): boolean {
+  const u = String(baseUrl || '').toLowerCase()
+  return u.includes('siliconflow') || u.includes('volces.com') || u.includes('volcengine.com')
 }
 
 function llmUpstreamAuthHint(baseUrl: string, status: number): string {
   if (status !== 401 && status !== 403) return ''
-  if (isSiliconFlowBaseUrl(baseUrl)) {
+  const u = String(baseUrl || '').toLowerCase()
+  if (u.includes('siliconflow')) {
     return ' 【硅基流动】请核对 SILICONFLOW_API_KEY；SILICONFLOW_AI_BASE_URL 须与密钥来源一致（在 cloud.siliconflow.cn 创建的密钥请用 https://api.siliconflow.cn/v1 ，误配 api.siliconflow.com 会 401）；并确认「对话模型」id 在控制台可用。'
+  }
+  if (u.includes('volces.com') || u.includes('volcengine.com')) {
+    return ' 【火山方舟】请核对 BYTEDANCE_ARK_API_KEY；BYTEDANCE_ARK_BASE_URL 须与控制台地域一致（默认 https://ark.cn-beijing.volces.com/api/v3）；「对话模型」须为支持多模态的模型或已开通的推理接入点（ep-）。'
   }
   return ''
 }
@@ -263,7 +269,7 @@ async function gpt4oJson<T>(
       { role: 'user', content: user },
     ],
   }
-  if (!isSiliconFlowBaseUrl(baseUrl)) {
+  if (!isOpenAiCompatGatewayNeedingHomeChatWorkarounds(baseUrl)) {
     body.response_format = { type: 'json_object' }
   }
   const resp = await fetch(url, {
@@ -1163,10 +1169,22 @@ function looksLikeVisionCapableChatModelId(modelId: string): boolean {
   if (s.includes('internvl') || s.includes('llava')) return true
   if (s.includes('qwen3-omni')) return true
   if (s.includes('minicpm-v') || s.includes('deepseek-vl')) return true
+  if (s.includes('doubao') && (s.includes('vision') || s.includes('vl'))) return true
   return false
 }
 
 const DEFAULT_SILICONFLOW_VISION_CHAT_MODEL = 'Qwen/Qwen3-VL-8B-Instruct'
+
+/** 方舟控制台常见多模态模型名兜底；可与 BYTEDANCE_ARK_VISION_CHAT_MODEL 覆盖 */
+const DEFAULT_BYTEDANCE_VISION_CHAT_MODEL = 'doubao-1-5-thinking-vision-pro-250428'
+
+function looksLikeDoubaoArkLikelyMultimodal(modelId: string): boolean {
+  const s = String(modelId || '').toLowerCase()
+  if (s.startsWith('ep-')) return true
+  if (s.includes('vision') && s.includes('doubao')) return true
+  if (s.includes('doubao-seed') && s.includes('vision')) return true
+  return false
+}
 
 function coerceHomeChatModelForMultimodal(
   gatewayId: AggregateGatewayId,
@@ -1175,9 +1193,15 @@ function coerceHomeChatModelForMultimodal(
 ): string {
   const m = String(requested || '').trim()
   if (mediaType !== 'image' && mediaType !== 'video') return m
-  if (gatewayId !== 'siliconflow') return m
-  if (looksLikeVisionCapableChatModelId(m)) return m
-  return String(process.env.SILICONFLOW_VISION_CHAT_MODEL || DEFAULT_SILICONFLOW_VISION_CHAT_MODEL).trim()
+  if (gatewayId === 'siliconflow') {
+    if (looksLikeVisionCapableChatModelId(m)) return m
+    return String(process.env.SILICONFLOW_VISION_CHAT_MODEL || DEFAULT_SILICONFLOW_VISION_CHAT_MODEL).trim()
+  }
+  if (gatewayId === 'bytedance') {
+    if (looksLikeVisionCapableChatModelId(m) || looksLikeDoubaoArkLikelyMultimodal(m)) return m
+    return String(process.env.BYTEDANCE_ARK_VISION_CHAT_MODEL || DEFAULT_BYTEDANCE_VISION_CHAT_MODEL).trim()
+  }
+  return m
 }
 
 function parseHomeParams(params: any, intentImageCount?: number): ParsedHomeParams {
@@ -1637,7 +1661,9 @@ async function executeHomeChatImageJobInBackground(opts: {
     const msg =
       gw.id === 'siliconflow'
         ? '未配置 SILICONFLOW_API_KEY'
-        : '未配置 XIAO_DOU_BAO_API_KEY'
+        : gw.id === 'bytedance'
+          ? '未配置 BYTEDANCE_ARK_API_KEY'
+          : '未配置 XIAO_DOU_BAO_API_KEY'
     try {
       await patchHomeChatImageJob(jobId, userId, {
         status: 'failed',
@@ -1810,6 +1836,14 @@ export default async function handler(req: any, res: any) {
           code: 'SILICONFLOW_NOT_CONFIGURED',
         })
       }
+      if (gw.id === 'bytedance') {
+        return res.status(200).json({
+          success: false,
+          error:
+            '未配置字节跳动(火山方舟)：请在服务端设置环境变量 BYTEDANCE_ARK_API_KEY（可选 BYTEDANCE_ARK_BASE_URL、BYTEDANCE_ARK_CHAT_MODEL；看图/视频分析可设 BYTEDANCE_ARK_VISION_CHAT_MODEL）',
+          code: 'BYTEDANCE_ARK_NOT_CONFIGURED',
+        })
+      }
       return res.status(200).json({
         success: true,
         kind: 'mock',
@@ -1980,9 +2014,9 @@ export default async function handler(req: any, res: any) {
     let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
     const streamAnalysis = body.streamAnalysis === true
     /** 单次请求内同时出图（非 split）仍走整包 JSON，避免与出图响应混流 */
-    /** 硅基流式经 CDN/网关时易出现尾包丢失，前端只收到 delta 无 done →「流式响应未完整」，故强制整包分析 */
+    /** 硅基 / 方舟等流式经 CDN/网关时易出现尾包丢失，前端只收到 delta 无 done →「流式响应未完整」，故强制整包分析 */
     const useStreamForAnalysis =
-      streamAnalysis && !(needsImageGen && !splitPipeline) && !isSiliconFlowBaseUrl(baseUrl)
+      streamAnalysis && !(needsImageGen && !splitPipeline) && !isOpenAiCompatGatewayNeedingHomeChatWorkarounds(baseUrl)
 
     if (needsAnalysis) {
       if (useStreamForAnalysis) {

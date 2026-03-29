@@ -49,6 +49,22 @@ const MAX_SESSIONS = 100
 const MAX_STORED_MESSAGES = 200
 const API_HISTORY_MAX = 40
 const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
+
+type HomeGatewayProvider = 'xiaodoubao' | 'siliconflow' | 'bytedance'
+
+function defaultHomeChatModelForGateway(gw: HomeGatewayProvider): string {
+  if (gw === 'siliconflow') return 'Qwen/Qwen3-VL-8B-Instruct'
+  if (gw === 'bytedance') return 'doubao-pro-32k-241215'
+  return 'gpt-4o'
+}
+
+/** 高级参数「服务商」：唯一列表，落地页与对话内两处面板共用，避免漏改 */
+const HOME_GATEWAY_OPTIONS: { value: HomeGatewayProvider; label: string }[] = [
+  { value: 'xiaodoubao', label: '小豆包' },
+  { value: 'siliconflow', label: '硅基流动' },
+  { value: 'bytedance', label: '字节跳动（火山方舟）' },
+]
+
 /** 首页输入框本地上传：单次多选上限，且待上传队列总数不超过该值 */
 const MAX_HOME_CHAT_UPLOAD_QUEUE = 6
 /** 超过此大小的图片走 Storage 直传，避免 data URL 进 JSON 超过服务端请求体上限（≈4.5MB） */
@@ -67,6 +83,8 @@ const HOME_IMAGE_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'midjourney', name: 'Midjourney' },
   { id: 'black-forest-labs/FLUX.1-schnell', name: 'FLUX.1 schnell' },
   { id: 'black-forest-labs/FLUX.1-dev', name: 'FLUX.1 dev' },
+  { id: 'doubao-seedream-4-0-250828', name: '豆包 Seedream 4.0' },
+  { id: 'doubao-seededit-3-0-t2i-250628', name: '豆包 Seededit' },
 ]
 
 const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
@@ -77,6 +95,12 @@ const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen2.5-72B-Instruct' },
   { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
   { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
+  { id: 'doubao-pro-32k-241215', name: '豆包 Pro 32K' },
+  { id: 'doubao-lite-32k-241215', name: '豆包 Lite 32K' },
+  { id: 'doubao-1-5-thinking-pro-250415', name: '豆包 1.5 Thinking Pro' },
+  { id: 'doubao-1-5-thinking-vision-pro-250428', name: '豆包 1.5 Thinking Vision' },
+  { id: 'doubao-seed-1-6-250615', name: '豆包 Seed 1.6' },
+  { id: 'doubao-seed-1-6-thinking-250615', name: '豆包 Seed 1.6 Thinking' },
 ]
 
 /**
@@ -111,7 +135,9 @@ function looksLikeHomeImageModel(id: string): boolean {
     s.includes('instantx') ||
     s.includes('juggernaut') ||
     s.includes('realvis') ||
-    s.includes('dreamshaper')
+    s.includes('dreamshaper') ||
+    s.includes('seededit') ||
+    s.includes('jimeng')
   )
 }
 
@@ -156,6 +182,8 @@ function classifyModelForHomeDropdowns(m: { id?: string; supported_endpoint_type
   const types: string[] = Array.isArray(m?.supported_endpoint_types)
     ? m.supported_endpoint_types.map((t) => String(t).toLowerCase())
     : []
+  /** 方舟等仅返回 ep- 接入点 id、无 type 时，同时列入对话与出图下拉，由用户在控制台核对能力 */
+  if (types.length === 0 && /^ep-/i.test(id)) return { image: true, chat: true }
   if (types.length === 0) return { image: heurImg, chat: heurChat }
 
   const tImg =
@@ -260,8 +288,8 @@ export type HomeChatSession = {
     imageModel: string
     /** Chat Completions 模型 id，与所选服务商网关一致 */
     chatModel: string
-    /** 聚合服务商：小豆包 / 硅基流动 */
-    gatewayProvider: 'xiaodoubao' | 'siliconflow'
+    /** 聚合服务商：小豆包 / 硅基流动 / 字节跳动(火山方舟直连) */
+    gatewayProvider: HomeGatewayProvider
   }
 }
 
@@ -777,7 +805,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     ;(async () => {
       setGatewayModelsLoading(true)
       try {
-        const gw = active?.params.gatewayProvider || 'xiaodoubao'
+        const gw = (active?.params.gatewayProvider || 'xiaodoubao') as HomeGatewayProvider
         const fallbackImage =
           gw === 'siliconflow'
             ? [
@@ -785,11 +813,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 { id: 'Qwen/Qwen-Image', label: 'Qwen-Image（离线兜底）' },
                 { id: 'Kwai-Kolors/Kolors', label: 'Kolors（离线兜底）' },
               ]
-            : [
-                { id: 'nano-banana-2', label: 'nano-banana-2（离线兜底）' },
-                { id: 'seedream', label: 'seedream（离线兜底）' },
-                { id: 'flux', label: 'flux（离线兜底）' },
-              ]
+            : gw === 'bytedance'
+              ? [
+                  { id: 'doubao-seedream-4-0-250828', label: 'Seedream 4.0（离线兜底·以控制台为准）' },
+                  { id: 'doubao-seededit-3-0-t2i-250628', label: 'Seededit 文生图（离线兜底）' },
+                  { id: 'doubao-seedream-3-0-t2i-250415', label: 'Seedream 3.0（离线兜底）' },
+                ]
+              : [
+                  { id: 'nano-banana-2', label: 'nano-banana-2（离线兜底）' },
+                  { id: 'seedream', label: 'seedream（离线兜底）' },
+                  { id: 'flux', label: 'flux（离线兜底）' },
+                ]
         const fallbackChat =
           gw === 'siliconflow'
             ? [
@@ -798,10 +832,19 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3（离线兜底）' },
                 { id: 'Qwen/Qwen3-32B', label: 'Qwen3-32B（离线兜底）' },
               ]
-            : [
-                { id: 'gpt-4o', label: 'gpt-4o（离线兜底）' },
-                { id: 'gpt-4o-mini', label: 'gpt-4o-mini（离线兜底）' },
-              ]
+            : gw === 'bytedance'
+              ? [
+                  { id: 'doubao-1-5-thinking-vision-pro-250428', label: 'doubao 1.5 thinking vision（离线兜底·看图）' },
+                  { id: 'doubao-pro-32k-241215', label: 'doubao-pro-32k（离线兜底）' },
+                  { id: 'doubao-lite-32k-241215', label: 'doubao-lite-32k（离线兜底）' },
+                  { id: 'doubao-1-5-thinking-pro-250415', label: 'doubao 1.5 thinking pro（离线兜底）' },
+                  { id: 'doubao-seed-1-6-250615', label: 'doubao-seed-1.6（离线兜底）' },
+                  { id: 'doubao-seed-1-6-thinking-250615', label: 'doubao-seed-1.6-thinking（离线兜底）' },
+                ]
+              : [
+                  { id: 'gpt-4o', label: 'gpt-4o（离线兜底）' },
+                  { id: 'gpt-4o-mini', label: 'gpt-4o-mini（离线兜底）' },
+                ]
         const unavailableImage: Record<string, string> = {}
         try {
           const token = localStorage.getItem('tikgen.accessToken') || ''
@@ -918,7 +961,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           setSessions((prev) =>
             prev.map((s) => {
               const curImg = String(s.params.imageModel || 'nano-banana-2')
-              const curChat = String(s.params.chatModel || (gw === 'siliconflow' ? 'Qwen/Qwen3-VL-8B-Instruct' : 'gpt-4o'))
+              const curChat = String(s.params.chatModel || defaultHomeChatModelForGateway(gw))
               let params = s.params
               if (!finalImage.some((o) => o.id === curImg)) {
                 const preferred =
@@ -1383,9 +1426,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         negativePrompt: ep.negativePrompt,
         refinementIntent: ep.refinementIntent ?? 'auto',
         imageModel: ep.imageModel || 'nano-banana-2',
-        chatModel:
-          ep.chatModel ||
-          (ep.gatewayProvider === 'siliconflow' ? 'Qwen/Qwen3-VL-8B-Instruct' : 'gpt-4o'),
+        chatModel: ep.chatModel || defaultHomeChatModelForGateway(ep.gatewayProvider ?? 'xiaodoubao'),
         gatewayProvider: ep.gatewayProvider ?? 'xiaodoubao',
       }
 
@@ -2228,12 +2269,15 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             value={active?.params.gatewayProvider ?? 'xiaodoubao'}
                             onChange={(e) =>
                               updateParams({
-                                gatewayProvider: e.target.value as 'xiaodoubao' | 'siliconflow',
+                                gatewayProvider: e.target.value as HomeGatewayProvider,
                               })
                             }
                           >
-                            <option value="xiaodoubao">小豆包</option>
-                            <option value="siliconflow">硅基流动</option>
+                            {HOME_GATEWAY_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
                           </select>
                         </label>
                         <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
@@ -2248,9 +2292,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                   ? String(active?.params.chatModel)
                                   : String(
                                       chatModelOptions[0]?.id ||
-                                        (active?.params.gatewayProvider === 'siliconflow'
-                                          ? 'Qwen/Qwen3-VL-8B-Instruct'
-                                          : 'gpt-4o'),
+                                        defaultHomeChatModelForGateway(
+                                          active?.params.gatewayProvider ?? 'xiaodoubao',
+                                        ),
                                     )
                             }
                             onChange={(e) => updateParams({ chatModel: e.target.value })}
@@ -2764,12 +2808,15 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       value={active?.params.gatewayProvider ?? 'xiaodoubao'}
                       onChange={(e) =>
                         updateParams({
-                          gatewayProvider: e.target.value as 'xiaodoubao' | 'siliconflow',
+                          gatewayProvider: e.target.value as HomeGatewayProvider,
                         })
                       }
                     >
-                      <option value="xiaodoubao">小豆包</option>
-                      <option value="siliconflow">硅基流动</option>
+                      {HOME_GATEWAY_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
@@ -2784,9 +2831,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             ? String(active?.params.chatModel)
                             : String(
                                 chatModelOptions[0]?.id ||
-                                  (active?.params.gatewayProvider === 'siliconflow'
-                                    ? 'Qwen/Qwen3-VL-8B-Instruct'
-                                    : 'gpt-4o'),
+                                  defaultHomeChatModelForGateway(active?.params.gatewayProvider ?? 'xiaodoubao'),
                               )
                       }
                       onChange={(e) => updateParams({ chatModel: e.target.value })}

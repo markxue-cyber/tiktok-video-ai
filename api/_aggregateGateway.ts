@@ -2,7 +2,7 @@
  * 首页对话等：多聚合 API 服务商（OpenAI 兼容）密钥与 baseUrl 解析
  */
 
-export type AggregateGatewayId = 'xiaodoubao' | 'siliconflow'
+export type AggregateGatewayId = 'xiaodoubao' | 'siliconflow' | 'bytedance'
 
 /** 去掉首尾空白、UTF-8 BOM、误粘贴的引号（避免 Vercel 里 Key 带 "" 导致 401） */
 export function normalizeApiKeySecret(raw: string | undefined | null): string {
@@ -21,6 +21,18 @@ export function normalizeGatewayId(raw: unknown): AggregateGatewayId {
     .toLowerCase()
     .trim()
   if (s === 'siliconflow' || s === 'guiji') return 'siliconflow'
+  if (
+    s === 'bytedance' ||
+    s === 'byte' ||
+    s === 'volcengine' ||
+    s === 'volces' ||
+    s === 'ark' ||
+    s === 'doubao-ark' ||
+    s === '火山方舟' ||
+    s === '字节跳动'
+  ) {
+    return 'bytedance'
+  }
   return 'xiaodoubao'
 }
 
@@ -51,6 +63,16 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
       process.env.SILICONFLOW_CHAT_MODEL || 'Qwen/Qwen3-VL-8B-Instruct',
     ).trim()
     return { id, label: '硅基流动', apiKey, baseUrl, chatModel }
+  }
+  if (id === 'bytedance') {
+    /** 火山方舟 OpenAI 兼容：控制台 API Key；地域见文档可改 BASE_URL */
+    const apiKey = normalizeApiKeySecret(process.env.BYTEDANCE_ARK_API_KEY)
+    const baseUrl = String(
+      process.env.BYTEDANCE_ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
+    ).replace(/\/+$/, '')
+    /** 多为推理接入点 ID（ep-）或模型名，请与控制台一致 */
+    const chatModel = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || 'doubao-pro-32k-241215').trim()
+    return { id, label: '字节跳动(方舟)', apiKey, baseUrl, chatModel }
   }
   const apiKey = normalizeApiKeySecret(process.env.XIAO_DOU_BAO_API_KEY)
   const baseUrl = String(process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1').replace(/\/+$/, '')
