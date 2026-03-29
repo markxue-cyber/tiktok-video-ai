@@ -331,7 +331,7 @@ export type HomeChatMsg = {
   /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
   streamLen?: number
   /** 用户消息：发送瞬间的参数快照（气泡展示不随底部配置改动） */
-  sendParams?: Pick<HomeChatSession['params'], 'aspectRatio' | 'imageCount'>
+  sendParams?: Pick<HomeChatSession['params'], 'aspectRatio' | 'imageCount' | 'resolution'>
 }
 
 export type HomeChatSession = {
@@ -354,7 +354,7 @@ export type HomeChatSession = {
   }
   messages: HomeChatMsg[]
   params: {
-    resolution: '2K' | '4K' | 'HD'
+    resolution: '2K' | '4K'
     aspectRatio: '1:1' | '3:4' | '9:16' | '16:9' | '4:3'
     imageCount: 1 | 2 | 4
     style: '写实' | '动漫' | '国潮' | '手绘' | '赛博朋克' | '水墨'
@@ -460,10 +460,17 @@ function HomeComposerPendingStrip({
   )
 }
 
+/** 首页出图分辨率：仅 2K/4K；历史 HD 与未知值按 2K */
+function coerceHomeResolution(raw: unknown): '2K' | '4K' {
+  const s = String(raw || '').toUpperCase()
+  if (s === '4K' || s === '4096') return '4K'
+  return '2K'
+}
+
 const defaultParams = (): HomeChatSession['params'] => ({
   resolution: '2K',
-  aspectRatio: '3:4',
-  imageCount: 2,
+  aspectRatio: '1:1',
+  imageCount: 1,
   style: '写实',
   refWeight: 0.7,
   subjectLock: 'high',
@@ -505,10 +512,11 @@ function loadSessions(): HomeChatSession[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     const dp = defaultParams()
-    return (parsed as HomeChatSession[]).map((s) => ({
-      ...s,
-      params: { ...dp, ...s.params },
-    }))
+    return (parsed as HomeChatSession[]).map((s) => {
+      const merged = { ...dp, ...s.params }
+      if (String(merged.resolution || '').toUpperCase() === 'HD') merged.resolution = '2K'
+      return { ...s, params: merged }
+    })
   } catch {
     return []
   }
@@ -1524,6 +1532,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     const ep = softNetwork
       ? { ...s.params, multiRatio: false as const, abVariant: false as const, qcEnabled: false as const }
       : s.params
+    const epResolution = coerceHomeResolution(ep.resolution)
     if (softNetwork) {
       setToast('当前网络较慢，已自动关闭多比例、A/B 与轻量质检以加快出图')
       window.setTimeout(() => setToast(''), 4500)
@@ -1542,11 +1551,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       attachments: attachments.length ? attachments : undefined,
       sendParams: {
         aspectRatio: ep.aspectRatio,
+        resolution: epResolution,
         imageCount: ep.imageCount,
       },
     }
 
-    const paramLine = `【${ep.aspectRatio} ${ep.imageCount}张】`
+    const paramLine = `【${ep.aspectRatio} ${epResolution} ${ep.imageCount}张】`
 
     setSessions((prev) =>
       prev.map((x) => {
@@ -1585,7 +1595,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       if (generateMode === 'preview') setPreviewToken('')
 
       const paramsPayload = {
-        resolution: ep.resolution,
+        resolution: epResolution,
         aspectRatio: ep.aspectRatio,
         imageCount: ep.imageCount,
         style: ep.style,
@@ -2004,7 +2014,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   session_id: sid,
                   aspect_ratio: s.params.aspectRatio,
                   style: s.params.style,
-                  resolution: s.params.resolution,
+                  resolution: coerceHomeResolution(s.params.resolution),
                   prompt: sendText,
                 },
               })
@@ -2076,7 +2086,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 session_id: sid,
                 aspect_ratio: s.params.aspectRatio,
                 style: s.params.style,
-                resolution: s.params.resolution,
+                resolution: coerceHomeResolution(s.params.resolution),
                 prompt: sendText,
               },
             })
@@ -2419,17 +2429,26 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <span>比例</span>
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
-                            value={active?.params.aspectRatio || '3:4'}
+                            value={active?.params.aspectRatio || '1:1'}
                             onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
                           >
                             <option value="1:1">1:1</option>
                             <option value="3:4">3:4</option>
                             <option value="9:16">9:16</option>
                           </select>
+                          <span>分辨率</span>
+                          <select
+                            className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                            value={coerceHomeResolution(active?.params.resolution)}
+                            onChange={(e) => updateParams({ resolution: e.target.value as '2K' | '4K' })}
+                          >
+                            <option value="2K">2K</option>
+                            <option value="4K">4K</option>
+                          </select>
                           <span>张数</span>
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
-                            value={active?.params.imageCount ?? 2}
+                            value={active?.params.imageCount ?? 1}
                             onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
                           >
                             <option value={1}>1</option>
@@ -2532,33 +2551,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           </select>
                         </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                          <span className="shrink-0 whitespace-nowrap">分辨率</span>
-                          <select
-                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                            value={active?.params.resolution || '2K'}
-                            onChange={(e) => updateParams({ resolution: e.target.value as any })}
-                          >
-                            <option value="2K">2K</option>
-                            <option value="4K">4K</option>
-                            <option value="HD">HD</option>
-                          </select>
-                        </label>
-                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                          <span className="shrink-0 whitespace-nowrap">风格</span>
-                          <select
-                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                            value={active?.params.style || '写实'}
-                            onChange={(e) => updateParams({ style: e.target.value as any })}
-                          >
-                            <option value="写实">写实</option>
-                            <option value="动漫">动漫</option>
-                            <option value="国潮">国潮</option>
-                            <option value="手绘">手绘</option>
-                            <option value="赛博朋克">赛博朋克</option>
-                            <option value="水墨">水墨</option>
-                          </select>
-                        </label>
-                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                           <span className="shrink-0 whitespace-nowrap" title="自动：根据你的话术与是否基于上一张成图推断">
                             改图方式
                           </span>
@@ -2573,20 +2565,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             <option value="iterative">上一版微调</option>
                             <option value="fresh">重新生成</option>
                           </select>
-                        </label>
-                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                          <span className="shrink-0 whitespace-nowrap tabular-nums">
-                            参考权重 {active?.params.refWeight?.toFixed(2)}
-                          </span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.05}
-                            value={active?.params.refWeight ?? 0.7}
-                            onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
-                            className="min-w-0 flex-1"
-                          />
                         </label>
                       </div>
                     </div>
@@ -2701,7 +2679,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <div className="home-chat-user-body whitespace-pre-wrap">{m.text}</div>
                       {m.sendParams ? (
                         <div className="home-chat-meta-row mt-2 text-[11px] leading-snug">
-                          {m.sendParams.aspectRatio} {m.sendParams.imageCount}张
+                          {m.sendParams.aspectRatio}{' '}
+                          {coerceHomeResolution(m.sendParams.resolution)}{' '}
+                          {m.sendParams.imageCount}张
                         </div>
                       ) : null}
                     </UserBubble>
@@ -2949,17 +2929,26 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <span>比例</span>
                     <select
                       className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
-                      value={active?.params.aspectRatio || '3:4'}
+                      value={active?.params.aspectRatio || '1:1'}
                       onChange={(e) => updateParams({ aspectRatio: e.target.value as any })}
                     >
                       <option value="1:1">1:1</option>
                       <option value="3:4">3:4</option>
                       <option value="9:16">9:16</option>
                     </select>
+                    <span>分辨率</span>
+                    <select
+                      className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
+                      value={coerceHomeResolution(active?.params.resolution)}
+                      onChange={(e) => updateParams({ resolution: e.target.value as '2K' | '4K' })}
+                    >
+                      <option value="2K">2K</option>
+                      <option value="4K">4K</option>
+                    </select>
                     <span>张数</span>
                     <select
                       className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
-                      value={active?.params.imageCount ?? 2}
+                      value={active?.params.imageCount ?? 1}
                       onChange={(e) => updateParams({ imageCount: Number(e.target.value) as any })}
                     >
                       <option value={1}>1</option>
@@ -3060,33 +3049,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     </select>
                   </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                    <span className="shrink-0 whitespace-nowrap">分辨率</span>
-                    <select
-                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                      value={active?.params.resolution || '2K'}
-                      onChange={(e) => updateParams({ resolution: e.target.value as any })}
-                    >
-                      <option value="2K">2K</option>
-                      <option value="4K">4K</option>
-                      <option value="HD">HD</option>
-                    </select>
-                  </label>
-                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                    <span className="shrink-0 whitespace-nowrap">风格</span>
-                    <select
-                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                      value={active?.params.style || '写实'}
-                      onChange={(e) => updateParams({ style: e.target.value as any })}
-                    >
-                      <option value="写实">写实</option>
-                      <option value="动漫">动漫</option>
-                      <option value="国潮">国潮</option>
-                      <option value="手绘">手绘</option>
-                      <option value="赛博朋克">赛博朋克</option>
-                      <option value="水墨">水墨</option>
-                    </select>
-                  </label>
-                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
                     <span className="shrink-0 whitespace-nowrap" title="自动：根据你的话术与是否基于上一张成图推断">
                       改图方式
                     </span>
@@ -3101,20 +3063,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <option value="iterative">上一版微调</option>
                       <option value="fresh">重新生成</option>
                     </select>
-                  </label>
-                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                    <span className="shrink-0 whitespace-nowrap tabular-nums">
-                      参考权重 {active?.params.refWeight?.toFixed(2)}
-                    </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={active?.params.refWeight ?? 0.7}
-                      onChange={(e) => updateParams({ refWeight: Number(e.target.value) })}
-                      className="min-w-0 flex-1"
-                    />
                   </label>
                 </div>
               </div>

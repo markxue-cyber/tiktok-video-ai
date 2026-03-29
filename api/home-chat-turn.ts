@@ -2039,7 +2039,7 @@ export default async function handler(req: any, res: any) {
       '若执行类与咨询类同时出现，以执行类为准（必须先满足出图）。',
       '视频：若用户要从视频生成静态商品图、海报、同款画面，needsImageGen=true。',
       '若仅分析视频脚本/镜头/台词/节奏且不要图，needsAnalysis=true，needsImageGen=false。',
-      'imageCount：按用户要求取 1-4，未说明则 1-2。',
+      'imageCount：按用户要求取 1-4，未说明则 1。',
       mediaType === 'video'
         ? '当前媒体为视频：禁止满足任何视频生成/剪辑成片类诉求（blockedVideoEdit）；但允许基于视频出静态商品图。'
         : '当前媒体为图片：允许分析、出图、修图、换背景、白底主图等（不涉及视频剪辑）。',
