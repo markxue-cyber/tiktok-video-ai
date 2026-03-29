@@ -1627,7 +1627,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
                       ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
                       : /does not support this api/i.test(msgRaw)
-                        ? '当前走方舟 OpenAI 出图 /images/generations，须使用 ep-m-… 接入点。若错误里出现 doubao-seedream-*，多半是「ep-日期…」类接入点不支持该接口；请把 BYTEDANCE_ARK_IMAGE_MODEL 改为控制台里的 ep-m-…（例如 Seedream 4 的推理接入点）。'
+                        ? '方舟报错「不支持此 API」常见两类：① 出图须 ep-m-… 且走 /images/generations（勿用 ep-日期… 仅支持其它路由的接入点）；② 带图分析走的是「对话」接口，勿把 BYTEDANCE_ARK_VISION_CHAT_MODEL 设成与 BYTEDANCE_ARK_IMAGE_MODEL 相同的 Seedream 出图接入点，应改为 vision-pro 的 ep-m-（或与 CHAT_MODEL 一致）。'
                         : msgRaw
         if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
         if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()

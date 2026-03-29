@@ -1227,9 +1227,20 @@ function coerceHomeChatModelForMultimodal(
     return String(process.env.SILICONFLOW_VISION_CHAT_MODEL || DEFAULT_SILICONFLOW_VISION_CHAT_MODEL).trim()
   }
   if (gatewayId === 'bytedance') {
-    if (looksLikeVisionCapableChatModelId(m) || looksLikeDoubaoArkLikelyMultimodal(m)) return m
-    /** 勿硬编码公网模型 id（账号未开通会报 does not exist）；优先用你在控制台创建的接入点 */
-    const visionEnv = String(process.env.BYTEDANCE_ARK_VISION_CHAT_MODEL || '').trim()
+    const imageEp = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL || '').trim()
+    let visionEnv = String(process.env.BYTEDANCE_ARK_VISION_CHAT_MODEL || '').trim()
+    /** 出图接入点（Seedream 等）只能走 /images/generations，不能用于 Chat Completions 带图分析 */
+    if (visionEnv && imageEp && visionEnv === imageEp) visionEnv = ''
+
+    if (looksLikeVisionCapableChatModelId(m)) return m
+    if (looksLikeDoubaoArkLikelyMultimodal(m)) {
+      if (imageEp && m === imageEp) {
+        /* 用户把出图 ep 选进对话模型等：忽略，改走下方 vision/chat 环境变量 */
+      } else {
+        return m
+      }
+    }
+
     if (visionEnv) return visionEnv
     const chatEnv = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || '').trim()
     if (chatEnv) return chatEnv

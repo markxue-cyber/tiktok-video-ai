@@ -4,6 +4,7 @@
  * 方舟首页出图走 OpenAI 兼容 POST …/images/generations：须 **ep-m-…** 推理接入点。
  * 「ep-20260329…」类常不支持该路由（会报底层 doubao-seedream-* does not support this api）；勿填模型版本名。
  * 将支持该路由的 ep-m- 接入点写入 BYTEDANCE_ARK_IMAGE_MODEL。
+ * BYTEDANCE_ARK_VISION_CHAT_MODEL 须为能看图/视频的对话模型（如 ep-m-… 的 vision-pro），勿与 IMAGE_MODEL 填同一个 Seedream 出图接入点。
  */
 
 export type AggregateGatewayId = 'xiaodoubao' | 'siliconflow' | 'bytedance'
