@@ -222,9 +222,11 @@ function isAllowedPublicAssetUrl(urlStr: string, supabaseBaseUrlRaw: string): bo
   try {
     const u = new URL(urlStr.trim())
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
-    const base = new URL(supabaseBaseUrlRaw)
-    if (u.host !== base.host) return false
-    return u.pathname.includes('/storage/v1/object/public/assets/')
+    if (!u.pathname.includes('/storage/v1/object/public/assets/')) return false
+    const raw = String(supabaseBaseUrlRaw || '').trim().replace(/\/+$/, '')
+    if (!raw) return false
+    const base = new URL(raw)
+    return u.hostname.toLowerCase() === base.hostname.toLowerCase()
   } catch {
     return false
   }

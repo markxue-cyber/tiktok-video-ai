@@ -1391,7 +1391,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       },
     }
 
-    const paramLine = `【${ep.aspectRatio} · ${ep.imageCount}张】`
+    const paramLine = `【${ep.aspectRatio} ${ep.imageCount}张】`
 
     setSessions((prev) =>
       prev.map((x) => {
@@ -1521,7 +1521,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         const msgRaw = String(data?.error || '请求失败')
         const msg =
           code === 'BAD_MEDIA'
-            ? '素材读取失败，请重新上传图片/视频后重试。'
+            ? '素材地址无效或无法访问（须为本站资产库的公开图片/视频链接）。请重新上传，或从资产库重新选择后再试。'
             : code === 'NOT_PRODUCT_IMAGE'
               ? String(data?.error || '当前参考图不太像可上架商品主体，请上传清晰商品图或使用「仅分析」。')
               : code === 'UPSTREAM_FAILED'
@@ -2529,7 +2529,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <div className="home-chat-user-body whitespace-pre-wrap">{m.text}</div>
                       {m.sendParams ? (
                         <div className="home-chat-meta-row mt-2 text-[11px] leading-snug">
-                          {m.sendParams.aspectRatio} · {m.sendParams.imageCount}张
+                          {m.sendParams.aspectRatio} {m.sendParams.imageCount}张
                         </div>
                       ) : null}
                     </UserBubble>
