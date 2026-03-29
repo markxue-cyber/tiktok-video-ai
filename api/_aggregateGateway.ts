@@ -71,7 +71,7 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
       process.env.BYTEDANCE_ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3',
     ).replace(/\/+$/, '')
     /** 多为推理接入点 ID（ep-）或模型名，请与控制台一致 */
-    const chatModel = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || 'doubao-pro-32k-241215').trim()
+    const chatModel = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || 'doubao-1-5-vision-pro-32k').trim()
     return { id, label: '字节跳动(方舟)', apiKey, baseUrl, chatModel }
   }
   const apiKey = normalizeApiKeySecret(process.env.XIAO_DOU_BAO_API_KEY)

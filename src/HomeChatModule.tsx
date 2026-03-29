@@ -52,10 +52,20 @@ const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 
 type HomeGatewayProvider = 'xiaodoubao' | 'siliconflow' | 'bytedance'
 
+/** 字节跳动：与「Doubao-1.5-vision-pro-32k / Seedream 4.0」对应的方舟模型 id（亦可能是 ep-m-…，以下拉为准） */
+const DEFAULT_BYTEDANCE_HOME_CHAT_MODEL = 'doubao-1-5-vision-pro-32k'
+const DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL = 'doubao-seedream-4-0-250828'
+
 function defaultHomeChatModelForGateway(gw: HomeGatewayProvider): string {
   if (gw === 'siliconflow') return 'Qwen/Qwen3-VL-8B-Instruct'
-  if (gw === 'bytedance') return 'doubao-pro-32k-241215'
+  if (gw === 'bytedance') return DEFAULT_BYTEDANCE_HOME_CHAT_MODEL
   return 'gpt-4o'
+}
+
+function defaultHomeImageModelForGateway(gw: HomeGatewayProvider): string {
+  if (gw === 'bytedance') return DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL
+  if (gw === 'siliconflow') return 'black-forest-labs/FLUX.1-schnell'
+  return 'nano-banana-2'
 }
 
 /** 高级参数「服务商」：唯一列表，落地页与对话内两处面板共用，避免漏改 */
@@ -96,6 +106,7 @@ const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
   { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
   { id: 'doubao-pro-32k-241215', name: '豆包 Pro 32K' },
+  { id: 'doubao-1-5-vision-pro-32k', name: '豆包 1.5 Vision Pro 32K' },
   { id: 'doubao-lite-32k-241215', name: '豆包 Lite 32K' },
   { id: 'doubao-1-5-thinking-pro-250415', name: '豆包 1.5 Thinking Pro' },
   {
@@ -838,6 +849,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             : gw === 'bytedance'
               ? [
                   {
+                    id: DEFAULT_BYTEDANCE_HOME_CHAT_MODEL,
+                    label: 'Doubao-1.5-vision-pro-32k（默认·离线兜底）',
+                  },
+                  {
                     id: 'doubao-pro-32k-241215',
                     label: 'doubao-pro-32k（兜底·看图请选 ep- 或控制台已开通的多模态模型）',
                   },
@@ -969,7 +984,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           setChatModelOptions(finalChat)
           setSessions((prev) =>
             prev.map((s) => {
-              const curImg = String(s.params.imageModel || 'nano-banana-2')
+              const curImg = String(s.params.imageModel || defaultHomeImageModelForGateway(gw))
               const curChat = String(s.params.chatModel || defaultHomeChatModelForGateway(gw))
               let params = s.params
               if (!finalImage.some((o) => o.id === curImg)) {
@@ -2276,11 +2291,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           <select
                             className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                             value={active?.params.gatewayProvider ?? 'xiaodoubao'}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const v = e.target.value as HomeGatewayProvider
                               updateParams({
-                                gatewayProvider: e.target.value as HomeGatewayProvider,
+                                gatewayProvider: v,
+                                chatModel: defaultHomeChatModelForGateway(v),
+                                imageModel: defaultHomeImageModelForGateway(v),
                               })
-                            }
+                            }}
                           >
                             {HOME_GATEWAY_OPTIONS.map((o) => (
                               <option key={o.value} value={o.value}>
@@ -2329,7 +2347,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                 ? ''
                                 : imageModelOptions.some((o) => o.id === active?.params.imageModel)
                                   ? String(active?.params.imageModel)
-                                  : String(imageModelOptions[0]?.id || 'nano-banana-2')
+                                  : String(
+                                      imageModelOptions[0]?.id ||
+                                        defaultHomeImageModelForGateway(active?.params.gatewayProvider ?? 'xiaodoubao'),
+                                    )
                             }
                             onChange={(e) => updateParams({ imageModel: e.target.value })}
                           >
@@ -2815,11 +2836,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     <select
                       className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
                       value={active?.params.gatewayProvider ?? 'xiaodoubao'}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const v = e.target.value as HomeGatewayProvider
                         updateParams({
-                          gatewayProvider: e.target.value as HomeGatewayProvider,
+                          gatewayProvider: v,
+                          chatModel: defaultHomeChatModelForGateway(v),
+                          imageModel: defaultHomeImageModelForGateway(v),
                         })
-                      }
+                      }}
                     >
                       {HOME_GATEWAY_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>
@@ -2866,7 +2890,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           ? ''
                           : imageModelOptions.some((o) => o.id === active?.params.imageModel)
                             ? String(active?.params.imageModel)
-                            : String(imageModelOptions[0]?.id || 'nano-banana-2')
+                            : String(
+                                imageModelOptions[0]?.id ||
+                                  defaultHomeImageModelForGateway(active?.params.gatewayProvider ?? 'xiaodoubao'),
+                              )
                       }
                       onChange={(e) => updateParams({ imageModel: e.target.value })}
                     >
