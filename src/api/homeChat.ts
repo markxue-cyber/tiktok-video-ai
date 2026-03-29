@@ -37,6 +37,10 @@ export type HomeChatTurnPayload = {
   userMessage: string
   /** 链式改图：上一张成品图 URL（须为资产库公开链接） */
   refImageUrl?: string
+  /** 会话内最近一张成图 URL，供服务端在意图为 last_generated 时选用（可与 refImageUrl 分工） */
+  lastOutputRefCandidate?: string
+  /** 本轮用户消息附带的附件数量；0 时才允许自动链式参考上一张成图 */
+  homeUserAttachmentCount?: number
   /** 会话内最近一次商品分析摘要，供第二轮提示词优化 */
   contextSummary?: string
   /** 是否本会话已产出过图（用于动态快捷指令） */

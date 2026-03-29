@@ -633,6 +633,114 @@ function likelyGenerateIntent(txt: string): boolean {
   return /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(String(txt || ''))
 }
 
+/**
+ * 纯文字追问但要动画面像素时，须把上一张成图作为 ref（否则只剩上传原图，加 logo 会画在原商品图上）。
+ * 覆盖：在图上加字/logo/水印、角落标注、「在这张图上」等；与 likelyGenerateIntent 互补。
+ */
+function likelyVisualEditOnLastOutput(txt: string): boolean {
+  const s = String(txt || '')
+  if (
+    /(加|添加|加上|贴|叠|放).{0,14}(logo|水印|字|文字|标识|品牌|角标|标语|slogan)/i.test(s) ||
+    /(右下角|左上角|左下角|右上角|四个角|角落|边缘).{0,18}(加|放|贴|印|写|标)/.test(s) ||
+    /(在|到)(这|那)(张)?(图|图片)(上|里|的)/.test(s) ||
+    /(刚才|刚刚|上面|上一张|成图|生成的图).{0,10}(加|贴|放|改|调|p|修)/.test(s) ||
+    /(p图|修图|重绘|改图|抠图|合成)/i.test(s)
+  ) {
+    return true
+  }
+  return false
+}
+
+/** 与 api/home-chat-turn stripHomeParamLine 一致，供链式 ref 推断 */
+function stripHomeParamLineHome(text: string): string {
+  return String(text || '')
+    .replace(/^【[^】]{1,160}】\s*/u, '')
+    .trim()
+}
+
+function explicitRejectsLastOutputRefHome(userMessageForApi: string): boolean {
+  const raw = String(userMessageForApi || '')
+  const core = stripHomeParamLineHome(raw)
+  const re = /(不要|别|勿|无需|不用)(用)?(上一张成图|刚生成|生成的图|预览图|这版成图)/
+  return re.test(raw) || re.test(core)
+}
+
+function explicitWantsOriginalUploadHome(userMessageForApi: string): boolean {
+  const raw = String(userMessageForApi || '')
+  const core = stripHomeParamLineHome(raw)
+  const re =
+    /(按上传|上传的图|用上传|原图|原始图|商品白底图|商品主图|最开始|首张图|最初那张|基于原图|按原图|用原图)/
+  return re.test(raw) || re.test(core)
+}
+
+function explicitWantsLastOutputHome(userMessageForApi: string): boolean {
+  const raw = String(userMessageForApi || '')
+  const core = stripHomeParamLineHome(raw)
+  const re =
+    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图)/
+  return re.test(raw) || re.test(core)
+}
+
+function heuristicWantsChainRefHome(userMessageForApi: string): boolean {
+  const raw = String(userMessageForApi || '')
+  const core = stripHomeParamLineHome(raw)
+  if (
+    /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(core) ||
+    /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(raw)
+  )
+    return true
+  if (HOME_QUICK_FORCE_PHRASES.some((p) => raw.includes(p) || core.includes(p))) return true
+  if (likelyVisualEditOnLastOutput(raw) || likelyVisualEditOnLastOutput(core)) return true
+  return false
+}
+
+/** 与后端 resolveHomeChainRefImageUrl 对齐（意图层由服务端补全，此处等价 referenceTarget=auto） */
+function resolveClientHomeChatRefPayload(opts: {
+  newSubjectMediaThisTurn: boolean
+  mediaType: 'image' | 'video'
+  lastGeneratedRefUrl?: string
+  refinementIntent: 'auto' | 'iterative' | 'fresh'
+  userMessageForApi: string
+  attachmentCountThisTurn: number
+}): { refImageUrl?: string; lastOutputRefCandidate?: string } {
+  const last = isPublicAssetUrl(opts.lastGeneratedRefUrl || '')
+    ? String(opts.lastGeneratedRefUrl).trim()
+    : ''
+  const lastPayload = last || undefined
+  const allowChain =
+    opts.mediaType === 'image' && opts.attachmentCountThisTurn === 0 && !!last
+
+  if (opts.newSubjectMediaThisTurn) {
+    return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+  }
+
+  const u = opts.userMessageForApi
+  if (explicitRejectsLastOutputRefHome(u)) {
+    return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+  }
+  if (explicitWantsOriginalUploadHome(u)) {
+    return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+  }
+  if (explicitWantsLastOutputHome(u)) {
+    return { refImageUrl: last || undefined, lastOutputRefCandidate: lastPayload }
+  }
+
+  const ri = opts.refinementIntent || 'auto'
+  if (ri === 'iterative') {
+    if (!allowChain) return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+    return { refImageUrl: last || undefined, lastOutputRefCandidate: lastPayload }
+  }
+  if (ri === 'fresh') {
+    return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+  }
+
+  if (heuristicWantsChainRefHome(u)) {
+    if (!allowChain) return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+    return { refImageUrl: last || undefined, lastOutputRefCandidate: lastPayload }
+  }
+  return { refImageUrl: undefined, lastOutputRefCandidate: lastPayload }
+}
+
 function isPublicAssetUrl(url: string): boolean {
   const u = String(url || '').trim()
   if (!u.startsWith('http')) return false
@@ -1520,25 +1628,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
     const sendText = trimmed || DEFAULT_SEND_TEXT
 
-    /** 链式参考：上一张成图 URL。选「上一版微调」时必须带上，否则后端仍只认首轮附件，整图会被优化成白底商品图。 */
-    const canChainLastGen =
-      primary.type === 'image' &&
-      attachments.length === 0 &&
-      isPublicAssetUrl(s.lastGeneratedRefUrl || '')
-    let refForGen: string | undefined
-    const refIntent = s.params.refinementIntent || 'auto'
-    if (canChainLastGen) {
-      if (refIntent === 'iterative') {
-        refForGen = s.lastGeneratedRefUrl
-      } else if (refIntent === 'fresh') {
-        refForGen = undefined
-      } else {
-        refForGen =
-          likelyGenerateIntent(sendText) || homeQuickForcePhrase(sendText)
-            ? s.lastGeneratedRefUrl
-            : undefined
-      }
-    }
     const hasGenPayload = hasSessionGeneratedMessages(s.messages)
     const localeStr =
       typeof navigator !== 'undefined' && navigator.language ? navigator.language : ''
@@ -1581,6 +1670,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     }
 
     const paramLine = `【${ep.aspectRatio} ${epResolution} ${ep.imageCount}张】`
+    const userMessageForApi = `${paramLine}\n${sendText}`
+    const refPack = resolveClientHomeChatRefPayload({
+      newSubjectMediaThisTurn,
+      mediaType: primary.type,
+      lastGeneratedRefUrl: s.lastGeneratedRefUrl,
+      refinementIntent: ep.refinementIntent ?? 'auto',
+      userMessageForApi,
+      attachmentCountThisTurn: attachments.length,
+    })
+    const refForGen = refPack.refImageUrl
+    const lastOutputRefCandidate = refPack.lastOutputRefCandidate
 
     setSessions((prev) =>
       prev.map((x) => {
@@ -1671,8 +1771,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         {
           mediaType: primary.type,
           mediaUrl: primary.url,
-          userMessage: `${paramLine}\n${sendText}`,
+          userMessage: userMessageForApi,
           refImageUrl: refForGen,
+          lastOutputRefCandidate,
+          homeUserAttachmentCount: attachments.length,
           contextSummary,
           hasSessionGenerated: hasGenPayload,
           sessionId: s.id,
@@ -1839,8 +1941,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               analysisText: analysisForGen || analysisTextFallback,
               mediaType: primary.type,
               mediaUrl: primary.url,
-              userMessage: `${paramLine}\n${sendText}`,
+              userMessage: userMessageForApi,
               refImageUrl: refForGen,
+              lastOutputRefCandidate,
+              homeUserAttachmentCount: attachments.length,
               contextSummary,
               hasSessionGenerated: hasGenPayload,
               sessionId: s.id,

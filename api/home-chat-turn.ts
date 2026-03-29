@@ -71,6 +71,19 @@ type IntentJson = {
   needsAnalysis?: boolean
   needsImageGen?: boolean
   imageCount?: number
+  /** original_upload=按上传/原图；last_generated=基于上一轮成图；auto=由规则推断 */
+  referenceTarget?: string
+}
+
+type HomeReferenceTarget = 'original_upload' | 'last_generated' | 'auto'
+
+function parseReferenceTargetFromIntent(intent: IntentJson): HomeReferenceTarget {
+  const v = String((intent as { referenceTarget?: unknown }).referenceTarget ?? 'auto')
+    .toLowerCase()
+    .trim()
+  if (v === 'original_upload' || v === 'upload' || v === 'original') return 'original_upload'
+  if (v === 'last_generated' || v === 'last_output' || v === 'chain' || v === 'last') return 'last_generated'
+  return 'auto'
 }
 
 /** 部分 OpenAI 兼容网关对流式分析或 json_object 支持不稳定，与硅基、火山方舟对齐处理 */
@@ -120,6 +133,7 @@ function localIntentFallback(mediaType: MediaType, userMessage: string): IntentJ
     needsAnalysis: true,
     needsImageGen: io.consultOnly ? false : io.needsImageGen === true,
     imageCount: 1,
+    referenceTarget: 'auto',
   }
 }
 
@@ -780,6 +794,114 @@ function resolveRefinementIntent(
 
   if (opts.chainingRefFromLastGen) return 'iterative'
   return 'iterative'
+}
+
+/** 用户明确不要用上一轮成图作参考（须优先于「上一张成图」等正向短语，避免子串误匹配） */
+function explicitRejectsLastOutputRef(userMessage: string): boolean {
+  const raw = String(userMessage || '')
+  const core = stripHomeParamLine(raw)
+  const re = /(不要|别|勿|无需|不用)(用)?(上一张成图|刚生成|生成的图|预览图|这版成图)/
+  return re.test(raw) || re.test(core)
+}
+
+function explicitWantsOriginalUpload(userMessage: string): boolean {
+  const raw = String(userMessage || '')
+  const core = stripHomeParamLine(raw)
+  const re =
+    /(按上传|上传的图|用上传|原图|原始图|商品白底图|商品主图|最开始|首张图|最初那张|基于原图|按原图|用原图)/
+  return re.test(raw) || re.test(core)
+}
+
+function explicitWantsLastOutput(userMessage: string): boolean {
+  const raw = String(userMessage || '')
+  const core = stripHomeParamLine(raw)
+  const re =
+    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图)/
+  return re.test(raw) || re.test(core)
+}
+
+function heuristicWantsChainRefFromMessage(userMessage: string): boolean {
+  const raw = String(userMessage || '')
+  const core = stripHomeParamLine(raw)
+  if (
+    /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(core) ||
+    /(生成|出图|做图|白底|场景图|信息流|封面|换场景|更亮|质感|主图|海报|种草)/.test(raw)
+  )
+    return true
+  if (HOME_FORCE_IMAGE_PHRASES.some((p) => raw.includes(p) || core.includes(p))) return true
+  const vc = (s: string) =>
+    /(加|添加|加上|贴|叠|放).{0,14}(logo|水印|字|文字|标识|品牌|角标|标语|slogan)/i.test(s) ||
+    /(右下角|左上角|左下角|右上角|四个角|角落|边缘).{0,18}(加|放|贴|印|写|标)/.test(s) ||
+    /(在|到)(这|那)(张)?(图|图片)(上|里|的)/.test(s) ||
+    /(刚才|刚刚|上面|上一张|成图|生成的图).{0,10}(加|贴|放|改|调|p|修)/.test(s) ||
+    /(p图|修图|重绘|改图|抠图|合成)/i.test(s)
+  return vc(raw) || vc(core)
+}
+
+/**
+ * 链式参考图 URL 决策（服务端权威）：新主图 > 显式话术/UI > 意图 referenceTarget > 正则/快捷词。
+ */
+function resolveHomeChainRefImageUrl(opts: {
+  newSubjectMediaThisTurn: boolean
+  userMessage: string
+  clientRefIn: string
+  lastOutputCandidateIn: string
+  supabaseUrl: string
+  referenceTarget: HomeReferenceTarget
+  refinementIntent: RefinementIntentParam
+  allowChainFromLastGen: boolean
+}): string {
+  const clientRef = normalizeOptionalRefUrl(opts.clientRefIn, opts.supabaseUrl)
+  const lastCand = normalizeOptionalRefUrl(opts.lastOutputCandidateIn, opts.supabaseUrl)
+  if (opts.newSubjectMediaThisTurn) return ''
+
+  const raw = String(opts.userMessage || '')
+
+  if (explicitRejectsLastOutputRef(raw)) return ''
+
+  if (explicitWantsOriginalUpload(raw)) return ''
+
+  if (explicitWantsLastOutput(raw)) return lastCand || clientRef
+
+  const ri = opts.refinementIntent || 'auto'
+  if (ri === 'iterative') {
+    if (!opts.allowChainFromLastGen) return clientRef
+    return lastCand || clientRef
+  }
+  if (ri === 'fresh') return ''
+
+  const rt = opts.referenceTarget
+  if (rt === 'original_upload') return ''
+  if (rt === 'last_generated') {
+    if (!opts.allowChainFromLastGen) return clientRef
+    return lastCand || clientRef
+  }
+
+  if (heuristicWantsChainRefFromMessage(raw)) {
+    if (!opts.allowChainFromLastGen) return clientRef
+    return lastCand || clientRef
+  }
+  return clientRef
+}
+
+function buildHomeIntentSystem(mediaType: MediaType): string {
+  return [
+    '你是首页「电商商品图」模块的意图分类器。根据用户上传媒体与用户问题输出 JSON。',
+    '字段：blockedVideoEdit(boolean), needsAnalysis(boolean), needsImageGen(boolean), imageCount(number 1-4), referenceTarget(string，取值仅可为 original_upload、last_generated、auto 三者之一)。',
+    'referenceTarget：用户希望基于哪张图做像素级修改。original_upload=明确要按上传图/原图/商品图/实拍；last_generated=明确要基于上一轮 AI 成图、预览图、刚生成的图继续改；auto=未明说或两种都可时由系统用语义与链式规则推断。',
+    '若用户换新主图或新附件，referenceTarget 仍填 auto 即可；服务端会以新主图优先。',
+    'blockedVideoEdit=true：用户主要诉求是「生成可播放的视频成片、剪辑时间线、拼接转场、加字幕导出成片、改视频画面、视频特效合成」等；不含「只想要脚本文案/大纲」类。',
+    'blockedVideoEdit=false：纯分析/拆解/提取，包括「分析视频脚本、拆解脚本、拉片、台词提取、拍摄手法解读」等；以及「写视频脚本/脚本文案」（文本产出，非渲染成片）；或「根据视频出静态商品图、改图」。',
+    '【执行类·必须 needsImageGen=true】用户要产出图片/修改图片，包括：界面快捷指令（换场景、更亮一点、改成白底主图、改成信息流风格、生成同款风格等）、以及含「生成、出图、做图、改成、换、加、修改、制作、去除、白底、主图、同款、确认高清」等动作且目标是得到新图的诉求。',
+    '【咨询类·needsImageGen=false】用户只要方法说明/教程/技巧，明确不要求出图，例如仅问「怎么拍、如何布光、为什么模糊」且无任何出图动作词。',
+    '若执行类与咨询类同时出现，以执行类为准（必须先满足出图）。',
+    '视频：若用户要从视频生成静态商品图、海报、同款画面，needsImageGen=true。',
+    '若仅分析视频脚本/镜头/台词/节奏且不要图，needsAnalysis=true，needsImageGen=false。',
+    'imageCount：按用户要求取 1-4，未说明则 1。',
+    mediaType === 'video'
+      ? '当前媒体为视频：禁止满足任何视频生成/剪辑成片类诉求（blockedVideoEdit）；但允许基于视频出静态商品图。'
+      : '当前媒体为图片：允许分析、出图、修图、换背景、白底主图等（不涉及视频剪辑）。',
+  ].join('\n')
 }
 
 function priorHasFullProductAnalysis(history: ChatTurn[]): boolean {
@@ -1954,6 +2076,11 @@ export default async function handler(req: any, res: any) {
     const hasSessionGenerated = body.hasSessionGenerated === true
     const sessionId = String(body.sessionId || '').trim().slice(0, 120)
     const newSubjectMediaThisTurn = body.newSubjectMediaThisTurn === true
+    const lastOutputRefCandidateRaw = String(body.lastOutputRefCandidate || '').trim()
+    const homeUserAttachmentCount = Math.max(
+      0,
+      Math.min(20, Math.floor(Number(body.homeUserAttachmentCount) || 0)),
+    )
 
     if (mediaType !== 'image' && mediaType !== 'video') {
       return res.status(200).json({ success: false, error: 'mediaType 无效', code: 'BAD_REQUEST' })
@@ -2000,6 +2127,44 @@ export default async function handler(req: any, res: any) {
       }
       const parsedGen = parseHomeParams(params)
 
+      const refIntentUserGen = JSON.stringify({
+        mediaType,
+        userMessage,
+        recentTurns: history.slice(-6),
+      })
+      let intentGen: IntentJson
+      try {
+        intentGen = await gpt4oJson<IntentJson>(
+          apiKey,
+          baseUrl,
+          buildHomeIntentSystem(mediaType),
+          refIntentUserGen,
+          chatModel,
+        )
+      } catch (e: any) {
+        const msg = String(e?.message || '')
+        if (/LLM请求失败\(40[13]\)/.test(msg) || /\b401\b|\b403\b/.test(msg)) {
+          return res.status(200).json({
+            success: false,
+            error: msg || '对话上游鉴权失败',
+            code: 'INTENT_FAILED',
+          })
+        }
+        intentGen = localIntentFallback(mediaType, userMessage)
+      }
+      const lastCandNormGen = normalizeOptionalRefUrl(lastOutputRefCandidateRaw, supabaseUrl)
+      const allowChainGen = mediaType === 'image' && homeUserAttachmentCount === 0 && !!lastCandNormGen
+      const effectiveRefImageUrlGen = resolveHomeChainRefImageUrl({
+        newSubjectMediaThisTurn: newSubjectMediaThisTurn === true,
+        userMessage,
+        clientRefIn: refImageUrlIn,
+        lastOutputCandidateIn: lastOutputRefCandidateRaw,
+        supabaseUrl,
+        referenceTarget: parseReferenceTargetFromIntent(intentGen),
+        refinementIntent: parsedGen.refinementIntent,
+        allowChainFromLastGen: allowChainGen,
+      })
+
       const forceSync = body.asyncImageGen === false || process.env.HOME_CHAT_SYNC_IMAGE_GEN === '1'
       if (!forceSync) {
         try {
@@ -2024,7 +2189,7 @@ export default async function handler(req: any, res: any) {
               supabaseUrl,
               mediaType,
               mediaUrl,
-              refImageUrlIn,
+              refImageUrlIn: effectiveRefImageUrlGen,
               contextSummary,
               locale: localeRaw,
               hasSessionGenerated,
@@ -2054,7 +2219,7 @@ export default async function handler(req: any, res: any) {
         supabaseUrl,
         mediaType,
         mediaUrl,
-        refImageUrl: refImageUrlIn,
+        refImageUrl: effectiveRefImageUrlGen,
         contextSummary,
         locale: localeRaw,
         hasSessionGenerated,
@@ -2071,21 +2236,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // --- 意图识别（快速 JSON）---
-    const intentSystem = [
-      '你是首页「电商商品图」模块的意图分类器。根据用户上传媒体与用户问题输出 JSON。',
-      '字段：blockedVideoEdit(boolean), needsAnalysis(boolean), needsImageGen(boolean), imageCount(number 1-4)。',
-      'blockedVideoEdit=true：用户主要诉求是「生成可播放的视频成片、剪辑时间线、拼接转场、加字幕导出成片、改视频画面、视频特效合成」等；不含「只想要脚本文案/大纲」类。',
-      'blockedVideoEdit=false：纯分析/拆解/提取，包括「分析视频脚本、拆解脚本、拉片、台词提取、拍摄手法解读」等；以及「写视频脚本/脚本文案」（文本产出，非渲染成片）；或「根据视频出静态商品图、改图」。',
-      '【执行类·必须 needsImageGen=true】用户要产出图片/修改图片，包括：界面快捷指令（换场景、更亮一点、改成白底主图、改成信息流风格、生成同款风格等）、以及含「生成、出图、做图、改成、换、加、修改、制作、去除、白底、主图、同款、确认高清」等动作且目标是得到新图的诉求。',
-      '【咨询类·needsImageGen=false】用户只要方法说明/教程/技巧，明确不要求出图，例如仅问「怎么拍、如何布光、为什么模糊」且无任何出图动作词。',
-      '若执行类与咨询类同时出现，以执行类为准（必须先满足出图）。',
-      '视频：若用户要从视频生成静态商品图、海报、同款画面，needsImageGen=true。',
-      '若仅分析视频脚本/镜头/台词/节奏且不要图，needsAnalysis=true，needsImageGen=false。',
-      'imageCount：按用户要求取 1-4，未说明则 1。',
-      mediaType === 'video'
-        ? '当前媒体为视频：禁止满足任何视频生成/剪辑成片类诉求（blockedVideoEdit）；但允许基于视频出静态商品图。'
-        : '当前媒体为图片：允许分析、出图、修图、换背景、白底主图等（不涉及视频剪辑）。',
-    ].join('\n')
+    const intentSystem = buildHomeIntentSystem(mediaType)
 
     const intentUser = JSON.stringify({
       mediaType,
@@ -2151,6 +2302,19 @@ export default async function handler(req: any, res: any) {
     if (!needsAnalysis && !needsImageGen) needsAnalysis = true
 
     const parsed = parseHomeParams(params, intent.imageCount)
+    const lastCandNormMain = normalizeOptionalRefUrl(lastOutputRefCandidateRaw, supabaseUrl)
+    const allowChainFromLastGenMain =
+      mediaType === 'image' && homeUserAttachmentCount === 0 && !!lastCandNormMain
+    const effectiveRefImageUrl = resolveHomeChainRefImageUrl({
+      newSubjectMediaThisTurn: newSubjectMediaThisTurn === true,
+      userMessage,
+      clientRefIn: refImageUrlIn,
+      lastOutputCandidateIn: lastOutputRefCandidateRaw,
+      supabaseUrl,
+      referenceTarget: parseReferenceTargetFromIntent(intent),
+      refinementIntent: parsed.refinementIntent,
+      allowChainFromLastGen: allowChainFromLastGenMain,
+    })
 
     let analysisText = ''
     let opsPack: { titles: string[]; sellingPoints: string[]; detailLead: string } | undefined
@@ -2279,7 +2443,7 @@ export default async function handler(req: any, res: any) {
         supabaseUrl,
         mediaType,
         mediaUrl,
-        refImageUrl: refImageUrlIn,
+        refImageUrl: effectiveRefImageUrl,
         contextSummary,
         locale: localeRaw,
         hasSessionGenerated,
