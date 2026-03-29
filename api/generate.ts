@@ -99,6 +99,43 @@ export default async function handler(req, res) {
       return 'UPSTREAM_ERROR'
     }
 
+    /** 聚合层常返回 code=upstream_error，message 为嵌套 JSON 字符串；勿误判为 NO_TASKID */
+    const parseVideoSubmitFailure = (d: any): { msg: string; code: string } | null => {
+      if (!d || typeof d !== 'object') return null
+      if (d.error) {
+        const msg =
+          typeof d.error === 'string'
+            ? d.error
+            : String(d.error?.message || JSON.stringify(d.error))
+        if (msg && msg !== '{}') return { msg: msg.slice(0, 2500), code: inferCode(msg) }
+      }
+      const codeStr = String(d.code || '').toLowerCase()
+      if (codeStr === 'upstream_error' || codeStr === 'error') {
+        const tryParse = (s: string): string => {
+          const t = String(s || '').trim()
+          if (!t) return ''
+          try {
+            const j = JSON.parse(t)
+            const inner =
+              (j?.error && typeof j.error === 'object' && (j.error.message || j.error.code)) ||
+              j?.message ||
+              (typeof j.error === 'string' ? j.error : '')
+            if (typeof inner === 'string' && inner.startsWith('{')) return tryParse(inner)
+            if (typeof inner === 'string') return inner
+            if (j?.error?.message) return String(j.error.message)
+          } catch {
+            return t.slice(0, 2500)
+          }
+          return t.slice(0, 2500)
+        }
+        const fromMsg = tryParse(d.message)
+        const fromUp = tryParse(d.upstream_message)
+        const msg = (fromMsg || fromUp || String(d.message || d.upstream_message || '上游错误')).slice(0, 2500)
+        if (msg) return { msg, code: inferCode(msg) }
+      }
+      return null
+    }
+
     // 提交视频生成任务
     if (req.method === 'POST') {
       // 保险栓：防止非用户确认的请求触发计费
@@ -211,7 +248,8 @@ export default async function handler(req, res) {
         }
       } else {
         apiModel = model ? (modelMap[model] || model) : 'doubao-seedance-1-5-pro-251215'
-        finalPrompt = prompt || '生成一个视频'
+        const promptRaw = typeof prompt === 'string' ? prompt : prompt != null ? String(prompt) : ''
+        finalPrompt = promptRaw.trim() || '生成一个视频'
         finalDuration = Number(duration) || 10
         finalAspect = aspect_ratio || '9:16'
         finalResolution = resolution || '720p'
@@ -222,6 +260,8 @@ export default async function handler(req, res) {
         }
       }
 
+      const textPayload = String(finalPrompt || '').trim() || (isVideoEnhance ? 'Video quality enhancement' : '生成一个视频')
+
       const enabled = await ensureModelEnabled(String(apiModel), 'video')
       if (!enabled) {
         return res.status(200).json({ success: false, error: `模型 ${apiModel} 已被后台禁用`, code: 'MODEL_UNAVAILABLE' })
@@ -229,25 +269,49 @@ export default async function handler(req, res) {
 
       console.log('Submitting with model:', apiModel, isVideoEnhance ? '(video enhance)' : '')
 
+      const submitPayload = {
+        model: apiModel,
+        duration: finalDuration,
+        aspect_ratio: finalAspect,
+        resolution: finalResolution,
+        ...upstreamExtra,
+        // 方舟/豆包等上游认 `content`；放末尾避免被 upstreamExtra 覆盖为空
+        content: textPayload,
+        prompt: textPayload,
+        text: textPayload,
+      }
+
       const submitResponse = await fetch('https://api.linkapi.org/v2/videos/generations', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          content: finalPrompt,
-          prompt: finalPrompt,
-          model: apiModel,
-          duration: finalDuration,
-          aspect_ratio: finalAspect,
-          resolution: finalResolution,
-          ...upstreamExtra,
-        }),
+        body: JSON.stringify(submitPayload),
       })
 
       const submitData = await submitResponse.json()
       console.log('Submit Response:', JSON.stringify(submitData))
+
+      const structuredFail = parseVideoSubmitFailure(submitData)
+      if (structuredFail) {
+        return res.status(200).json({
+          success: false,
+          error: structuredFail.msg,
+          code: structuredFail.code,
+          raw: submitData,
+        })
+      }
+
+      if (!submitResponse.ok) {
+        const msg = `聚合API HTTP ${submitResponse.status}`
+        return res.status(200).json({
+          success: false,
+          error: msg,
+          code: inferCode(msg),
+          raw: submitData,
+        })
+      }
 
       // 检查是否有错误
       if (submitData.error) {

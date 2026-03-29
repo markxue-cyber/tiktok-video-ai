@@ -2935,6 +2935,7 @@ function HelpCenter() {
     { code: 'QUOTA_EXHAUSTED', action: '升级套餐或等待次日额度恢复。' },
     { code: 'UPSTREAM_TIMEOUT', action: '稍后重试，必要时降低分辨率/时长。' },
     { code: 'UPSTREAM_NO_TASKID', action: '上游返回异常，建议重试并保留 request id。' },
+    { code: 'UPSTREAM_BAD_REQUEST', action: '上游参数不合法（如缺少文案/模型不匹配）；检查描述与参考素材后重试。' },
     { code: 'NO_OUTPUT', action: '上游未返回结果，建议更换模型重试。' },
     { code: 'UNKNOWN', action: '复制完整报错与任务ID，通过反馈入口提交。' },
   ]
