@@ -965,12 +965,9 @@ async function runNanoBananaGeneration(
       data?.message ||
       (typeof raw === 'string' && raw.slice(0, 1000)) ||
       `上游错误(${resp.status})`
-    if (
-      gw === 'bytedance' &&
-      typeof msg === 'string' &&
-      /does not support|不支持/i.test(msg)
-    ) {
-      msg += ` 【说明】${ARK_IMAGE_ENDPOINT_REQUIRED_MSG}`
+    if (gw === 'bytedance' && typeof msg === 'string' && /does not support|不支持/i.test(msg)) {
+      msg +=
+        ' 【说明】OpenAI 出图须 ep-m- 接入点；ep-日期… 类接入点常不支持本 URL。请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…（如 Seedream 4 的推理接入点）。'
     }
     await writeTaskRow({
       user_id: params.userId,
@@ -1161,22 +1158,29 @@ function sanitizeHomeImageModel(raw: unknown): string {
 }
 
 /**
- * 火山方舟：OpenAI 兼容 images/generations 的 model 须为推理接入点 id（ep- 开头）。
- * 非 ep- 时优先用 BYTEDANCE_ARK_IMAGE_MODEL（也应为 ep-）；裸 doubao-seedream-* 由调用方在校验里拦截并提示。
+ * 方舟 OpenAI 兼容 /images/generations：须使用 **ep-m-…** 接入点。
+ * 「ep-20260329…」类 ID 虽为合法推理接入点，但常绑定 Seedream 5 等，仅走其它 API，本路由会报「底层模型不支持」；
+ * 此时应用 BYTEDANCE_ARK_IMAGE_MODEL 中的 ep-m- 接入点覆盖。
  */
 function resolveBytedanceUpstreamImageModel(clientModel: string): string {
   const c = String(clientModel || '').trim()
-  if (/^ep-/i.test(c)) return c
   const env = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL || '').trim()
+  const cEpM = /^ep-m-/i.test(c)
+  const envEpM = /^ep-m-/i.test(env)
+  if (cEpM) return c
+  if (envEpM) return env
   if (env) return env
+  if (/^ep-/i.test(c)) return c
   return c
 }
 
 const ARK_IMAGE_ENDPOINT_REQUIRED_MSG =
-  '火山方舟的 OpenAI 兼容出图接口要求 model 为「推理接入点」ID（以 ep- 开头，例如 ep-m-xxxx），不能填模型版本名（如 doubao-seedream-5-0-260128）。请到火山引擎控制台 → 方舟 → 在线推理 → 推理接入点，选择你的图片生成模型并创建接入点，将列表中的接入点 ID 填入环境变量 BYTEDANCE_ARK_IMAGE_MODEL，或在页面「高级」出图模型里选择该 ep- 项。'
+  '首页出图调用方舟 OpenAI 兼容 POST …/images/generations，必须使用 ep-m-… 格式的推理接入点。' +
+  'ep-20260329… 类接入点常对应 Seedream 5，会报 doubao-seedream-* does not support this api（报错里是底层模型名，不一定等于请求里的 model 字段）。' +
+  '请改用支持该 OpenAI 出图路由的 ep-m- 接入点（如 Seedream 4.0 的 ep-m-…），写入 BYTEDANCE_ARK_IMAGE_MODEL；勿填 doubao-seedream-* 模型名。'
 
 function isArkOpenAiImageModelId(model: string): boolean {
-  return /^ep-/i.test(String(model || '').trim())
+  return /^ep-m-/i.test(String(model || '').trim())
 }
 
 /** 首页传入的对话模型；非法则回退各网关环境变量默认 */
@@ -1886,7 +1890,7 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({
           success: false,
           error:
-            '未配置字节跳动(火山方舟)：请在服务端设置环境变量 BYTEDANCE_ARK_API_KEY（可选 BYTEDANCE_ARK_BASE_URL、BYTEDANCE_ARK_CHAT_MODEL、BYTEDANCE_ARK_VISION_CHAT_MODEL；出图须 BYTEDANCE_ARK_IMAGE_MODEL=控制台「图像生成」ep- 接入点，否则易报模型不支持 images/generations）',
+            '未配置字节跳动(火山方舟)：请在服务端设置环境变量 BYTEDANCE_ARK_API_KEY（可选 BYTEDANCE_ARK_BASE_URL、BYTEDANCE_ARK_CHAT_MODEL、BYTEDANCE_ARK_VISION_CHAT_MODEL；OpenAI 出图须 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-… 接入点，勿用仅 ep-日期… 的接入点）',
           code: 'BYTEDANCE_ARK_NOT_CONFIGURED',
         })
       }

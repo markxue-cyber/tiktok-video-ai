@@ -78,11 +78,11 @@ function defaultHomeImageModelForGateway(gw: HomeGatewayProvider): string {
   return 'nano-banana-2'
 }
 
-/** 发往首页出图 API：方舟 OpenAI /images/generations 不接受裸 doubao-seedream-*，非 ep- 时用服务端默认（BYTEDANCE_ARK_IMAGE_MODEL） */
+/** 方舟 OpenAI 出图仅认 ep-m-…；ep-20260329… 等会在上游报「模型不支持本 API」 */
 function effectiveHomeImageModelForApiSend(gw: HomeGatewayProvider, stored: string | undefined): string {
   const raw = String(stored ?? '').trim()
   if (gw !== 'bytedance') return raw || 'nano-banana-2'
-  if (/^ep-/i.test(raw)) return raw
+  if (/^ep-m-/i.test(raw)) return raw
   return defaultHomeImageModelForGateway('bytedance')
 }
 
@@ -950,9 +950,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           }
         }
 
-        let mergedImage = [...new Set(imageIds)].filter(
-          (id) => !(gw === 'bytedance' && isArkBareCatalogImageModelId(id)),
-        )
+        let mergedImage = [...new Set(imageIds)].filter((id) => {
+          if (gw !== 'bytedance') return true
+          if (isArkBareCatalogImageModelId(id)) return false
+          if (/^ep-/i.test(id) && !/^ep-m-/i.test(id)) return false
+          return true
+        })
         if (
           gw === 'bytedance' &&
           bytedanceHomeImageModelFromServer &&
@@ -1068,7 +1071,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               } else if (
                 gw === 'bytedance' &&
                 bytedanceHomeImageModelFromServer &&
-                !/^ep-/i.test(curImg)
+                !/^ep-m-/i.test(curImg)
               ) {
                 params = { ...params, imageModel: bytedanceHomeImageModelFromServer }
               }
@@ -1616,11 +1619,13 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     : code === 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT'
                       ? String(
                           data?.error ||
-                            '方舟出图须使用推理接入点 ID（ep- 开头）。请在 Vercel 配置 BYTEDANCE_ARK_IMAGE_MODEL，或在高级里选择 ep- 出图模型。',
+                            '方舟 OpenAI 出图须 ep-m-… 接入点（非 ep-日期…）。请在 BYTEDANCE_ARK_IMAGE_MODEL 配置 ep-m-…。',
                         )
                     : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
                       ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
-                      : msgRaw
+                      : /does not support this api/i.test(msgRaw)
+                        ? '当前走方舟 OpenAI 出图 /images/generations，须使用 ep-m-… 接入点。若错误里出现 doubao-seedream-*，多半是「ep-日期…」类接入点不支持该接口；请把 BYTEDANCE_ARK_IMAGE_MODEL 改为控制台里的 ep-m-…（例如 Seedream 4 的推理接入点）。'
+                        : msgRaw
         if (code === 'QUOTA_EXHAUSTED' || /额度|用尽/.test(msg)) onGoBenefits()
         if (code === 'PAYMENT_REQUIRED' || /付费|订单/.test(msg)) onGoBenefits()
         setSessions((prev) =>
@@ -1824,10 +1829,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   : code === 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT'
                     ? String(
                         data2?.error ||
-                          '方舟出图须使用推理接入点 ID（ep- 开头）。请配置 BYTEDANCE_ARK_IMAGE_MODEL 或在高级里选择 ep- 出图模型。',
+                          '方舟 OpenAI 出图须 ep-m-… 接入点。请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…。',
                       )
                   : code === 'IMAGE_JOB_FAILED'
-                    ? String(data2?.error || '出图任务失败，请重试。')
+                    ? /does not support this api/i.test(String(data2?.error || msgRaw))
+                      ? '出图失败：方舟 OpenAI 出图须 ep-m-… 接入点；请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…（ep-日期… 类常为 Seedream 5，不支持本出图 URL）。'
+                      : String(data2?.error || '出图任务失败，请重试。')
                     : msgRaw
             setSessions((prev) =>
               prev.map((session) => {

@@ -1,9 +1,9 @@
 /**
  * 首页对话等：多聚合 API 服务商（OpenAI 兼容）密钥与 baseUrl 解析
  *
- * 方舟出图：OpenAI 兼容 POST …/images/generations 的 model 须为「推理接入点」ID（以 ep- 开头，如 ep-m-xxxx），
- * 勿填控制台里的模型版本名（如 doubao-seedream-5-0-260128），否则会报「does not support this api」。
- * 在控制台为图片模型创建推理接入点后，将接入点 ID 写入 BYTEDANCE_ARK_IMAGE_MODEL。
+ * 方舟首页出图走 OpenAI 兼容 POST …/images/generations：须 **ep-m-…** 推理接入点。
+ * 「ep-20260329…」类常不支持该路由（会报底层 doubao-seedream-* does not support this api）；勿填模型版本名。
+ * 将支持该路由的 ep-m- 接入点写入 BYTEDANCE_ARK_IMAGE_MODEL。
  */
 
 export type AggregateGatewayId = 'xiaodoubao' | 'siliconflow' | 'bytedance'
@@ -48,7 +48,7 @@ export type ResolvedAggregateGateway = {
   baseUrl: string
   /** Chat Completions 用模型 id（各平台在环境变量中配置） */
   chatModel: string
-  /** 方舟：须为推理接入点 id（ep-…），非 doubao-seedream-* 模型名（BYTEDANCE_ARK_IMAGE_MODEL） */
+  /** 方舟 OpenAI 出图：须 ep-m-… 接入点 id（BYTEDANCE_ARK_IMAGE_MODEL） */
   defaultImageModel?: string
 }
 
