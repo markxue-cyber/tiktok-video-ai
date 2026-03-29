@@ -97,9 +97,20 @@ function looksLikeHomeImageModel(id: string): boolean {
     s.includes('qwen-image') ||
     s.includes('kolors') ||
     s.includes('stable-diffusion') ||
+    s.includes('stabilityai') ||
     s.includes('sdxl') ||
     s.includes('z-image') ||
-    s.includes('sd3')
+    s.includes('sd3') ||
+    s.includes('cogview') ||
+    s.includes('hunyuan-image') ||
+    s.includes('playground-v') ||
+    s.includes('imagen') ||
+    s.includes('black-forest-labs') ||
+    s.includes('/flux.') ||
+    s.includes('instantx') ||
+    s.includes('juggernaut') ||
+    s.includes('realvis') ||
+    s.includes('dreamshaper')
   )
 }
 
@@ -129,27 +140,37 @@ function looksLikeHomeChatModel(id: string): boolean {
   return true
 }
 
-function classifyGatewayModelRow(m: { id?: string; supported_endpoint_types?: unknown }): {
-  chat: boolean
+/**
+ * 合并网关 supported_endpoint_types 与 id 启发式。
+ * 若网关返回了 type 字符串但与我们的判断均不匹配，仍保留启发式结果，避免下拉里只剩兜底一项。
+ */
+function classifyModelForHomeDropdowns(m: { id?: string; supported_endpoint_types?: unknown }): {
   image: boolean
+  chat: boolean
 } {
   const id = String(m?.id || '').trim()
-  if (!id) return { chat: false, image: false }
+  if (!id) return { image: false, chat: false }
+  const heurImg = looksLikeHomeImageModel(id)
+  const heurChat = looksLikeHomeChatModel(id)
   const types: string[] = Array.isArray(m?.supported_endpoint_types)
     ? m.supported_endpoint_types.map((t) => String(t).toLowerCase())
     : []
-  if (types.length > 0) {
-    const image = types.some((t) => t.includes('image') && (t.includes('generat') || t.includes('gen')))
-    const chat = types.some(
-      (t) =>
-        t.includes('chat') || t.includes('completion') || t === 'llm' || (t.includes('text') && t.includes('generat')),
-    )
-    return { image, chat: chat && !image }
-  }
-  return {
-    image: looksLikeHomeImageModel(id),
-    chat: looksLikeHomeChatModel(id),
-  }
+  if (types.length === 0) return { image: heurImg, chat: heurChat }
+
+  const tImg =
+    types.includes('image-generation') ||
+    types.some((t) => t.includes('image') && (t.includes('generat') || t.includes('gen')))
+  const tChat = types.some(
+    (t) =>
+      t.includes('chat') ||
+      t.includes('completion') ||
+      t === 'llm' ||
+      (t.includes('text') && t.includes('generat')),
+  )
+
+  if (tImg) return { image: true, chat: false }
+  if (tChat) return { image: heurImg, chat: true }
+  return { image: heurImg, chat: heurChat }
 }
 
 function buildAssistantTextFromTurn(data: HomeChatTurnResult): string {
@@ -747,8 +768,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   }, [activeId])
 
   /**
-   * 对话 / 出图模型下拉：请求 /api/models?gateway= ，按端点类型或 id 启发式拆成两类。
-   * model_controls：image / llm 分别剔除 disabled；出图叠 model-availability。
+   * 对话 / 出图模型下拉：GET /api/models?gateway= ，合并网关 type 与 id 启发式；type 无法识别时保留启发式，避免列表被清空。
+   * model_controls / model-availability 不剔除选项，仅在文案上标注。
    */
   useEffect(() => {
     let cancelled = false
@@ -759,16 +780,26 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         const fallbackImage =
           gw === 'siliconflow'
             ? [
-                {
-                  id: 'black-forest-labs/FLUX.1-schnell',
-                  label: 'FLUX.1-schnell（兜底示例，请以硅基控制台模型名为准）',
-                },
+                { id: 'black-forest-labs/FLUX.1-schnell', label: 'FLUX.1-schnell（离线兜底）' },
+                { id: 'Qwen/Qwen-Image', label: 'Qwen-Image（离线兜底）' },
+                { id: 'Kwai-Kolors/Kolors', label: 'Kolors（离线兜底）' },
               ]
-            : [{ id: 'nano-banana-2', label: 'Nano Banana 2（网关未返回图模时的兜底）' }]
+            : [
+                { id: 'nano-banana-2', label: 'nano-banana-2（离线兜底）' },
+                { id: 'seedream', label: 'seedream（离线兜底）' },
+                { id: 'flux', label: 'flux（离线兜底）' },
+              ]
         const fallbackChat =
           gw === 'siliconflow'
-            ? [{ id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B-Instruct（兜底）' }]
-            : [{ id: 'gpt-4o', label: 'gpt-4o（兜底）' }]
+            ? [
+                { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B-Instruct（离线兜底）' },
+                { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3（离线兜底）' },
+                { id: 'Qwen/Qwen3-32B', label: 'Qwen3-32B（离线兜底）' },
+              ]
+            : [
+                { id: 'gpt-4o', label: 'gpt-4o（离线兜底）' },
+                { id: 'gpt-4o-mini', label: 'gpt-4o-mini（离线兜底）' },
+              ]
         const unavailableImage: Record<string, string> = {}
         try {
           const token = localStorage.getItem('tikgen.accessToken') || ''
@@ -801,27 +832,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             for (const m of list) {
               const id = String(m?.id || '').trim()
               if (!id) continue
-              const types: string[] = Array.isArray(m?.supported_endpoint_types)
-                ? m.supported_endpoint_types.map(String)
-                : []
-              const tl = types.map((t) => String(t).toLowerCase())
-              let isImage = false
-              let isChat = false
-              if (tl.length > 0) {
-                isImage = tl.includes('image-generation') || tl.some((t) => t.includes('image') && (t.includes('generat') || t.includes('gen')))
-                isChat = tl.some(
-                  (t) =>
-                    t.includes('chat') ||
-                    t.includes('completion') ||
-                    t === 'llm' ||
-                    (t.includes('text') && t.includes('generat')),
-                )
-                if (isImage) isChat = false
-              } else {
-                const c = classifyGatewayModelRow(m)
-                isImage = c.image
-                isChat = c.chat
-              }
+              const { image: isImage, chat: isChat } = classifyModelForHomeDropdowns(m)
               if (isImage) imageIds.push(id)
               if (isChat) chatIds.push(id)
             }
@@ -866,12 +877,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
         const imageOptions: { id: string; label: string }[] = []
         for (const id of mergedImage) {
-          if (!id || unavailableImage[id] || disabledImage.has(id)) continue
+          if (!id) continue
+          const tags: string[] = []
+          if (unavailableImage[id]) tags.push('近期失败记录')
+          if (disabledImage.has(id)) tags.push('后台已关闭')
+          const tagStr = tags.length ? `（${tags.join('，')}）` : ''
           const name = friendlyImg.get(id) || id
-          imageOptions.push({
-            id,
-            label: recommendedImage.has(id) ? `${name}（推荐）` : name,
-          })
+          const base = recommendedImage.has(id) ? `${name}（推荐）` : name
+          imageOptions.push({ id, label: `${base}${tagStr}` })
         }
         imageOptions.sort((a, b) => {
           const ar = recommendedImage.has(a.id) ? 0 : 1
@@ -882,12 +895,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
         const chatOptions: { id: string; label: string }[] = []
         for (const id of mergedChat) {
-          if (!id || disabledLlm.has(id)) continue
+          if (!id) continue
+          const tagStr = disabledLlm.has(id) ? '（后台已关闭）' : ''
           const name = friendlyChat.get(id) || id
-          chatOptions.push({
-            id,
-            label: recommendedLlm.has(id) ? `${name}（推荐）` : name,
-          })
+          const base = recommendedLlm.has(id) ? `${name}（推荐）` : name
+          chatOptions.push({ id, label: `${base}${tagStr}` })
         }
         chatOptions.sort((a, b) => {
           const ar = recommendedLlm.has(a.id) ? 0 : 1
