@@ -78,6 +78,14 @@ function defaultHomeImageModelForGateway(gw: HomeGatewayProvider): string {
   return 'nano-banana-2'
 }
 
+/** 发往首页出图 API：方舟 OpenAI /images/generations 不接受裸 doubao-seedream-*，非 ep- 时用服务端默认（BYTEDANCE_ARK_IMAGE_MODEL） */
+function effectiveHomeImageModelForApiSend(gw: HomeGatewayProvider, stored: string | undefined): string {
+  const raw = String(stored ?? '').trim()
+  if (gw !== 'bytedance') return raw || 'nano-banana-2'
+  if (/^ep-/i.test(raw)) return raw
+  return defaultHomeImageModelForGateway('bytedance')
+}
+
 /** 高级参数「服务商」：唯一列表，落地页与对话内两处面板共用，避免漏改 */
 const HOME_GATEWAY_OPTIONS: { value: HomeGatewayProvider; label: string }[] = [
   { value: 'xiaodoubao', label: '小豆包' },
@@ -1022,6 +1030,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 const preferred =
                   finalImage.find((o) => o.label.includes('推荐')) || finalImage[0]
                 params = { ...params, imageModel: preferred.id }
+              } else if (
+                gw === 'bytedance' &&
+                bytedanceHomeImageModelFromServer &&
+                !/^ep-/i.test(curImg)
+              ) {
+                params = { ...params, imageModel: bytedanceHomeImageModelFromServer }
               }
               if (!finalChat.some((o) => o.id === curChat)) {
                 const preferred =
@@ -1477,7 +1491,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         hdEnhance: ep.hdEnhance,
         negativePrompt: ep.negativePrompt,
         refinementIntent: ep.refinementIntent ?? 'auto',
-        imageModel: ep.imageModel || 'nano-banana-2',
+        imageModel: effectiveHomeImageModelForApiSend(
+          ep.gatewayProvider ?? 'xiaodoubao',
+          ep.imageModel,
+        ),
         chatModel: ep.chatModel || defaultHomeChatModelForGateway(ep.gatewayProvider ?? 'xiaodoubao'),
         gatewayProvider: ep.gatewayProvider ?? 'xiaodoubao',
       }
@@ -1561,6 +1578,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
                   : code === 'RATE_LIMITED'
                     ? '请求过于频繁，请等待 10-20 秒后重试。'
+                    : code === 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT'
+                      ? String(
+                          data?.error ||
+                            '方舟出图须使用推理接入点 ID（ep- 开头）。请在 Vercel 配置 BYTEDANCE_ARK_IMAGE_MODEL，或在高级里选择 ep- 出图模型。',
+                        )
                     : /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(msgRaw)
                       ? '请求超时，请先生成1张预览图确认方向，或关闭多比例/A-B后重试。'
                       : msgRaw
@@ -1764,6 +1786,11 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   ? '出图超时，请稍后重试或先生成预览图。'
                   : code === 'RATE_LIMITED'
                     ? '操作过于频繁，请稍后再试。'
+                  : code === 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT'
+                    ? String(
+                        data2?.error ||
+                          '方舟出图须使用推理接入点 ID（ep- 开头）。请配置 BYTEDANCE_ARK_IMAGE_MODEL 或在高级里选择 ep- 出图模型。',
+                      )
                   : code === 'IMAGE_JOB_FAILED'
                     ? String(data2?.error || '出图任务失败，请重试。')
                     : msgRaw
