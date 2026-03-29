@@ -2186,10 +2186,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             setPlusMenuOpen((v) => !v)
                           }}
                           onPointerDown={(e) => e.stopPropagation()}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
+                          className="flex h-8 w-[3.85rem] shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
                           title="上传"
                         >
-                          <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
+                          <ImagePlus className="pointer-events-none h-[18px] w-[18px] stroke-[2]" />
                         </button>
                         {plusMenuOpen ? (
                           <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
@@ -2717,10 +2717,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       setPlusMenuOpen((v) => !v)
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
+                    className="flex h-8 w-[3.85rem] shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
                     title="上传"
                   >
-                    <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
+                    <ImagePlus className="pointer-events-none h-[18px] w-[18px] stroke-[2]" />
                   </button>
                   {plusMenuOpen ? (
                     <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
