@@ -817,6 +817,7 @@ function resolveRefinementIntent(
     '在上面这张图的基础上',
     '在这张图的基础上',
     '在这张图片的基础上',
+    '在这张图片上',
     '以这张图为基础',
   ]
   if (lastGeneratedImagePhrases.some((p) => raw.includes(p) || core.includes(p))) return 'iterative'
@@ -842,8 +843,9 @@ function explicitRejectsLastOutputRef(userMessage: string): boolean {
 function explicitWantsOriginalUpload(userMessage: string): boolean {
   const raw = String(userMessage || '')
   const core = stripHomeParamLine(raw)
+  /** 勿含「商品主图」：「作为平台上架商品主图」是输出规格，不是要求按上传原图重画 */
   const re =
-    /(按上传|上传的图|用上传|原图|原始图|商品白底图|商品主图|最开始|首张图|最初那张|基于原图|按原图|用原图)/
+    /(按上传|上传的图|用上传|原图|原始图|商品白底图|最开始|首张图|最初那张|基于原图|按原图|用原图)/
   return re.test(raw) || re.test(core)
 }
 
@@ -852,7 +854,7 @@ function explicitWantsLastOutput(userMessage: string): boolean {
   const core = stripHomeParamLine(raw)
   /** 含「这张图/当前成图」且明显在上一张画布上改，须优先于意图里误判的 original_upload */
   const re =
-    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图|在这张图的基础上|在这张图片的基础上|在这张图上|以这张图为基础|以这张图为参考|就着这张(图|片)|当前成图|这张图的基础上)/
+    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图|在这张图的基础上|在这张图片的基础上|在这张图上|在这张图片上|以这张图为基础|以这张图为参考|就着这张(图|片)|当前成图|这张图的基础上)/
   return re.test(raw) || re.test(core)
 }
 
@@ -868,7 +870,7 @@ function heuristicWantsChainRefFromMessage(userMessage: string): boolean {
   const vc = (s: string) =>
     /(加|添加|加上|贴|叠|放).{0,14}(logo|水印|字|文字|标识|品牌|角标|标语|slogan)/i.test(s) ||
     /(右下角|左上角|左下角|右上角|四个角|角落|边缘).{0,18}(加|放|贴|印|写|标)/.test(s) ||
-    /(在|到)(这|那)(张)?(图|图片)(上|里|的)/.test(s) ||
+    /(在|到)(这|那)(张)?(图片|图)(上|里|的)/.test(s) ||
     /(刚才|刚刚|上面|上一张|成图|生成的图).{0,10}(加|贴|放|改|调|p|修)/.test(s) ||
     /(p图|修图|重绘|改图|抠图|合成)/i.test(s)
   return vc(raw) || vc(core)
