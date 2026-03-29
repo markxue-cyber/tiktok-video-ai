@@ -703,7 +703,7 @@ function resolveClientHomeChatRefPayload(opts: {
   userMessageForApi: string
   attachmentCountThisTurn: number
 }): { refImageUrl?: string; lastOutputRefCandidate?: string } {
-  const last = isPublicAssetUrl(opts.lastGeneratedRefUrl || '')
+  const last = isPersistableLastGenRefUrl(opts.lastGeneratedRefUrl || '')
     ? String(opts.lastGeneratedRefUrl).trim()
     : ''
   const lastPayload = last || undefined
@@ -750,6 +750,27 @@ function isPublicAssetUrl(url: string): boolean {
   } catch {
     return false
   }
+}
+
+/** 会话「上一张成图」链式参考：含上游 CDN 直链，不限于 Supabase public assets */
+function isPersistableLastGenRefUrl(url: string): boolean {
+  const u = String(url || '').trim()
+  if (!u.startsWith('http://') && !u.startsWith('https://')) return false
+  if (u.startsWith('data:')) return false
+  if (u.length > 4000) return false
+  try {
+    const h = new URL(u).hostname.toLowerCase()
+    if (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h.startsWith('192.168.') ||
+      h.startsWith('10.')
+    )
+      return false
+  } catch {
+    return false
+  }
+  return true
 }
 
 function hasSessionGeneratedMessages(messages: HomeChatMsg[]): boolean {
@@ -2126,7 +2147,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 updatedAt: Date.now(),
                 messages: msgs,
                 lastGeneratedRefUrl:
-                  firstImg && isPublicAssetUrl(firstImg) ? firstImg : session.lastGeneratedRefUrl,
+                  firstImg && isPersistableLastGenRefUrl(firstImg) ? firstImg : session.lastGeneratedRefUrl,
               }
             }),
           )
@@ -2182,7 +2203,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 ? String(data.analysisText).slice(0, 2000)
                 : x.productAnalysisSummary,
               lastGeneratedRefUrl:
-                firstImg && isPublicAssetUrl(firstImg) ? firstImg : x.lastGeneratedRefUrl,
+                firstImg && isPersistableLastGenRefUrl(firstImg) ? firstImg : x.lastGeneratedRefUrl,
               messages: x.messages.map((m) =>
                 m.id === assistantMsgId
                   ? {

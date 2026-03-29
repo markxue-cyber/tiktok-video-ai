@@ -609,6 +609,38 @@ function normalizeOptionalRefUrl(
   return u
 }
 
+/**
+ * 上游成品图常为模型/CDN 直链，非 Supabase public assets；仍须作为链式 ref 传给下游。
+ * 仅允许 http(s)，拒绝内网/元数据地址，长度封顶。
+ */
+function normalizeChainableRefUrl(urlStr: string): string {
+  const u = String(urlStr || '').trim()
+  if (!u || u.length > 4000) return ''
+  try {
+    const parsed = new URL(u)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return ''
+    const host = parsed.hostname.toLowerCase()
+    if (
+      host === 'localhost' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.localhost') ||
+      host.startsWith('127.') ||
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      host.startsWith('169.254.') ||
+      /^(172\.(1[6-9]|2\d|3[0-1])\.)/.test(host)
+    )
+      return ''
+    return u
+  } catch {
+    return ''
+  }
+}
+
+function normalizeHomeGenRefUrl(urlStr: string, supabaseBase: string): string {
+  return normalizeOptionalRefUrl(urlStr, supabaseBase) || normalizeChainableRefUrl(urlStr)
+}
+
 /** primaryMediaFirst：本轮已换新参考图时优先用请求里的 mediaUrl，避免预览草稿里的旧 ref 盖住新图 */
 function pickNanoRefImage(
   mediaType: MediaType,
@@ -620,8 +652,8 @@ function pickNanoRefImage(
 ): string | undefined {
   if (mediaType !== 'image') return undefined
   const m = normalizeOptionalRefUrl(mediaUrl, supabaseBase)
-  const c = normalizeOptionalRefUrl(clientRefUrl, supabaseBase)
-  const d = normalizeOptionalRefUrl(String(draftRefUrl || ''), supabaseBase)
+  const c = normalizeHomeGenRefUrl(clientRefUrl, supabaseBase)
+  const d = normalizeHomeGenRefUrl(String(draftRefUrl || ''), supabaseBase)
   const ordered = primaryMediaFirst ? [m, c, d] : [c, d, m]
   for (const x of ordered) {
     if (x) return x
@@ -851,8 +883,8 @@ function resolveHomeChainRefImageUrl(opts: {
   refinementIntent: RefinementIntentParam
   allowChainFromLastGen: boolean
 }): string {
-  const clientRef = normalizeOptionalRefUrl(opts.clientRefIn, opts.supabaseUrl)
-  const lastCand = normalizeOptionalRefUrl(opts.lastOutputCandidateIn, opts.supabaseUrl)
+  const clientRef = normalizeHomeGenRefUrl(opts.clientRefIn, opts.supabaseUrl)
+  const lastCand = normalizeHomeGenRefUrl(opts.lastOutputCandidateIn, opts.supabaseUrl)
   if (opts.newSubjectMediaThisTurn) return ''
 
   const raw = String(opts.userMessage || '')
@@ -1549,7 +1581,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     return
   }
 
-  const clientRef = normalizeOptionalRefUrl(String(refImageUrlRaw || ''), supabaseUrl)
+  const clientRef = normalizeHomeGenRefUrl(String(refImageUrlRaw || ''), supabaseUrl)
   const chainingRefFromLastGen = !!(clientRef && mediaType === 'image')
   const refinementMode = resolveRefinementIntent(userMessage, refinementIntent, {
     newSubjectMediaThisTurn: newSubjectMediaThisTurn === true,
@@ -1566,9 +1598,9 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     supabaseUrl,
     newSubjectMediaThisTurn === true,
   )
-  /** 用户显式「上一版微调」且带了上一张成图作 ref 时，可能是种草/人物场景，勿用「必须像商品主图」挡掉 */
+  /** 链式微调（含话术推断出的 iterative）可能是种草/人物场景，勿用「必须像商品主图」误拦 */
   const skipSellableVision =
-    refinementIntent === 'iterative' && !!clientRef && mediaType === 'image'
+    refinementMode === 'iterative' && !!nanoRefEarly && mediaType === 'image'
   if (nanoRefEarly && !skipSellableVision) {
     const ok = await Promise.race([
       visionSellableProductRef(apiKey, baseUrl, nanoRefEarly, chatModel),
@@ -2152,7 +2184,7 @@ export default async function handler(req: any, res: any) {
         }
         intentGen = localIntentFallback(mediaType, userMessage)
       }
-      const lastCandNormGen = normalizeOptionalRefUrl(lastOutputRefCandidateRaw, supabaseUrl)
+      const lastCandNormGen = normalizeHomeGenRefUrl(lastOutputRefCandidateRaw, supabaseUrl)
       const allowChainGen = mediaType === 'image' && homeUserAttachmentCount === 0 && !!lastCandNormGen
       const effectiveRefImageUrlGen = resolveHomeChainRefImageUrl({
         newSubjectMediaThisTurn: newSubjectMediaThisTurn === true,
@@ -2302,7 +2334,7 @@ export default async function handler(req: any, res: any) {
     if (!needsAnalysis && !needsImageGen) needsAnalysis = true
 
     const parsed = parseHomeParams(params, intent.imageCount)
-    const lastCandNormMain = normalizeOptionalRefUrl(lastOutputRefCandidateRaw, supabaseUrl)
+    const lastCandNormMain = normalizeHomeGenRefUrl(lastOutputRefCandidateRaw, supabaseUrl)
     const allowChainFromLastGenMain =
       mediaType === 'image' && homeUserAttachmentCount === 0 && !!lastCandNormMain
     const effectiveRefImageUrl = resolveHomeChainRefImageUrl({
