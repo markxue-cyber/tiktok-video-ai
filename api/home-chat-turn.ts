@@ -80,7 +80,7 @@ function isSiliconFlowBaseUrl(baseUrl: string): boolean {
 function llmUpstreamAuthHint(baseUrl: string, status: number): string {
   if (status !== 401 && status !== 403) return ''
   if (isSiliconFlowBaseUrl(baseUrl)) {
-    return ' 【硅基流动】请核对 SILICONFLOW_API_KEY（完整复制、无引号/空格）、SILICONFLOW_AI_BASE_URL 与控制台区域一致（国际常用 https://api.siliconflow.com/v1 ），以及「对话模型」为控制台可用 id。'
+    return ' 【硅基流动】请核对 SILICONFLOW_API_KEY；SILICONFLOW_AI_BASE_URL 须与密钥来源一致（在 cloud.siliconflow.cn 创建的密钥请用 https://api.siliconflow.cn/v1 ，误配 api.siliconflow.com 会 401）；并确认「对话模型」id 在控制台可用。'
   }
   return ''
 }

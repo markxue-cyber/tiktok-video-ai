@@ -41,7 +41,8 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
   const id = normalizeGatewayId(raw)
   if (id === 'siliconflow') {
     const apiKey = normalizeApiKeySecret(process.env.SILICONFLOW_API_KEY)
-    const baseUrl = String(process.env.SILICONFLOW_AI_BASE_URL || 'https://api.siliconflow.com/v1').replace(
+    /** 与 cloud.siliconflow.cn 控制台密钥一致；官方 Quickstart 为 https://api.siliconflow.cn/v1（误用 .com 易 401） */
+    const baseUrl = String(process.env.SILICONFLOW_AI_BASE_URL || 'https://api.siliconflow.cn/v1').replace(
       /\/+$/,
       '',
     )
