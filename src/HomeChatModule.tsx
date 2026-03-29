@@ -2550,22 +2550,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             )}
                           </select>
                         </label>
-                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                          <span className="shrink-0 whitespace-nowrap" title="自动：根据你的话术与是否基于上一张成图推断">
-                            改图方式
-                          </span>
-                          <select
-                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                            value={active?.params.refinementIntent ?? 'auto'}
-                            onChange={(e) =>
-                              updateParams({ refinementIntent: e.target.value as 'auto' | 'iterative' | 'fresh' })
-                            }
-                          >
-                            <option value="auto">自动推断</option>
-                            <option value="iterative">上一版微调</option>
-                            <option value="fresh">重新生成</option>
-                          </select>
-                        </label>
                       </div>
                     </div>
                   ) : null}
@@ -3046,22 +3030,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           </option>
                         ))
                       )}
-                    </select>
-                  </label>
-                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                    <span className="shrink-0 whitespace-nowrap" title="自动：根据你的话术与是否基于上一张成图推断">
-                      改图方式
-                    </span>
-                    <select
-                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                      value={active?.params.refinementIntent ?? 'auto'}
-                      onChange={(e) =>
-                        updateParams({ refinementIntent: e.target.value as 'auto' | 'iterative' | 'fresh' })
-                      }
-                    >
-                      <option value="auto">自动推断</option>
-                      <option value="iterative">上一版微调</option>
-                      <option value="fresh">重新生成</option>
                     </select>
                   </label>
                 </div>
