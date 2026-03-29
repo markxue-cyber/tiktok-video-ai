@@ -4186,13 +4186,17 @@ function VideoGenerator({
             className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
           >
             {processingCount > 0 ? (
-              <>
-                再提交一个（进行中 {processingCount}，每次 <CreditCostWithZap amount={CREDITS_PER_VIDEO} />）
-              </>
+              <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5">
+                <span>再提交一个</span>
+                <span className="text-white/90">进行中 {processingCount}</span>
+                <span className="text-white/90">每次</span>
+                <CreditCostWithZap amount={CREDITS_PER_VIDEO} />
+              </span>
             ) : (
-              <>
-                生成视频<CreditCostWithZap amount={CREDITS_PER_VIDEO} wrapInParens />
-              </>
+              <span className="inline-flex items-center gap-1.5">
+                <span>生成视频</span>
+                <CreditCostWithZap amount={CREDITS_PER_VIDEO} />
+              </span>
             )}
           </button>
           {!canGenerate ? (
@@ -7913,13 +7917,16 @@ function ImageGenerator({
                         生成中…
                       </>
                     ) : ecommercePendingCredits > 0 ? (
-                      <>
-                        一键生成图片<CreditCostWithZap amount={ecommercePendingCredits} wrapInParens />
-                      </>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>一键生成图片</span>
+                        <CreditCostWithZap amount={ecommercePendingCredits} />
+                      </span>
                     ) : (
-                      <>
-                        一键生成图片（每张 <CreditCostWithZap amount={CREDITS_PER_IMAGE} />）
-                      </>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>一键生成图片</span>
+                        <span className="text-white/85">每张</span>
+                        <CreditCostWithZap amount={CREDITS_PER_IMAGE} />
+                      </span>
                     )}
                   </button>
                   <button

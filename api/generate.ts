@@ -4,7 +4,8 @@ import {
   chargeVideoOnSuccess,
   checkAndConsume,
   finalizeVideoSubmitHold,
-  releaseBillingHold,
+  refundPrepaidCredits,
+  refundVideoCreditsOnFailure,
   requireUser,
 } from './_billing.js'
 
@@ -164,7 +165,7 @@ export default async function handler(req, res) {
       const failAndRelease = async (payload: { success: false; error: string; code: string; raw?: any }) => {
         if (needBillingRelease) {
           try {
-            await releaseBillingHold(req)
+            await refundPrepaidCredits(req)
           } catch {
             /* ignore */
           }
@@ -290,6 +291,7 @@ export default async function handler(req, res) {
 
       console.log('Submitting with model:', apiModel, isVideoEnhance ? '(video enhance)' : '')
 
+      try {
       const submitPayload = {
         model: apiModel,
         duration: finalDuration,
@@ -374,9 +376,12 @@ export default async function handler(req, res) {
       await finalizeVideoSubmitHold(req, taskId, result.message)
       needBillingRelease = false
       return res.status(200).json(result)
+      } finally {
+        if (needBillingRelease) await refundPrepaidCredits(req).catch(() => {})
+      }
     }
 
-    // 查询任务状态 (GET) — 需登录以便成片成功时幂等扣积分
+    // 查询任务状态 (GET) — 需登录；成片仅标记计费，失败回补积分
     if (req.method === 'GET') {
       const taskId = req.query.taskId as string
 
@@ -384,8 +389,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: '缺少taskId' })
       }
 
+      let authUserId: string | null = null
       try {
-        await requireUser(req)
+        const u = await requireUser(req)
+        authUserId = String(u.user?.id || u.user?.sub || '').trim() || null
       } catch (e: any) {
         return res.status(401).json({ success: false, error: e?.message || '未登录（查询进度需携带 Authorization）' })
       }
@@ -412,6 +419,13 @@ export default async function handler(req, res) {
         }
       } else if (status === 'failed' || status === 'error') {
         await updateTaskByProviderId(taskId, { status: 'failed', raw: statusData })
+        if (authUserId) {
+          try {
+            await refundVideoCreditsOnFailure(authUserId, taskId)
+          } catch (e) {
+            console.error('refundVideoCreditsOnFailure failed', e)
+          }
+        }
       } else {
         await updateTaskByProviderId(taskId, { status: 'processing' })
       }

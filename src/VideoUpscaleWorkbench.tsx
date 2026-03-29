@@ -754,9 +754,10 @@ export function VideoUpscaleWorkbench({
               提升中...
             </>
           ) : (
-            <>
-              开始提升<CreditCostWithZap amount={CREDITS_PER_VIDEO} wrapInParens />
-            </>
+            <span className="inline-flex items-center justify-center gap-1.5">
+              <span>开始提升</span>
+              <CreditCostWithZap amount={CREDITS_PER_VIDEO} />
+            </span>
           )}
         </button>
       </div>

@@ -1,5 +1,5 @@
 // Vercel Serverless — 去除背景（Nano Banana 2 + 参考图），计费同图片生成
-import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, releaseBillingHold } from './_billing.js'
+import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, refundPrepaidCredits } from './_billing.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -229,7 +229,7 @@ export default async function handler(req: any, res: any) {
       raw: data || rawText,
     })
     } finally {
-      if (needBillingRelease) await releaseBillingHold(req).catch(() => {})
+      if (needBillingRelease) await refundPrepaidCredits(req).catch(() => {})
     }
   } catch (e: any) {
     const msg = String(e?.message || 'Unknown error')

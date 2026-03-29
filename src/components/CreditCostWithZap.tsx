@@ -5,19 +5,15 @@ const zapCls =
 
 type Props = {
   amount: number
-  /** 是否包一层中文括号「（…）」（仅数字+闪电，无「积分」文案） */
-  wrapInParens?: boolean
   className?: string
 }
 
-/** 消耗积分按钮内：数字 + 闪电图标（替代「约 N 积分」） */
-export function CreditCostWithZap({ amount, wrapInParens = false, className }: Props) {
-  const inner = (
+/** 消耗积分：数字 + 闪电（无括号，与主文案用父级 gap 排版） */
+export function CreditCostWithZap({ amount, className }: Props) {
+  return (
     <span className={`inline-flex items-center gap-0.5 tabular-nums ${className || ''}`}>
       <span>{amount}</span>
       <Zap className={zapCls} strokeWidth={2.35} fill="none" aria-hidden />
     </span>
   )
-  if (wrapInParens) return <>（{inner}）</>
-  return inner
 }

@@ -3,7 +3,7 @@
  * 禁止在本接口内调用任何视频生成/编辑类上游。
  */
 import { requireUser } from './_supabase.js'
-import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, releaseBillingHold } from './_billing.js'
+import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, refundPrepaidCredits } from './_billing.js'
 import { insertQueuedHomeChatImageJob, patchHomeChatImageJob } from './_homeChatImageJob.js'
 import { handleHomeChatGenStatus } from './_homeChatGenStatusRoute.js'
 import { normalizeGatewayId, resolveAggregateGateway, type AggregateGatewayId } from './_aggregateGateway.js'
@@ -1116,7 +1116,7 @@ async function runNanoBananaGeneration(
         output_url: null,
         raw: { reason: 'model disabled by admin', from: 'home_chat' },
       })
-      if (needBillingRelease) await releaseBillingHold(reqBill).catch(() => {})
+      if (needBillingRelease) await refundPrepaidCredits(reqBill).catch(() => {})
       throw new Error(`模型 ${usedModel} 已被后台禁用`)
     }
   }
@@ -1182,7 +1182,7 @@ async function runNanoBananaGeneration(
       output_url: null,
       raw: { upstream_status: resp.status, upstream: data || raw, from: 'home_chat' },
     })
-    if (needBillingRelease) await releaseBillingHold(reqBill).catch(() => {})
+    if (needBillingRelease) await refundPrepaidCredits(reqBill).catch(() => {})
     needBillingRelease = false
     throw new Error(String(msg))
   }
@@ -1244,7 +1244,7 @@ async function runNanoBananaGeneration(
     output_url: null,
     raw: data || raw,
   })
-  if (needBillingRelease) await releaseBillingHold(reqBill).catch(() => {})
+  if (needBillingRelease) await refundPrepaidCredits(reqBill).catch(() => {})
   needBillingRelease = false
   throw new Error('上游未返回可识别的图片地址（url/b64_json）')
 }

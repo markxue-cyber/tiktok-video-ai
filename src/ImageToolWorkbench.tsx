@@ -1639,14 +1639,17 @@ export function ImageToolWorkbench({
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/25 ring-1 ring-inset ring-white/10 transition-[filter,opacity] hover:brightness-[1.03] active:brightness-[0.98] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100"
               >
                 {submittingCount > 0 ? <RefreshCw className="w-4 h-4 animate-spin" /> : <SubmitIcon className="w-4 h-4" />}
-                {rt.submitLabel}
-                {images.length > 0 ? (
-                  <CreditCostWithZap amount={images.length * CREDITS_PER_IMAGE} wrapInParens />
-                ) : (
-                  <>
-                    （每张 <CreditCostWithZap amount={CREDITS_PER_IMAGE} />）
-                  </>
-                )}
+                <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5">
+                  <span>{rt.submitLabel}</span>
+                  {images.length > 0 ? (
+                    <CreditCostWithZap amount={images.length * CREDITS_PER_IMAGE} />
+                  ) : (
+                    <>
+                      <span className="text-white/85">每张</span>
+                      <CreditCostWithZap amount={CREDITS_PER_IMAGE} />
+                    </>
+                  )}
+                </span>
               </button>
             </div>
           </div>

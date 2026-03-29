@@ -222,7 +222,8 @@ export async function ensureMonthlyCreditsForActivePaidPlan(userId, subscription
   return grantSubscriptionCreditsOnce(userId, subscription.current_period_start, grant)
 }
 
-async function insertBillingHold(userId, type, idem, creditsCost, relatedTaskId) {
+/** 先插入幂等行再扣余额，避免并发双扣 */
+async function insertPrepaidCreditsLedger(userId, type, idem, creditsCost, relatedTaskId) {
   const insertResp = await fetch(`${baseUrl()}/rest/v1/usage_ledger`, {
     method: 'POST',
     headers: serviceHeaders({
@@ -236,14 +237,25 @@ async function insertBillingHold(userId, type, idem, creditsCost, relatedTaskId)
         units: 0,
         request_idempotency_key: idem,
         related_task_id: relatedTaskId || null,
-        result_json: { billingHold: true, creditsCost: Math.floor(Number(creditsCost)) },
+        result_json: {
+          creditsPrepaid: true,
+          creditsCost: Math.floor(Number(creditsCost)),
+          creditsRefunded: false,
+        },
       },
     ]),
   })
   if (insertResp.ok) return { ok: true }
   if (insertResp.status === 409) return { conflict: true }
   const insertJson = await fetchJsonOrText(insertResp)
-  throw new Error(insertJson?.message || '计费占位写入失败')
+  throw new Error(insertJson?.message || '计费记录写入失败')
+}
+
+async function deleteLedgerByUserIdem(userId, idem) {
+  await fetch(
+    `${baseUrl()}/rest/v1/usage_ledger?user_id=eq.${encodeURIComponent(userId)}&request_idempotency_key=eq.${encodeURIComponent(idem)}`,
+    { method: 'DELETE', headers: serviceHeaders() },
+  )
 }
 
 export async function checkAndConsume(req, opts) {
@@ -312,7 +324,9 @@ export async function checkAndConsume(req, opts) {
       return { user, subscription, already: true, result: parseLedgerResultJson(existing.result_json) }
     }
     const o = parseLedgerResultJson(existing?.result_json)
-    if (o?.billingHold === true) throw new Error('同一出图请求正在处理中，请稍候再试')
+    if (o?.creditsPrepaid === true && o?.creditsRefunded !== true && !ledgerResultHasReplayableImage(existing?.result_json)) {
+      throw new Error('同一出图请求正在处理中，请稍候再试')
+    }
   }
 
   if (opts.type === 'video') {
@@ -326,13 +340,20 @@ export async function checkAndConsume(req, opts) {
       }
     }
     const o = parseLedgerResultJson(existing?.result_json)
-    if (o?.billingHold === true) throw new Error('同一视频请求正在提交中，请稍候')
+    if (o?.creditsPrepaid === true && o?.creditsRefunded !== true) {
+      if (o?.taskId) {
+        return {
+          user,
+          subscription,
+          already: true,
+          result: { taskId: o.taskId, message: o.message || '视频生成中，预计需要3-5分钟' },
+        }
+      }
+      throw new Error('同一视频请求正在提交中，请稍候')
+    }
   }
 
-  const credits = await fetchUserCredits(user.id)
-  if (credits < creditsCost) throw new Error('积分不足，请充值或升级套餐')
-
-  const ins = await insertBillingHold(user.id, opts.type, idem, creditsCost, opts.relatedTaskId)
+  const ins = await insertPrepaidCreditsLedger(user.id, opts.type, idem, creditsCost, opts.relatedTaskId)
   if (ins.conflict) {
     const ex2 = await fetchLedgerRow(user.id, idem)
     if (opts.type === 'image') {
@@ -352,23 +373,39 @@ export async function checkAndConsume(req, opts) {
       }
     }
     const o2 = parseLedgerResultJson(ex2?.result_json)
-    if (o2?.billingHold === true) {
+    if (o2?.creditsPrepaid === true && o2?.creditsRefunded !== true) {
       throw new Error(opts.type === 'video' ? '同一视频请求正在提交中，请稍候' : '同一出图请求正在处理中，请稍候再试')
     }
-    throw new Error('计费占位冲突，请重试')
+    throw new Error('计费记录冲突，请重试')
+  }
+
+  try {
+    await deductUserCredits(user.id, creditsCost)
+  } catch (e) {
+    await deleteLedgerByUserIdem(user.id, idem)
+    throw e
   }
 
   return { user, subscription, already: false }
 }
 
-export async function releaseBillingHold(req) {
+/** 任务失败：回补已预付积分并删除幂等行（成功则保留行供幂等复用） */
+export async function refundPrepaidCredits(req) {
   const { user } = await requireUser(req)
   const idem = getIdem(req)
   if (!idem) return
-  await fetch(
-    `${baseUrl()}/rest/v1/usage_ledger?user_id=eq.${encodeURIComponent(user.id)}&request_idempotency_key=eq.${encodeURIComponent(idem)}`,
-    { method: 'DELETE', headers: serviceHeaders() },
-  )
+  const row = await fetchLedgerRow(user.id, idem)
+  if (!row) return
+  const prev = parseLedgerResultJson(row?.result_json) || {}
+  if (prev.creditsPrepaid === true && prev.creditsRefunded !== true) {
+    const cost = Math.floor(Number(prev.creditsCost))
+    if (Number.isFinite(cost) && cost > 0) await grantUserCredits(user.id, cost)
+  }
+  await deleteLedgerByUserIdem(user.id, idem)
+}
+
+export async function releaseBillingHold(req) {
+  await refundPrepaidCredits(req)
 }
 
 export async function finalizeCreditsBilling(req, resultJson, relatedTaskId) {
@@ -378,10 +415,34 @@ export async function finalizeCreditsBilling(req, resultJson, relatedTaskId) {
 
   const row = await fetchLedgerRow(user.id, idem)
   const prev = parseLedgerResultJson(row?.result_json) || {}
-  if (!prev.billingHold) throw new Error('计费状态异常')
   const cost = Math.floor(Number(prev.creditsCost))
   if (!Number.isFinite(cost) || cost <= 0) throw new Error('计费状态异常')
 
+  if (prev.creditsPrepaid === true) {
+    const merged = {
+      ...prev,
+      ...resultJson,
+      creditsPrepaid: true,
+      creditsCost: cost,
+      creditsCharged: cost,
+      creditsRefunded: false,
+    }
+    const patchResp = await fetch(
+      `${baseUrl()}/rest/v1/usage_ledger?user_id=eq.${encodeURIComponent(user.id)}&request_idempotency_key=eq.${encodeURIComponent(idem)}`,
+      {
+        method: 'PATCH',
+        headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ result_json: merged, related_task_id: relatedTaskId || null }),
+      },
+    )
+    if (!patchResp.ok) {
+      const pj = await fetchJsonOrText(patchResp)
+      throw new Error(pj?.message || '计费确认失败')
+    }
+    return
+  }
+
+  if (!prev.billingHold) throw new Error('计费状态异常')
   await deductUserCredits(user.id, cost)
   const merged = { ...resultJson, creditsCharged: cost, billingHold: false }
   const patchResp = await fetch(
@@ -404,12 +465,13 @@ export async function finalizeVideoSubmitHold(req, taskId, message) {
   if (!idem) return
   const row = await fetchLedgerRow(user.id, idem)
   const prev = parseLedgerResultJson(row?.result_json) || {}
-  if (!prev.billingHold) return
+  if (prev.creditsPrepaid !== true) return
   const cost = Math.floor(Number(prev.creditsCost)) || CREDITS_PER_VIDEO
   const merged = {
     ...prev,
-    billingHold: true,
+    creditsPrepaid: true,
     creditsCost: cost,
+    creditsRefunded: false,
     taskId,
     message: message || '视频生成中，预计需要3-5分钟',
   }
@@ -423,6 +485,7 @@ export async function finalizeVideoSubmitHold(req, taskId, message) {
   )
 }
 
+/** 成片成功：积分已在提交时扣除，仅标记完成（幂等） */
 export async function chargeVideoOnSuccess(req, taskId, videoUrl) {
   const { user } = await requireUser(req)
   const tid = String(taskId || '').trim()
@@ -438,36 +501,92 @@ export async function chargeVideoOnSuccess(req, taskId, videoUrl) {
   const trow = Array.isArray(tj) ? tj[0] : tj
   if (!trow?.id) return { charged: false, reason: 'forbidden' }
 
-  const chargeIdem = `video-done-${tid}`
-  const existing = await fetchLedgerRow(user.id, chargeIdem)
-  if (existing?.id) return { charged: false, reason: 'already' }
+  const legResp = await fetch(
+    `${baseUrl()}/rest/v1/usage_ledger?user_id=eq.${encodeURIComponent(user.id)}&related_task_id=eq.${encodeURIComponent(tid)}&type=eq.video&select=*`,
+    { method: 'GET', headers: serviceHeaders() },
+  )
+  const legJson = await fetchJsonOrText(legResp)
+  const rows = Array.isArray(legJson) ? legJson : []
+  const legRow = rows.find((r) => {
+    const p = parseLedgerResultJson(r?.result_json) || {}
+    return p.creditsPrepaid === true && p.videoRefundMarker !== true
+  })
+  if (!legRow?.id) return { charged: false, reason: 'no_prepaid_row' }
 
-  const cost = CREDITS_PER_VIDEO
-  const insertResp = await fetch(`${baseUrl()}/rest/v1/usage_ledger`, {
+  const prev = parseLedgerResultJson(legRow.result_json) || {}
+  if (prev.creditsPrepaid !== true) return { charged: false, reason: 'no_prepaid_row' }
+  if (prev.creditsRefunded === true) return { charged: false, reason: 'refunded' }
+  if (prev.videoSuccessMarked === true) return { charged: false, reason: 'already' }
+
+  const merged = {
+    ...prev,
+    taskId: tid,
+    videoUrl: url,
+    videoSuccessMarked: true,
+    creditsCharged: Math.floor(Number(prev.creditsCost)) || CREDITS_PER_VIDEO,
+  }
+  const patchResp = await fetch(`${baseUrl()}/rest/v1/usage_ledger?id=eq.${encodeURIComponent(legRow.id)}`, {
+    method: 'PATCH',
+    headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ result_json: merged }),
+  })
+  if (!patchResp.ok) {
+    const pj = await fetchJsonOrText(patchResp)
+    throw new Error(pj?.message || '视频计费标记失败')
+  }
+  return { charged: true, prepaid: true }
+}
+
+/** 轮询发现视频失败：回补该任务提交时扣除的积分（幂等） */
+export async function refundVideoCreditsOnFailure(userId, taskId) {
+  const uid = String(userId || '').trim()
+  const tid = String(taskId || '').trim()
+  if (!uid || !tid) return
+
+  const markerIdem = `video-refund-${tid}`
+  const markerIns = await fetch(`${baseUrl()}/rest/v1/usage_ledger`, {
     method: 'POST',
     headers: serviceHeaders({
       'Content-Type': 'application/json',
-      Prefer: 'return=representation',
+      Prefer: 'resolution=ignore-duplicates,return=representation',
     }),
     body: JSON.stringify([
       {
-        user_id: user.id,
+        user_id: uid,
         type: 'video',
         units: 0,
-        request_idempotency_key: chargeIdem,
+        request_idempotency_key: markerIdem,
         related_task_id: tid,
-        result_json: { taskId: tid, videoUrl: url, creditsCharged: cost },
+        result_json: { videoRefundMarker: true, taskId: tid },
       },
     ]),
   })
-  const insertJson = await fetchJsonOrText(insertResp)
-  if (!insertResp.ok) {
-    if (insertResp.status === 409) return { charged: false, reason: 'already' }
-    throw new Error(insertJson?.message || '视频计费记录写入失败')
-  }
+  if (!markerIns.ok && markerIns.status !== 409) return
+  if (markerIns.status === 409) return
 
-  await deductUserCredits(user.id, cost)
-  return { charged: true }
+  const legResp = await fetch(
+    `${baseUrl()}/rest/v1/usage_ledger?user_id=eq.${encodeURIComponent(uid)}&related_task_id=eq.${encodeURIComponent(tid)}&type=eq.video&select=*`,
+    { method: 'GET', headers: serviceHeaders() },
+  )
+  const legJson = await fetchJsonOrText(legResp)
+  const rows = Array.isArray(legJson) ? legJson : []
+  const src = rows.find((r) => {
+    const p = parseLedgerResultJson(r?.result_json) || {}
+    return p.creditsPrepaid === true && p.videoRefundMarker !== true
+  })
+  if (!src?.id) return
+
+  const prev = parseLedgerResultJson(src.result_json) || {}
+  if (prev.creditsRefunded === true || prev.videoSuccessMarked === true) return
+  const cost = Math.floor(Number(prev.creditsCost)) || CREDITS_PER_VIDEO
+  if (cost > 0) await grantUserCredits(uid, cost)
+
+  const merged = { ...prev, creditsRefunded: true, refundReason: 'video_failed' }
+  await fetch(`${baseUrl()}/rest/v1/usage_ledger?id=eq.${encodeURIComponent(src.id)}`, {
+    method: 'PATCH',
+    headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ result_json: merged }),
+  })
 }
 
 export async function finalizeConsumption(req, resultJson, relatedTaskId) {

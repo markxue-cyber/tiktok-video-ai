@@ -1,5 +1,5 @@
 // Vercel Serverless Function - 图片生成API（聚合API / OpenAI兼容）
-import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, releaseBillingHold } from './_billing.js'
+import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, refundPrepaidCredits } from './_billing.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -343,7 +343,7 @@ export default async function handler(req, res) {
       raw: data || rawText,
     })
     } finally {
-      if (needBillingRelease) await releaseBillingHold(req).catch(() => {})
+      if (needBillingRelease) await refundPrepaidCredits(req).catch(() => {})
     }
   } catch (e) {
     const msg = String(e?.message || 'Unknown error')
