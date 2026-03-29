@@ -52,9 +52,16 @@ const DEFAULT_SEND_TEXT = '请结合上传的媒体回答我的问题。'
 
 type HomeGatewayProvider = 'xiaodoubao' | 'siliconflow' | 'bytedance'
 
-/** 字节跳动：与「Doubao-1.5-vision-pro-32k / Seedream 4.0」对应的方舟模型 id（亦可能是 ep-m-…，以下拉为准） */
+/** 字节跳动：与「Doubao-1.5-vision-pro-32k」对应的方舟模型 id（亦可能是 ep-m-…，以下拉为准） */
 const DEFAULT_BYTEDANCE_HOME_CHAT_MODEL = 'doubao-1-5-vision-pro-32k'
-const DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL = 'doubao-seedream-4-0-250828'
+/**
+ * 未配置 BYTEDANCE_ARK_IMAGE_MODEL 且 /api/models 未带回 imageModel 时的代码兜底。
+ * Seedream 4.0 裸 id 常报「不支持此 API」；出图请在环境变量填控制台图像类 ep-m-…。
+ */
+const DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL = 'doubao-seededit-3-0-t2i-250628'
+
+/** GET /api/models 成功时写入；方舟出图默认优先用服务端 BYTEDANCE_ARK_IMAGE_MODEL */
+let bytedanceHomeImageModelFromServer: string | null = null
 
 function defaultHomeChatModelForGateway(gw: HomeGatewayProvider): string {
   if (gw === 'siliconflow') return 'Qwen/Qwen3-VL-8B-Instruct'
@@ -63,7 +70,10 @@ function defaultHomeChatModelForGateway(gw: HomeGatewayProvider): string {
 }
 
 function defaultHomeImageModelForGateway(gw: HomeGatewayProvider): string {
-  if (gw === 'bytedance') return DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL
+  if (gw === 'bytedance') {
+    if (bytedanceHomeImageModelFromServer) return bytedanceHomeImageModelFromServer
+    return DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL
+  }
   if (gw === 'siliconflow') return 'black-forest-labs/FLUX.1-schnell'
   return 'nano-banana-2'
 }
@@ -93,7 +103,7 @@ const HOME_IMAGE_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'midjourney', name: 'Midjourney' },
   { id: 'black-forest-labs/FLUX.1-schnell', name: 'FLUX.1 schnell' },
   { id: 'black-forest-labs/FLUX.1-dev', name: 'FLUX.1 dev' },
-  { id: 'doubao-seedream-4-0-250828', name: '豆包 Seedream 4.0' },
+  { id: 'doubao-seedream-4-0-250828', name: '豆包 Seedream 4.0（若不支持出图 API 请换 ep-）' },
   { id: 'doubao-seededit-3-0-t2i-250628', name: '豆包 Seededit' },
 ]
 
@@ -829,8 +839,14 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               ]
             : gw === 'bytedance'
               ? [
-                  { id: 'doubao-seedream-4-0-250828', label: 'Seedream 4.0（离线兜底·以控制台为准）' },
-                  { id: 'doubao-seededit-3-0-t2i-250628', label: 'Seededit 文生图（离线兜底）' },
+                  {
+                    id: 'doubao-seededit-3-0-t2i-250628',
+                    label: 'Seededit（离线兜底·出图请以控制台 ep-m- 接入点为准）',
+                  },
+                  {
+                    id: 'doubao-seedream-4-0-250828',
+                    label: 'Seedream 4.0（部分账号不支持 OpenAI 兼容 /images/generations）',
+                  },
                   { id: 'doubao-seedream-3-0-t2i-250415', label: 'Seedream 3.0（离线兜底）' },
                 ]
               : [
@@ -885,32 +901,47 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
         const imageIds: string[] = []
         const chatIds: string[] = []
+        let modelsJson: any = null
         try {
           const resp = await fetch(`/api/models?gateway=${encodeURIComponent(gw)}`)
           const text = await resp.text()
-          const data = (() => {
-            try {
-              return text ? JSON.parse(text) : null
-            } catch {
-              return null
-            }
-          })()
-          if (data?.success) {
-            const root = data?.data
-            const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
-            for (const m of list) {
-              const id = String(m?.id || '').trim()
-              if (!id) continue
-              const { image: isImage, chat: isChat } = classifyModelForHomeDropdowns(m)
-              if (isImage) imageIds.push(id)
-              if (isChat) chatIds.push(id)
-            }
+          try {
+            modelsJson = text ? JSON.parse(text) : null
+          } catch {
+            modelsJson = null
           }
         } catch {
-          /* ignore */
+          modelsJson = null
+        }
+
+        if (gw === 'bytedance') {
+          const img = modelsJson?.gatewayDefaults?.imageModel
+          bytedanceHomeImageModelFromServer =
+            modelsJson?.success && typeof img === 'string' && img.trim() ? img.trim() : null
+        } else {
+          bytedanceHomeImageModelFromServer = null
+        }
+
+        if (modelsJson?.success) {
+          const root = modelsJson?.data
+          const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
+          for (const m of list) {
+            const id = String(m?.id || '').trim()
+            if (!id) continue
+            const { image: isImage, chat: isChat } = classifyModelForHomeDropdowns(m)
+            if (isImage) imageIds.push(id)
+            if (isChat) chatIds.push(id)
+          }
         }
 
         const mergedImage = [...new Set(imageIds)]
+        if (
+          gw === 'bytedance' &&
+          bytedanceHomeImageModelFromServer &&
+          !mergedImage.includes(bytedanceHomeImageModelFromServer)
+        ) {
+          mergedImage.unshift(bytedanceHomeImageModelFromServer)
+        }
         const mergedChat = [...new Set(chatIds)]
 
         const disabledImage = new Set<string>()

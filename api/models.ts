@@ -35,7 +35,14 @@ export default async function handler(req, res) {
     if (!r.ok) {
       return res.status(200).json({ success: false, error: data?.error?.message || data?.message || `请求失败(${r.status})`, raw: data })
     }
-    return res.status(200).json({ success: true, data })
+    return res.status(200).json({
+      success: true,
+      data,
+      gatewayDefaults: {
+        chatModel: gw.chatModel,
+        ...(gw.defaultImageModel ? { imageModel: gw.defaultImageModel } : {}),
+      },
+    })
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || '服务器错误' })
   }

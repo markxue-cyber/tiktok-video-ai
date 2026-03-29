@@ -1,5 +1,8 @@
 /**
  * 首页对话等：多聚合 API 服务商（OpenAI 兼容）密钥与 baseUrl 解析
+ *
+ * 方舟出图：OpenAI 兼容 POST …/images/generations 往往要求控制台「图像生成」类接入点 id（ep-m-…），
+ * 与裸模型名（如 doubao-seedream-…）不一定一致。可设 BYTEDANCE_ARK_IMAGE_MODEL 与首页默认对齐。
  */
 
 export type AggregateGatewayId = 'xiaodoubao' | 'siliconflow' | 'bytedance'
@@ -44,6 +47,8 @@ export type ResolvedAggregateGateway = {
   baseUrl: string
   /** Chat Completions 用模型 id（各平台在环境变量中配置） */
   chatModel: string
+  /** 方舟等：首页 /images/generations 默认 model，多为 ep-m-…（BYTEDANCE_ARK_IMAGE_MODEL） */
+  defaultImageModel?: string
 }
 
 /**
@@ -72,7 +77,15 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
     ).replace(/\/+$/, '')
     /** 多为推理接入点 ID（ep-）或模型名，请与控制台一致 */
     const chatModel = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || 'doubao-1-5-vision-pro-32k').trim()
-    return { id, label: '字节跳动(方舟)', apiKey, baseUrl, chatModel }
+    const defaultImageModel = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL || '').trim()
+    return {
+      id,
+      label: '字节跳动(方舟)',
+      apiKey,
+      baseUrl,
+      chatModel,
+      ...(defaultImageModel ? { defaultImageModel } : {}),
+    }
   }
   const apiKey = normalizeApiKeySecret(process.env.XIAO_DOU_BAO_API_KEY)
   const baseUrl = String(process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1').replace(/\/+$/, '')
