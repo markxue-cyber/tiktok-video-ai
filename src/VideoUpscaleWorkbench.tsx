@@ -18,6 +18,7 @@ import {
   type VideoUpscaleWorkspaceV1,
 } from './tikgenImageGenPersistence'
 import { buildDownloadProxyUrl } from './utils/downloadProxy'
+import { CreditCostWithZap } from './components/CreditCostWithZap'
 import { CREDITS_PER_VIDEO } from './lib/billingCredits'
 
 const VIDEO_UPSCALE_LS = 'tikgen.videoUpscale.history.v1'
@@ -753,7 +754,9 @@ export function VideoUpscaleWorkbench({
               提升中...
             </>
           ) : (
-            <>开始提升（{CREDITS_PER_VIDEO} 积分）</>
+            <>
+              开始提升<CreditCostWithZap amount={CREDITS_PER_VIDEO} wrapInParens />
+            </>
           )}
         </button>
       </div>

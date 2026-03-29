@@ -28,6 +28,7 @@ import {
   tryLocalStorageSetJson,
 } from './tikgenImageGenPersistence'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
+import { CreditCostWithZap } from './components/CreditCostWithZap'
 import { CREDITS_PER_IMAGE } from './lib/billingCredits'
 
 const MAX_IMAGES = 5
@@ -1639,9 +1640,13 @@ export function ImageToolWorkbench({
               >
                 {submittingCount > 0 ? <RefreshCw className="w-4 h-4 animate-spin" /> : <SubmitIcon className="w-4 h-4" />}
                 {rt.submitLabel}
-                {images.length > 0
-                  ? `（约 ${images.length * CREDITS_PER_IMAGE} 积分）`
-                  : `（每张 ${CREDITS_PER_IMAGE} 积分）`}
+                {images.length > 0 ? (
+                  <CreditCostWithZap amount={images.length * CREDITS_PER_IMAGE} wrapInParens />
+                ) : (
+                  <>
+                    （每张 <CreditCostWithZap amount={CREDITS_PER_IMAGE} />）
+                  </>
+                )}
               </button>
             </div>
           </div>

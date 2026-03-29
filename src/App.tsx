@@ -124,6 +124,7 @@ import { ImageToolWorkbench } from './ImageToolWorkbench'
 import { RemoveBackgroundWorkbench } from './RemoveBackgroundWorkbench'
 import { LandingV2 } from './LandingV2'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
+import { CreditCostWithZap } from './components/CreditCostWithZap'
 import { CREDITS_PER_IMAGE, CREDITS_PER_VIDEO, creditsForImageCount } from './lib/billingCredits'
 
 // 视频模型列表来自聚合API报错提示（会随账号权限变化而变化）
@@ -4185,9 +4186,13 @@ function VideoGenerator({
             className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold rounded-xl disabled:opacity-50"
           >
             {processingCount > 0 ? (
-              <>再提交一个（进行中 {processingCount}，每次 {CREDITS_PER_VIDEO} 积分）</>
+              <>
+                再提交一个（进行中 {processingCount}，每次 <CreditCostWithZap amount={CREDITS_PER_VIDEO} />）
+              </>
             ) : (
-              <>生成视频（{CREDITS_PER_VIDEO} 积分）</>
+              <>
+                生成视频<CreditCostWithZap amount={CREDITS_PER_VIDEO} wrapInParens />
+              </>
             )}
           </button>
           {!canGenerate ? (
@@ -7751,7 +7756,10 @@ function ImageGenerator({
                 ) : (
                   <>
                     <Sparkles className="relative h-5 w-5 shrink-0 drop-shadow-sm" strokeWidth={2.25} />
-                    <span className="relative">开始生成（约 {simpleStartCredits} 积分）</span>
+                    <span className="relative inline-flex items-center gap-1.5">
+                      开始生成
+                      <CreditCostWithZap amount={simpleStartCredits} />
+                    </span>
                   </>
                 )}
               </button>
@@ -7905,9 +7913,13 @@ function ImageGenerator({
                         生成中…
                       </>
                     ) : ecommercePendingCredits > 0 ? (
-                      <>一键生成图片（约 {ecommercePendingCredits} 积分）</>
+                      <>
+                        一键生成图片<CreditCostWithZap amount={ecommercePendingCredits} wrapInParens />
+                      </>
                     ) : (
-                      <>一键生成图片（每张 {CREDITS_PER_IMAGE} 积分）</>
+                      <>
+                        一键生成图片（每张 <CreditCostWithZap amount={CREDITS_PER_IMAGE} />）
+                      </>
                     )}
                   </button>
                   <button
