@@ -677,7 +677,7 @@ function explicitWantsLastOutputHome(userMessageForApi: string): boolean {
   const raw = String(userMessageForApi || '')
   const core = stripHomeParamLineHome(raw)
   const re =
-    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图)/
+    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图|在这张图的基础上|在这张图片的基础上|在这张图上|以这张图为基础|以这张图为参考|就着这张(图|片)|当前成图|这张图的基础上)/
   return re.test(raw) || re.test(core)
 }
 

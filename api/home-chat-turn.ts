@@ -815,6 +815,9 @@ function resolveRefinementIntent(
     '把刚刚生成的这张图',
     '在上面这张图上',
     '在上面这张图的基础上',
+    '在这张图的基础上',
+    '在这张图片的基础上',
+    '以这张图为基础',
   ]
   if (lastGeneratedImagePhrases.some((p) => raw.includes(p) || core.includes(p))) return 'iterative'
 
@@ -847,8 +850,9 @@ function explicitWantsOriginalUpload(userMessage: string): boolean {
 function explicitWantsLastOutput(userMessage: string): boolean {
   const raw = String(userMessage || '')
   const core = stripHomeParamLine(raw)
+  /** 含「这张图/当前成图」且明显在上一张画布上改，须优先于意图里误判的 original_upload */
   const re =
-    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图)/
+    /(上一张成图|刚生成(的)?图|生成的图|预览图|刚才那(张|版)|这版成图|上面生成(的)?|刚出的图|在这一版基础上|在上一张成图|在预览图|在这张图的基础上|在这张图片的基础上|在这张图上|以这张图为基础|以这张图为参考|就着这张(图|片)|当前成图|这张图的基础上)/
   return re.test(raw) || re.test(core)
 }
 
@@ -921,6 +925,7 @@ function buildHomeIntentSystem(mediaType: MediaType): string {
     '你是首页「电商商品图」模块的意图分类器。根据用户上传媒体与用户问题输出 JSON。',
     '字段：blockedVideoEdit(boolean), needsAnalysis(boolean), needsImageGen(boolean), imageCount(number 1-4), referenceTarget(string，取值仅可为 original_upload、last_generated、auto 三者之一)。',
     'referenceTarget：用户希望基于哪张图做像素级修改。original_upload=明确要按上传图/原图/商品图/实拍；last_generated=明确要基于上一轮 AI 成图、预览图、刚生成的图继续改；auto=未明说或两种都可时由系统用语义与链式规则推断。',
+    '强规则：出现「在这张图的基础上」「在这张图上」「以这张图为基础」「当前成图」等且用户是在加字/logo/改角落/微调画面时，若会话语境是接着上一张生成结果改，须填 last_generated，勿填 original_upload（勿把「这张图」默认当成上传商品图）。',
     '若用户换新主图或新附件，referenceTarget 仍填 auto 即可；服务端会以新主图优先。',
     'blockedVideoEdit=true：用户主要诉求是「生成可播放的视频成片、剪辑时间线、拼接转场、加字幕导出成片、改视频画面、视频特效合成」等；不含「只想要脚本文案/大纲」类。',
     'blockedVideoEdit=false：纯分析/拆解/提取，包括「分析视频脚本、拆解脚本、拉片、台词提取、拍摄手法解读」等；以及「写视频脚本/脚本文案」（文本产出，非渲染成片）；或「根据视频出静态商品图、改图」。',
