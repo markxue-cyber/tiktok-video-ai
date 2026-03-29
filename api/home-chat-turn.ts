@@ -970,8 +970,7 @@ async function runNanoBananaGeneration(
       typeof msg === 'string' &&
       /does not support|不支持/i.test(msg)
     ) {
-      msg +=
-        ' 【火山方舟出图】请在部署环境设置 BYTEDANCE_ARK_IMAGE_MODEL 为控制台「图像生成」推理接入点 id（形如 ep-m-xxxx）；或在高级设置里选择以 ep- 开头的出图模型。裸 doubao-seedream 等模型名常与 /images/generations 不匹配。'
+      msg += ` 【说明】${ARK_IMAGE_ENDPOINT_REQUIRED_MSG}`
     }
     await writeTaskRow({
       user_id: params.userId,
@@ -1162,8 +1161,8 @@ function sanitizeHomeImageModel(raw: unknown): string {
 }
 
 /**
- * 火山方舟：OpenAI 兼容 POST …/images/generations 通常只认「图像生成」推理接入点（ep- 开头）。
- * 客户端/localStorage 里常见的 doubao-seedream-* 会报「不支持此 API」；配置了 BYTEDANCE_ARK_IMAGE_MODEL 时用它覆盖非 ep- 选项。
+ * 火山方舟：OpenAI 兼容 images/generations 的 model 须为推理接入点 id（ep- 开头）。
+ * 非 ep- 时优先用 BYTEDANCE_ARK_IMAGE_MODEL（也应为 ep-）；裸 doubao-seedream-* 由调用方在校验里拦截并提示。
  */
 function resolveBytedanceUpstreamImageModel(clientModel: string): string {
   const c = String(clientModel || '').trim()
@@ -1171,6 +1170,13 @@ function resolveBytedanceUpstreamImageModel(clientModel: string): string {
   const env = String(process.env.BYTEDANCE_ARK_IMAGE_MODEL || '').trim()
   if (env) return env
   return c
+}
+
+const ARK_IMAGE_ENDPOINT_REQUIRED_MSG =
+  '火山方舟的 OpenAI 兼容出图接口要求 model 为「推理接入点」ID（以 ep- 开头，例如 ep-m-xxxx），不能填模型版本名（如 doubao-seedream-5-0-260128）。请到火山引擎控制台 → 方舟 → 在线推理 → 推理接入点，选择你的图片生成模型并创建接入点，将列表中的接入点 ID 填入环境变量 BYTEDANCE_ARK_IMAGE_MODEL，或在页面「高级」出图模型里选择该 ep- 项。'
+
+function isArkOpenAiImageModelId(model: string): boolean {
+  return /^ep-/i.test(String(model || '').trim())
 }
 
 /** 首页传入的对话模型；非法则回退各网关环境变量默认 */
@@ -1345,6 +1351,14 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
   let genModel = String(imageModel || '').trim() || DEFAULT_HOME_IMAGE_MODEL
   if (gatewayProvider === 'bytedance') {
     genModel = resolveBytedanceUpstreamImageModel(genModel) || DEFAULT_HOME_IMAGE_MODEL
+    if (!isArkOpenAiImageModelId(genModel)) {
+      res.status(200).json({
+        success: false,
+        code: 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT',
+        error: ARK_IMAGE_ENDPOINT_REQUIRED_MSG,
+      })
+      return
+    }
   }
 
   if (!allowImageGenPerMinute(userId)) {

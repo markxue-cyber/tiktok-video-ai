@@ -35,12 +35,17 @@ export default async function handler(req, res) {
     if (!r.ok) {
       return res.status(200).json({ success: false, error: data?.error?.message || data?.message || `请求失败(${r.status})`, raw: data })
     }
+    /** 方舟 OpenAI 出图仅认 ep- 接入点；勿把 BYTEDANCE_ARK_IMAGE_MODEL 设成 doubao-seedream-* 模型名下发给前端 */
+    const arkImg =
+      gw.id === 'bytedance' && gw.defaultImageModel && /^ep-/i.test(String(gw.defaultImageModel).trim())
+        ? String(gw.defaultImageModel).trim()
+        : undefined
     return res.status(200).json({
       success: true,
       data,
       gatewayDefaults: {
         chatModel: gw.chatModel,
-        ...(gw.defaultImageModel ? { imageModel: gw.defaultImageModel } : {}),
+        ...(arkImg ? { imageModel: arkImg } : {}),
       },
     })
   } catch (e: any) {
