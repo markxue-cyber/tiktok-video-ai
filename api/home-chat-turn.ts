@@ -595,15 +595,20 @@ function normalizeOptionalRefUrl(
   return u
 }
 
+/** primaryMediaFirst：本轮已换新参考图时优先用请求里的 mediaUrl，避免预览草稿里的旧 ref 盖住新图 */
 function pickNanoRefImage(
   mediaType: MediaType,
   mediaUrl: string,
   clientRefUrl: string,
   draftRefUrl: string | undefined,
   supabaseBase: string,
+  primaryMediaFirst?: boolean,
 ): string | undefined {
   if (mediaType !== 'image') return undefined
-  const ordered = [clientRefUrl, draftRefUrl, mediaUrl].map((x) => normalizeOptionalRefUrl(String(x || ''), supabaseBase))
+  const m = normalizeOptionalRefUrl(mediaUrl, supabaseBase)
+  const c = normalizeOptionalRefUrl(clientRefUrl, supabaseBase)
+  const d = normalizeOptionalRefUrl(String(draftRefUrl || ''), supabaseBase)
+  const ordered = primaryMediaFirst ? [m, c, d] : [c, d, m]
   for (const x of ordered) {
     if (x) return x
   }
@@ -744,6 +749,8 @@ function resolveRefinementIntent(
   const ex = (explicit || 'auto').toLowerCase() as RefinementIntentParam
   if (ex === 'iterative') return 'iterative'
   if (ex === 'fresh') return 'fresh'
+  /** 新主图/新附件：勿被「换场景」等快捷短语判成上一版微调，否则提示词仍锁旧主体 */
+  if (opts.newSubjectMediaThisTurn) return 'fresh'
 
   const raw = String(userMessage || '')
   const core = stripHomeParamLine(raw)
@@ -771,7 +778,6 @@ function resolveRefinementIntent(
 
   if (HOME_FORCE_IMAGE_PHRASES.some((p) => raw.includes(p) || core.includes(p))) return 'iterative'
 
-  if (opts.newSubjectMediaThisTurn) return 'fresh'
   if (opts.chainingRefFromLastGen) return 'iterative'
   return 'iterative'
 }
@@ -1427,8 +1433,17 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     newSubjectMediaThisTurn: newSubjectMediaThisTurn === true,
     chainingRefFromLastGen,
   })
-  const draftEarly = previewToken ? getPreviewDraft(previewToken, userId) : null
-  const nanoRefEarly = pickNanoRefImage(mediaType, mediaUrl, clientRef, draftEarly?.refImageUrl, supabaseUrl)
+  /** 换新参考图后不得沿用旧预览 token 里的 media/ref/prompt，否则会一直生成上一主体 */
+  const previewDraft =
+    previewToken && newSubjectMediaThisTurn !== true ? getPreviewDraft(previewToken, userId) : null
+  const nanoRefEarly = pickNanoRefImage(
+    mediaType,
+    mediaUrl,
+    clientRef,
+    previewDraft?.refImageUrl,
+    supabaseUrl,
+    newSubjectMediaThisTurn === true,
+  )
   /** 用户显式「上一版微调」且带了上一张成图作 ref 时，可能是种草/人物场景，勿用「必须像商品主图」挡掉 */
   const skipSellableVision =
     refinementIntent === 'iterative' && !!clientRef && mediaType === 'image'
@@ -1484,17 +1499,31 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           localeEn
             ? 'User locale is English: put English visual keywords first, keep necessary Chinese only if user wrote Chinese.'
             : '输出要包含中文描述 + 必要英文视觉关键词，便于模型稳定出图。',
+          ...(newSubjectMediaThisTurn === true
+            ? [
+                '【本轮参考图已更换】baseAnalysis 仅描述当前参考图；optimized 必须与 userMessage 及该图一致，禁止写入先前对话中的其他商品/人物主体（如旧款服装）。',
+              ]
+            : []),
           '输出 JSON：{"optimized":"..."}',
         ].join('\n'),
         JSON.stringify({
           baseAnalysis: analysisText.slice(0, 2000),
-          sessionProductSummary: String(contextSummary || '').slice(0, 1200) || undefined,
+          sessionProductSummary:
+            newSubjectMediaThisTurn === true
+              ? undefined
+              : String(contextSummary || '').slice(0, 1200) || undefined,
           userMessage,
           executionDirectives: execDir || undefined,
           style: styleKeywords(style),
           aspectRatio,
           refWeight,
           refinementMode,
+          ...(newSubjectMediaThisTurn === true
+            ? {
+                noteNewReference:
+                  '用户本轮已更换参考图：禁止沿用 sessionProductSummary 中可能存在的旧商品描述；主体以本轮参考图与 userMessage 为准。',
+              }
+            : {}),
         }),
         chatModel,
       )
@@ -1544,7 +1573,14 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
 
   finalPrompt = [optimizedPrompt, extra].join('\n\n')
 
-  const nanoRefPreview = pickNanoRefImage(mediaType, mediaUrl, clientRef, undefined, supabaseUrl)
+  const nanoRefPreview = pickNanoRefImage(
+    mediaType,
+    mediaUrl,
+    clientRef,
+    undefined,
+    supabaseUrl,
+    newSubjectMediaThisTurn === true,
+  )
 
   if (generateMode === 'preview') {
     const previewId = putPreviewDraft({
@@ -1599,13 +1635,19 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     return
   }
 
-  const draft = previewToken ? getPreviewDraft(previewToken, userId) : null
-  const finalPromptToUse = draft?.finalPrompt || finalPrompt
-  const mediaTypeToUse = draft?.mediaType || mediaType
-  const mediaUrlToUse = draft?.mediaUrl || mediaUrl
-  const styleToUse = draft?.style || style
-  const resolutionToUse = draft?.resolution || resolution
-  const nanoRefFinal = pickNanoRefImage(mediaTypeToUse, mediaUrlToUse, clientRef, draft?.refImageUrl, supabaseUrl)
+  const finalPromptToUse = previewDraft?.finalPrompt || finalPrompt
+  const mediaTypeToUse = previewDraft?.mediaType || mediaType
+  const mediaUrlToUse = previewDraft?.mediaUrl || mediaUrl
+  const styleToUse = previewDraft?.style || style
+  const resolutionToUse = previewDraft?.resolution || resolution
+  const nanoRefFinal = pickNanoRefImage(
+    mediaTypeToUse,
+    mediaUrlToUse,
+    clientRef,
+    previewDraft?.refImageUrl,
+    supabaseUrl,
+    newSubjectMediaThisTurn === true,
+  )
 
   const ratioListSafe = ratioList.slice(0, 2)
   const variants = abVariant ? (['conservative', 'aggressive'] as const) : (['normal'] as const)

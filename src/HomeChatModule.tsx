@@ -1542,7 +1542,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
     const hasGenPayload = hasSessionGeneratedMessages(s.messages)
     const localeStr =
       typeof navigator !== 'undefined' && navigator.language ? navigator.language : ''
-    const contextSummary = String(s.productAnalysisSummary || '').slice(0, 2500)
+    /** 换新主图后勿把上一轮摘要带给提示词优化（否则会锁旧主体如女装） */
+    const contextSummary = newSubjectMediaThisTurn
+      ? ''
+      : String(s.productAnalysisSummary || '').slice(0, 2500)
 
     const conn =
       typeof navigator !== 'undefined'
@@ -1591,6 +1594,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           updatedAt: Date.now(),
           messages: nextMsgs,
           media: null,
+          ...(newSubjectMediaThisTurn ? { productAnalysisSummary: undefined } : {}),
         }
       }),
     )
@@ -1613,7 +1617,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           ? 'final'
           : 'preview'
         : 'final'
-      if (generateMode === 'preview') setPreviewToken('')
+      const effectivePreviewToken =
+        generateMode === 'final' && !newSubjectMediaThisTurn ? previewToken : ''
+      if (generateMode === 'preview' || newSubjectMediaThisTurn) setPreviewToken('')
 
       const paramsPayload = {
         resolution: epResolution,
@@ -1627,7 +1633,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         abVariant: ep.abVariant,
         qcEnabled: ep.qcEnabled,
         generateMode,
-        previewToken: generateMode === 'final' ? previewToken : '',
+        previewToken: effectivePreviewToken,
         optimizePrompt: ep.optimizePrompt,
         hdEnhance: ep.hdEnhance,
         negativePrompt: ep.negativePrompt,
@@ -1673,7 +1679,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           locale: localeStr,
           newSubjectMediaThisTurn,
           generateMode,
-          previewToken: generateMode === 'final' ? previewToken : '',
+          previewToken: effectivePreviewToken,
           history: hist.slice(-API_HISTORY_MAX),
           splitPipeline: true,
           params: paramsPayload,
@@ -1841,7 +1847,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               locale: localeStr,
               newSubjectMediaThisTurn,
               generateMode,
-              previewToken: generateMode === 'final' ? previewToken : '',
+              previewToken: effectivePreviewToken,
               history: hist.slice(-API_HISTORY_MAX),
               params: paramsPayload,
             },
