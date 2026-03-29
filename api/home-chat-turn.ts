@@ -1175,9 +1175,6 @@ function looksLikeVisionCapableChatModelId(modelId: string): boolean {
 
 const DEFAULT_SILICONFLOW_VISION_CHAT_MODEL = 'Qwen/Qwen3-VL-8B-Instruct'
 
-/** 方舟控制台常见多模态模型名兜底；可与 BYTEDANCE_ARK_VISION_CHAT_MODEL 覆盖 */
-const DEFAULT_BYTEDANCE_VISION_CHAT_MODEL = 'doubao-1-5-thinking-vision-pro-250428'
-
 function looksLikeDoubaoArkLikelyMultimodal(modelId: string): boolean {
   const s = String(modelId || '').toLowerCase()
   if (s.startsWith('ep-')) return true
@@ -1199,7 +1196,12 @@ function coerceHomeChatModelForMultimodal(
   }
   if (gatewayId === 'bytedance') {
     if (looksLikeVisionCapableChatModelId(m) || looksLikeDoubaoArkLikelyMultimodal(m)) return m
-    return String(process.env.BYTEDANCE_ARK_VISION_CHAT_MODEL || DEFAULT_BYTEDANCE_VISION_CHAT_MODEL).trim()
+    /** 勿硬编码公网模型 id（账号未开通会报 does not exist）；优先用你在控制台创建的接入点 */
+    const visionEnv = String(process.env.BYTEDANCE_ARK_VISION_CHAT_MODEL || '').trim()
+    if (visionEnv) return visionEnv
+    const chatEnv = String(process.env.BYTEDANCE_ARK_CHAT_MODEL || '').trim()
+    if (chatEnv) return chatEnv
+    return m
   }
   return m
 }

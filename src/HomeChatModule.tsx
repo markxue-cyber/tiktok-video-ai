@@ -98,7 +98,10 @@ const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'doubao-pro-32k-241215', name: '豆包 Pro 32K' },
   { id: 'doubao-lite-32k-241215', name: '豆包 Lite 32K' },
   { id: 'doubao-1-5-thinking-pro-250415', name: '豆包 1.5 Thinking Pro' },
-  { id: 'doubao-1-5-thinking-vision-pro-250428', name: '豆包 1.5 Thinking Vision' },
+  {
+    id: 'doubao-1-5-thinking-vision-pro-250428',
+    name: '豆包 1.5 Thinking Vision（须账号已开通）',
+  },
   { id: 'doubao-seed-1-6-250615', name: '豆包 Seed 1.6' },
   { id: 'doubao-seed-1-6-thinking-250615', name: '豆包 Seed 1.6 Thinking' },
 ]
@@ -834,12 +837,18 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               ]
             : gw === 'bytedance'
               ? [
-                  { id: 'doubao-1-5-thinking-vision-pro-250428', label: 'doubao 1.5 thinking vision（离线兜底·看图）' },
-                  { id: 'doubao-pro-32k-241215', label: 'doubao-pro-32k（离线兜底）' },
+                  {
+                    id: 'doubao-pro-32k-241215',
+                    label: 'doubao-pro-32k（兜底·看图请选 ep- 或控制台已开通的多模态模型）',
+                  },
                   { id: 'doubao-lite-32k-241215', label: 'doubao-lite-32k（离线兜底）' },
                   { id: 'doubao-1-5-thinking-pro-250415', label: 'doubao 1.5 thinking pro（离线兜底）' },
                   { id: 'doubao-seed-1-6-250615', label: 'doubao-seed-1.6（离线兜底）' },
                   { id: 'doubao-seed-1-6-thinking-250615', label: 'doubao-seed-1.6-thinking（离线兜底）' },
+                  {
+                    id: 'doubao-1-5-thinking-vision-pro-250428',
+                    label: 'doubao 1.5 thinking vision（示例·须控制台已开通，否则报不存在）',
+                  },
                 ]
               : [
                   { id: 'gpt-4o', label: 'gpt-4o（离线兜底）' },
