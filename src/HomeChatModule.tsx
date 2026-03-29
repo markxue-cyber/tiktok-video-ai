@@ -65,8 +65,24 @@ const HOME_IMAGE_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'sdxl', name: 'SDXL' },
   { id: 'dalle-3', name: 'DALL·E 3' },
   { id: 'midjourney', name: 'Midjourney' },
+  { id: 'black-forest-labs/FLUX.1-schnell', name: 'FLUX.1 schnell' },
+  { id: 'black-forest-labs/FLUX.1-dev', name: 'FLUX.1 dev' },
 ]
 
+const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
+  { id: 'gpt-4o', name: 'GPT-4o' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o mini' },
+  { id: 'Qwen/Qwen2.5-7B-Instruct', name: 'Qwen2.5-7B-Instruct' },
+  { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen2.5-72B-Instruct' },
+  { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
+  { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
+]
+
+/**
+ * 硅基等平台 GET /v1/models 往往只有 id，没有 supported_endpoint_types；
+ * 只能靠 id 启发式区分「文生图」与聊天/VL/视频等，避免把 Qwen3-Instruct 选进出图。
+ * 若某账号的 /models 里根本没有 FLUX/Z-Image 等 id，下拉里自然只有 Qwen-Image、Kolors 等。
+ */
 function looksLikeHomeImageModel(id: string): boolean {
   const s = String(id || '').toLowerCase()
   return (
@@ -81,8 +97,59 @@ function looksLikeHomeImageModel(id: string): boolean {
     s.includes('qwen-image') ||
     s.includes('kolors') ||
     s.includes('stable-diffusion') ||
-    s.includes('sdxl')
+    s.includes('sdxl') ||
+    s.includes('z-image') ||
+    s.includes('sd3')
   )
+}
+
+/** 非 Chat Completions 用途（嵌入、语音、视频生成等），从对话下拉里剔除 */
+function looksLikeNonChatEndpointModel(id: string): boolean {
+  const s = String(id || '').toLowerCase()
+  if (s.includes('embedding')) return true
+  if (s.includes('rerank')) return true
+  if (s.includes('bge-')) return true
+  if (s.includes('bce-embedding') || s.includes('bce-reranker')) return true
+  if (s.includes('paddleocr')) return true
+  if (s.includes('deepseek-ocr')) return true
+  if (s.includes('funaudiollm')) return true
+  if (s.includes('cosyvoice') || s.includes('sensevoice')) return true
+  if (s.includes('indextts')) return true
+  if (s.includes('moss-tts')) return true
+  if (s.includes('telespeech')) return true
+  if (s.includes('-i2v-') || s.includes('-t2v-')) return true
+  if (s.includes('wan2.2') || s.includes('/wan2.')) return true
+  if (s.includes('captioner')) return true
+  return false
+}
+
+function looksLikeHomeChatModel(id: string): boolean {
+  if (looksLikeHomeImageModel(id)) return false
+  if (looksLikeNonChatEndpointModel(id)) return false
+  return true
+}
+
+function classifyGatewayModelRow(m: { id?: string; supported_endpoint_types?: unknown }): {
+  chat: boolean
+  image: boolean
+} {
+  const id = String(m?.id || '').trim()
+  if (!id) return { chat: false, image: false }
+  const types: string[] = Array.isArray(m?.supported_endpoint_types)
+    ? m.supported_endpoint_types.map((t) => String(t).toLowerCase())
+    : []
+  if (types.length > 0) {
+    const image = types.some((t) => t.includes('image') && (t.includes('generat') || t.includes('gen')))
+    const chat = types.some(
+      (t) =>
+        t.includes('chat') || t.includes('completion') || t === 'llm' || (t.includes('text') && t.includes('generat')),
+    )
+    return { image, chat: chat && !image }
+  }
+  return {
+    image: looksLikeHomeImageModel(id),
+    chat: looksLikeHomeChatModel(id),
+  }
 }
 
 function buildAssistantTextFromTurn(data: HomeChatTurnResult): string {
@@ -169,6 +236,8 @@ export type HomeChatSession = {
     refinementIntent?: 'auto' | 'iterative' | 'fresh'
     /** 出图模型 id（与聚合 API / model_controls 一致） */
     imageModel: string
+    /** Chat Completions 模型 id，与所选服务商网关一致 */
+    chatModel: string
     /** 聚合服务商：小豆包 / 硅基流动 */
     gatewayProvider: 'xiaodoubao' | 'siliconflow'
   }
@@ -272,6 +341,7 @@ const defaultParams = (): HomeChatSession['params'] => ({
   negativePrompt: true,
   refinementIntent: 'auto',
   imageModel: 'nano-banana-2',
+  chatModel: 'gpt-4o',
   gatewayProvider: 'xiaodoubao',
 })
 
@@ -619,7 +689,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const pendingFileByIdRef = useRef(new Map<string, { file: File; kind: 'image' | 'video' }>())
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
   const [imageModelOptions, setImageModelOptions] = useState<{ id: string; label: string }[]>([])
-  const [imageModelListLoading, setImageModelListLoading] = useState(true)
+  const [chatModelOptions, setChatModelOptions] = useState<{ id: string; label: string }[]>([])
+  const [gatewayModelsLoading, setGatewayModelsLoading] = useState(true)
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) || null, [sessions, activeId])
 
@@ -676,116 +747,181 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   }, [activeId])
 
   /**
-   * 出图模型下拉：按所选服务商请求 /api/models?gateway= ，展示网关返回的图模 id。
-   * model_controls 中 enabled=false 的剔除；登录用户叠 model-availability 不可用项。
+   * 对话 / 出图模型下拉：请求 /api/models?gateway= ，按端点类型或 id 启发式拆成两类。
+   * model_controls：image / llm 分别剔除 disabled；出图叠 model-availability。
    */
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      setImageModelListLoading(true)
+      setGatewayModelsLoading(true)
       try {
-      const gw = active?.params.gatewayProvider || 'xiaodoubao'
-      const fallback =
-        gw === 'siliconflow'
-          ? [
-              {
-                id: 'black-forest-labs/FLUX.1-schnell',
-                label: 'FLUX.1-schnell（兜底示例，请以硅基控制台模型名为准）',
-              },
-            ]
-          : [{ id: 'nano-banana-2', label: 'Nano Banana 2（网关未返回图模时的兜底）' }]
-      const unavailable: Record<string, string> = {}
-      try {
-        const token = localStorage.getItem('tikgen.accessToken') || ''
-        if (token) {
-          const r = await getModelAvailabilityAPI(token)
-          for (const x of r.image || []) unavailable[String(x.id)] = String(x.reason || '暂不可用')
-        }
-      } catch {
-        /* ignore */
-      }
-
-      const friendly = new Map(HOME_IMAGE_MODEL_LABELS.map((x) => [x.id, x.name]))
-
-      const apiIds: string[] = []
-      try {
-        const resp = await fetch(`/api/models?gateway=${encodeURIComponent(gw)}`)
-        const text = await resp.text()
-        const data = (() => {
-          try {
-            return text ? JSON.parse(text) : null
-          } catch {
-            return null
+        const gw = active?.params.gatewayProvider || 'xiaodoubao'
+        const fallbackImage =
+          gw === 'siliconflow'
+            ? [
+                {
+                  id: 'black-forest-labs/FLUX.1-schnell',
+                  label: 'FLUX.1-schnell（兜底示例，请以硅基控制台模型名为准）',
+                },
+              ]
+            : [{ id: 'nano-banana-2', label: 'Nano Banana 2（网关未返回图模时的兜底）' }]
+        const fallbackChat =
+          gw === 'siliconflow'
+            ? [{ id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B-Instruct（兜底）' }]
+            : [{ id: 'gpt-4o', label: 'gpt-4o（兜底）' }]
+        const unavailableImage: Record<string, string> = {}
+        try {
+          const token = localStorage.getItem('tikgen.accessToken') || ''
+          if (token) {
+            const r = await getModelAvailabilityAPI(token)
+            for (const x of r.image || []) unavailableImage[String(x.id)] = String(x.reason || '暂不可用')
           }
-        })()
-        if (!data?.success) {
-          /* 网关报错时不再伪造其它模型 */
-        } else {
-          const root = data?.data
-          const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
-          for (const m of list) {
-            const id = String(m?.id || '').trim()
-            if (!id) continue
-            const types: string[] = Array.isArray(m?.supported_endpoint_types)
-              ? m.supported_endpoint_types.map(String)
-              : []
-            if (types.includes('image-generation') || looksLikeHomeImageModel(id)) apiIds.push(id)
-          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
-      }
 
-      let mergedIds = [...new Set(apiIds)]
+        const friendlyImg = new Map(HOME_IMAGE_MODEL_LABELS.map((x) => [x.id, x.name]))
+        const friendlyChat = new Map(HOME_CHAT_MODEL_LABELS.map((x) => [x.id, x.name]))
 
-      const disabled = new Set<string>()
-      const recommended = new Set<string>()
-      try {
-        const resp = await fetch('/api/model-controls?type=image')
-        const data = await resp.json()
-        if (data?.success && Array.isArray(data.controls)) {
-          for (const c of data.controls) {
-            const id = String(c.model_id || '').trim()
-            if (!id) continue
-            if (c.enabled === false) disabled.add(id)
-            if (c.recommended === true) recommended.add(id)
+        const imageIds: string[] = []
+        const chatIds: string[] = []
+        try {
+          const resp = await fetch(`/api/models?gateway=${encodeURIComponent(gw)}`)
+          const text = await resp.text()
+          const data = (() => {
+            try {
+              return text ? JSON.parse(text) : null
+            } catch {
+              return null
+            }
+          })()
+          if (data?.success) {
+            const root = data?.data
+            const list = Array.isArray(root?.data) ? root.data : Array.isArray(root) ? root : []
+            for (const m of list) {
+              const id = String(m?.id || '').trim()
+              if (!id) continue
+              const types: string[] = Array.isArray(m?.supported_endpoint_types)
+                ? m.supported_endpoint_types.map(String)
+                : []
+              const tl = types.map((t) => String(t).toLowerCase())
+              let isImage = false
+              let isChat = false
+              if (tl.length > 0) {
+                isImage = tl.includes('image-generation') || tl.some((t) => t.includes('image') && (t.includes('generat') || t.includes('gen')))
+                isChat = tl.some(
+                  (t) =>
+                    t.includes('chat') ||
+                    t.includes('completion') ||
+                    t === 'llm' ||
+                    (t.includes('text') && t.includes('generat')),
+                )
+                if (isImage) isChat = false
+              } else {
+                const c = classifyGatewayModelRow(m)
+                isImage = c.image
+                isChat = c.chat
+              }
+              if (isImage) imageIds.push(id)
+              if (isChat) chatIds.push(id)
+            }
           }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
-      }
 
-      const options: { id: string; label: string }[] = []
-      for (const id of mergedIds) {
-        if (!id || unavailable[id] || disabled.has(id)) continue
-        const name = friendly.get(id) || id
-        options.push({
-          id,
-          label: recommended.has(id) ? `${name}（推荐）` : name,
+        const mergedImage = [...new Set(imageIds)]
+        const mergedChat = [...new Set(chatIds)]
+
+        const disabledImage = new Set<string>()
+        const disabledLlm = new Set<string>()
+        const recommendedImage = new Set<string>()
+        const recommendedLlm = new Set<string>()
+        try {
+          const [imgResp, llmResp] = await Promise.all([
+            fetch('/api/model-controls?type=image'),
+            fetch('/api/model-controls?type=llm'),
+          ])
+          const imgData = await imgResp.json().catch(() => null)
+          const llmData = await llmResp.json().catch(() => null)
+          if (imgData?.success && Array.isArray(imgData.controls)) {
+            for (const c of imgData.controls) {
+              const id = String(c.model_id || '').trim()
+              if (!id) continue
+              if (c.enabled === false) disabledImage.add(id)
+              if (c.recommended === true) recommendedImage.add(id)
+            }
+          }
+          if (llmData?.success && Array.isArray(llmData.controls)) {
+            for (const c of llmData.controls) {
+              const id = String(c.model_id || '').trim()
+              if (!id) continue
+              if (c.enabled === false) disabledLlm.add(id)
+              if (c.recommended === true) recommendedLlm.add(id)
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+
+        const imageOptions: { id: string; label: string }[] = []
+        for (const id of mergedImage) {
+          if (!id || unavailableImage[id] || disabledImage.has(id)) continue
+          const name = friendlyImg.get(id) || id
+          imageOptions.push({
+            id,
+            label: recommendedImage.has(id) ? `${name}（推荐）` : name,
+          })
+        }
+        imageOptions.sort((a, b) => {
+          const ar = recommendedImage.has(a.id) ? 0 : 1
+          const br = recommendedImage.has(b.id) ? 0 : 1
+          if (ar !== br) return ar - br
+          return a.label.localeCompare(b.label, 'zh-CN')
         })
-      }
 
-      options.sort((a, b) => {
-        const ar = recommended.has(a.id) ? 0 : 1
-        const br = recommended.has(b.id) ? 0 : 1
-        if (ar !== br) return ar - br
-        return a.label.localeCompare(b.label, 'zh-CN')
-      })
+        const chatOptions: { id: string; label: string }[] = []
+        for (const id of mergedChat) {
+          if (!id || disabledLlm.has(id)) continue
+          const name = friendlyChat.get(id) || id
+          chatOptions.push({
+            id,
+            label: recommendedLlm.has(id) ? `${name}（推荐）` : name,
+          })
+        }
+        chatOptions.sort((a, b) => {
+          const ar = recommendedLlm.has(a.id) ? 0 : 1
+          const br = recommendedLlm.has(b.id) ? 0 : 1
+          if (ar !== br) return ar - br
+          return a.label.localeCompare(b.label, 'zh-CN')
+        })
 
-      const finalOpts = options.length ? options : fallback
-      if (!cancelled) {
-        setImageModelOptions(finalOpts)
-        setSessions((prev) =>
-          prev.map((s) => {
-            const cur = String(s.params.imageModel || 'nano-banana-2')
-            if (finalOpts.some((o) => o.id === cur)) return s
-            const preferred = finalOpts.find((o) => o.label.includes('推荐')) || finalOpts[0]
-            return { ...s, params: { ...s.params, imageModel: preferred.id } }
-          }),
-        )
-      }
+        const finalImage = imageOptions.length ? imageOptions : fallbackImage
+        const finalChat = chatOptions.length ? chatOptions : fallbackChat
+        if (!cancelled) {
+          setImageModelOptions(finalImage)
+          setChatModelOptions(finalChat)
+          setSessions((prev) =>
+            prev.map((s) => {
+              const curImg = String(s.params.imageModel || 'nano-banana-2')
+              const curChat = String(s.params.chatModel || (gw === 'siliconflow' ? 'Qwen/Qwen2.5-7B-Instruct' : 'gpt-4o'))
+              let params = s.params
+              if (!finalImage.some((o) => o.id === curImg)) {
+                const preferred =
+                  finalImage.find((o) => o.label.includes('推荐')) || finalImage[0]
+                params = { ...params, imageModel: preferred.id }
+              }
+              if (!finalChat.some((o) => o.id === curChat)) {
+                const preferred =
+                  finalChat.find((o) => o.label.includes('推荐')) || finalChat[0]
+                params = { ...params, chatModel: preferred.id }
+              }
+              return params === s.params ? s : { ...s, params }
+            }),
+          )
+        }
       } finally {
-        setImageModelListLoading(false)
+        if (!cancelled) setGatewayModelsLoading(false)
       }
     })()
     return () => {
@@ -1233,6 +1369,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         negativePrompt: ep.negativePrompt,
         refinementIntent: ep.refinementIntent ?? 'auto',
         imageModel: ep.imageModel || 'nano-banana-2',
+        chatModel:
+          ep.chatModel ||
+          (ep.gatewayProvider === 'siliconflow' ? 'Qwen/Qwen2.5-7B-Instruct' : 'gpt-4o'),
         gatewayProvider: ep.gatewayProvider ?? 'xiaodoubao',
       }
 
@@ -2084,12 +2223,42 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                           </select>
                         </label>
                         <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
-                          <span className="shrink-0 whitespace-nowrap">出图模型</span>
+                          <span className="shrink-0 whitespace-nowrap">对话模型</span>
                           <select
-                            disabled={imageModelListLoading}
+                            disabled={gatewayModelsLoading}
                             className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90 disabled:cursor-wait disabled:opacity-70"
                             value={
-                              imageModelListLoading
+                              gatewayModelsLoading
+                                ? ''
+                                : chatModelOptions.some((o) => o.id === active?.params.chatModel)
+                                  ? String(active?.params.chatModel)
+                                  : String(
+                                      chatModelOptions[0]?.id ||
+                                        (active?.params.gatewayProvider === 'siliconflow'
+                                          ? 'Qwen/Qwen2.5-7B-Instruct'
+                                          : 'gpt-4o'),
+                                    )
+                            }
+                            onChange={(e) => updateParams({ chatModel: e.target.value })}
+                          >
+                            {gatewayModelsLoading ? (
+                              <option value="">正在拉取网关可用模型…</option>
+                            ) : (
+                              chatModelOptions.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.label}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </label>
+                        <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
+                          <span className="shrink-0 whitespace-nowrap">出图模型</span>
+                          <select
+                            disabled={gatewayModelsLoading}
+                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90 disabled:cursor-wait disabled:opacity-70"
+                            value={
+                              gatewayModelsLoading
                                 ? ''
                                 : imageModelOptions.some((o) => o.id === active?.params.imageModel)
                                   ? String(active?.params.imageModel)
@@ -2097,7 +2266,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             }
                             onChange={(e) => updateParams({ imageModel: e.target.value })}
                           >
-                            {imageModelListLoading ? (
+                            {gatewayModelsLoading ? (
                               <option value="">正在拉取网关可用模型…</option>
                             ) : (
                               imageModelOptions.map((o) => (
@@ -2590,12 +2759,42 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     </select>
                   </label>
                   <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
-                    <span className="shrink-0 whitespace-nowrap">出图模型</span>
+                    <span className="shrink-0 whitespace-nowrap">对话模型</span>
                     <select
-                      disabled={imageModelListLoading}
+                      disabled={gatewayModelsLoading}
                       className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90 disabled:cursor-wait disabled:opacity-70"
                       value={
-                        imageModelListLoading
+                        gatewayModelsLoading
+                          ? ''
+                          : chatModelOptions.some((o) => o.id === active?.params.chatModel)
+                            ? String(active?.params.chatModel)
+                            : String(
+                                chatModelOptions[0]?.id ||
+                                  (active?.params.gatewayProvider === 'siliconflow'
+                                    ? 'Qwen/Qwen2.5-7B-Instruct'
+                                    : 'gpt-4o'),
+                              )
+                      }
+                      onChange={(e) => updateParams({ chatModel: e.target.value })}
+                    >
+                      {gatewayModelsLoading ? (
+                        <option value="">正在拉取网关可用模型…</option>
+                      ) : (
+                        chatModelOptions.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                  <label className="col-span-1 flex min-w-0 items-center gap-2 text-xs text-white/60 sm:col-span-2 xl:col-span-4">
+                    <span className="shrink-0 whitespace-nowrap">出图模型</span>
+                    <select
+                      disabled={gatewayModelsLoading}
+                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90 disabled:cursor-wait disabled:opacity-70"
+                      value={
+                        gatewayModelsLoading
                           ? ''
                           : imageModelOptions.some((o) => o.id === active?.params.imageModel)
                             ? String(active?.params.imageModel)
@@ -2603,7 +2802,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       }
                       onChange={(e) => updateParams({ imageModel: e.target.value })}
                     >
-                      {imageModelListLoading ? (
+                      {gatewayModelsLoading ? (
                         <option value="">正在拉取网关可用模型…</option>
                       ) : (
                         imageModelOptions.map((o) => (

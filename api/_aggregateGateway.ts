@@ -29,7 +29,7 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
   const id = normalizeGatewayId(raw)
   if (id === 'siliconflow') {
     const apiKey = String(process.env.SILICONFLOW_API_KEY || '').trim()
-    const baseUrl = String(process.env.SILICONFLOW_AI_BASE_URL || 'https://api.siliconflow.cn/v1').replace(
+    const baseUrl = String(process.env.SILICONFLOW_AI_BASE_URL || 'https://api.siliconflow.com/v1').replace(
       /\/+$/,
       '',
     )

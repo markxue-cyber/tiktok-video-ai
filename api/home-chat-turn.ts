@@ -7,6 +7,10 @@ import { checkAndConsume, finalizeConsumption } from './_billing.js'
 import { insertQueuedHomeChatImageJob, patchHomeChatImageJob } from './_homeChatImageJob.js'
 import { handleHomeChatGenStatus } from './_homeChatGenStatusRoute.js'
 import { normalizeGatewayId, resolveAggregateGateway, type AggregateGatewayId } from './_aggregateGateway.js'
+import {
+  buildSiliconFlowImagesGenerationsBody,
+  pickImageUrlFromGenerationsJson,
+} from './_siliconflowImage.js'
 
 const BLOCKED_VIDEO_EDIT_MSG =
   '当前对话模块暂不支持视频生成、剪辑、二次创作类功能，仅支持视频内容分析、脚本拆解、拍摄手法解读、台词提取等需求，请您调整提问内容后重试'
@@ -749,6 +753,7 @@ async function runNanoBananaGeneration(
     refImage?: string
     imageCount: number
     model: string
+    gatewayProvider?: AggregateGatewayId
   },
   /** 计费层曾误把无 url 的 result_json 当命中时使用新 key 重试一次 */
   retryDepth = 0,
@@ -850,23 +855,38 @@ async function runNanoBananaGeneration(
     }
   }
 
+  const upstreamSignal = imageUpstreamAbortSignal()
+  const gw = params.gatewayProvider || 'xiaodoubao'
+  const jsonBody =
+    gw === 'siliconflow'
+      ? await buildSiliconFlowImagesGenerationsBody({
+          model: usedModel,
+          prompt: params.prompt,
+          negative: neg,
+          aspectRatio: aspect,
+          refImage: params.refImage,
+          imageCount: n,
+          signal: upstreamSignal,
+        })
+      : {
+          prompt: params.prompt,
+          ...negativeFields,
+          model: usedModel || undefined,
+          n,
+          count: n,
+          num_images: n,
+          ...sizeFields,
+          ...refFields,
+        }
+
   const resp = await fetch(`${params.baseUrl.replace(/\/+$/, '')}/images/generations`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${params.apiKey}`,
       'Content-Type': 'application/json',
     },
-    signal: imageUpstreamAbortSignal(),
-    body: JSON.stringify({
-      prompt: params.prompt,
-      ...negativeFields,
-      model: usedModel || undefined,
-      n,
-      count: n,
-      num_images: n,
-      ...sizeFields,
-      ...refFields,
-    }),
+    signal: upstreamSignal,
+    body: JSON.stringify(jsonBody),
   })
   const raw = await resp.text()
   const data = (() => {
@@ -896,15 +916,21 @@ async function runNanoBananaGeneration(
   }
 
   const pick = (v: any) => (typeof v === 'string' ? v : '')
+  const sfPick = gw === 'siliconflow' ? pickImageUrlFromGenerationsJson(data) : null
   const first = Array.isArray(data?.data) ? data.data[0] : null
   const url =
+    sfPick?.url ||
     pick(first?.url) ||
     pick(first?.image_url) ||
     pick(data?.output) ||
     pick(data?.result?.url) ||
     pick(data?.image_url) ||
     pick(data?.url)
-  const b64 = pick(first?.b64_json) || pick(data?.b64_json) || pick(data?.image_base64)
+  const b64 =
+    sfPick?.b64 ||
+    pick(first?.b64_json) ||
+    pick(data?.b64_json) ||
+    pick(data?.image_base64)
 
   if (b64) {
     const result = { imageUrl: `data:image/png;base64,${b64}`, size: reqSize }
@@ -1049,6 +1075,8 @@ type ParsedHomeParams = {
   refinementIntent: RefinementIntentParam
   /** OpenAI 兼容出图 model id，由首页高级参数传入 */
   imageModel: string
+  /** 首页选择的对话模型；null 表示用网关环境变量默认 */
+  chatModelOverride: string | null
   /** 聚合 API 服务商（与密钥环境变量对应） */
   gatewayProvider: AggregateGatewayId
 }
@@ -1060,6 +1088,14 @@ function sanitizeHomeImageModel(raw: unknown): string {
   if (!s || s.length > 200) return DEFAULT_HOME_IMAGE_MODEL
   // 硅基等厂商常用 org/model 形式，允许 /
   if (!/^[a-zA-Z0-9._\/-]+$/.test(s)) return DEFAULT_HOME_IMAGE_MODEL
+  return s
+}
+
+/** 首页传入的对话模型；非法则回退各网关环境变量默认 */
+function sanitizeOptionalChatModel(raw: unknown): string | null {
+  const s = String(raw ?? '').trim()
+  if (!s || s.length > 200) return null
+  if (!/^[a-zA-Z0-9._\/-]+$/.test(s)) return null
   return s
 }
 
@@ -1084,6 +1120,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
   const refinementIntent: RefinementIntentParam =
     ri === 'iterative' || ri === 'fresh' || ri === 'auto' ? ri : 'auto'
   const imageModel = sanitizeHomeImageModel(params.imageModel)
+  const chatModelOverride = sanitizeOptionalChatModel(params.chatModel)
   const gatewayProvider = normalizeGatewayId(params.gatewayProvider)
   return {
     aspectRatio,
@@ -1101,6 +1138,7 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
     imageCount,
     refinementIntent,
     imageModel,
+    chatModelOverride,
     gatewayProvider,
   }
 }
@@ -1172,6 +1210,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     generateOnlyHop,
     imageModel,
     chatModel,
+    gatewayProvider,
   } = ctx
 
   const genModel = String(imageModel || '').trim() || DEFAULT_HOME_IMAGE_MODEL
@@ -1333,6 +1372,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
       refImage: nanoRefPreview,
       imageCount: 1,
       model: genModel,
+      gatewayProvider,
     })
     const previewImage = { url: prev.imageUrl, ratio: aspectRatio, variant: 'preview', qcScore: 80, qcIssues: [] as string[] }
     void writeHomeTelemetry(userId, {
@@ -1404,6 +1444,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
           refImage: nanoRefFinal,
           imageCount: 1,
           model: genModel,
+          gatewayProvider,
         })
         let qc: QcResult = { score: 80, issues: [] }
         const qcBudgetOk = Date.now() - startedAt < 72_000
@@ -1528,7 +1569,7 @@ async function executeHomeChatImageJobInBackground(opts: {
   }
   const apiKey = gw.apiKey
   const baseUrl = gw.baseUrl
-  const chatModel = gw.chatModel
+  const chatModel = parsedGen.chatModelOverride || gw.chatModel
 
   try {
     await patchHomeChatImageJob(jobId, userId, { status: 'running' })
@@ -1646,7 +1687,7 @@ export default async function handler(req: any, res: any) {
     const gw = resolveAggregateGateway(params.gatewayProvider)
     const apiKey = gw.apiKey
     const baseUrl = gw.baseUrl
-    const chatModel = gw.chatModel
+    const chatModel = sanitizeOptionalChatModel(params.chatModel) || gw.chatModel
     const generateMode = String(body.generateMode || params.generateMode || 'final') as GenerateMode
     const previewToken = String(body.previewToken || params.previewToken || '').trim()
     const refImageUrlIn = String(body.refImageUrl || '').trim()
