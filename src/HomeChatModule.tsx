@@ -140,6 +140,14 @@ const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
  * 只能靠 id 启发式区分「文生图」与聊天/VL/视频等，避免把 Qwen3-Instruct 选进出图。
  * 若某账号的 /models 里根本没有 FLUX/Z-Image 等 id，下拉里自然只有 Qwen-Image、Kolors 等。
  */
+/** 方舟 OpenAI 出图只认 ep-；控制台 /models 里的 doubao-seedream-* 选进出图必炸，下拉里直接隐藏 */
+function isArkBareCatalogImageModelId(id: string): boolean {
+  const s = String(id || '').trim()
+  if (/^ep-/i.test(s)) return false
+  if (!/^doubao-/i.test(s)) return false
+  return /seedream|seededit|t2i|jimeng/i.test(s)
+}
+
 function looksLikeHomeImageModel(id: string): boolean {
   const s = String(id || '').toLowerCase()
   return (
@@ -942,7 +950,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           }
         }
 
-        const mergedImage = [...new Set(imageIds)]
+        let mergedImage = [...new Set(imageIds)].filter(
+          (id) => !(gw === 'bytedance' && isArkBareCatalogImageModelId(id)),
+        )
         if (
           gw === 'bytedance' &&
           bytedanceHomeImageModelFromServer &&
@@ -1001,6 +1011,16 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           return a.label.localeCompare(b.label, 'zh-CN')
         })
 
+        const imageOptionsForUi =
+          gw === 'bytedance'
+            ? imageOptions.filter((o) => !isArkBareCatalogImageModelId(o.id))
+            : imageOptions
+
+        const fallbackImageForUi =
+          gw === 'bytedance'
+            ? fallbackImage.filter((o) => !isArkBareCatalogImageModelId(o.id))
+            : fallbackImage
+
         const chatOptions: { id: string; label: string }[] = []
         for (const id of mergedChat) {
           if (!id) continue
@@ -1016,7 +1036,22 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           return a.label.localeCompare(b.label, 'zh-CN')
         })
 
-        const finalImage = imageOptions.length ? imageOptions : fallbackImage
+        let finalImage = imageOptionsForUi.length ? imageOptionsForUi : fallbackImageForUi
+        if (gw === 'bytedance' && !finalImage.length) {
+          finalImage = bytedanceHomeImageModelFromServer
+            ? [
+                {
+                  id: bytedanceHomeImageModelFromServer,
+                  label: `出图接入点（${bytedanceHomeImageModelFromServer}）`,
+                },
+              ]
+            : [
+                {
+                  id: 'nano-banana-2',
+                  label: '请先在 Vercel 配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-…',
+                },
+              ]
+        }
         const finalChat = chatOptions.length ? chatOptions : fallbackChat
         if (!cancelled) {
           setImageModelOptions(finalImage)

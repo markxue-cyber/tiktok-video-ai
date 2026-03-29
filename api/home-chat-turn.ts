@@ -1254,9 +1254,14 @@ function parseHomeParams(params: any, intentImageCount?: number): ParsedHomePara
   const ri = String(params.refinementIntent || 'auto').toLowerCase()
   const refinementIntent: RefinementIntentParam =
     ri === 'iterative' || ri === 'fresh' || ri === 'auto' ? ri : 'auto'
-  const imageModel = sanitizeHomeImageModel(params.imageModel)
-  const chatModelOverride = sanitizeOptionalChatModel(params.chatModel)
   const gatewayProvider = normalizeGatewayId(params.gatewayProvider)
+  let imageModel = sanitizeHomeImageModel(params.imageModel)
+  /** 所有入口（含异步任务、旧版前端）统一在此替换，避免裸 doubao-seedream-* 传到 images/generations */
+  if (gatewayProvider === 'bytedance') {
+    const r = resolveBytedanceUpstreamImageModel(imageModel)
+    if (r) imageModel = r
+  }
+  const chatModelOverride = sanitizeOptionalChatModel(params.chatModel)
   return {
     aspectRatio,
     resolution,
