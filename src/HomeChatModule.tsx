@@ -73,6 +73,7 @@ const HOME_CHAT_MODEL_LABELS: { id: string; name: string }[] = [
   { id: 'gpt-4o', name: 'GPT-4o' },
   { id: 'gpt-4o-mini', name: 'GPT-4o mini' },
   { id: 'Qwen/Qwen2.5-7B-Instruct', name: 'Qwen2.5-7B-Instruct' },
+  { id: 'Qwen/Qwen3-VL-8B-Instruct', name: 'Qwen3-VL-8B-Instruct' },
   { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen2.5-72B-Instruct' },
   { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3' },
   { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1' },
@@ -792,7 +793,8 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         const fallbackChat =
           gw === 'siliconflow'
             ? [
-                { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B-Instruct（离线兜底）' },
+                { id: 'Qwen/Qwen3-VL-8B-Instruct', label: 'Qwen3-VL-8B-Instruct（离线兜底·支持看图）' },
+                { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen2.5-7B-Instruct（纯文本）' },
                 { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3（离线兜底）' },
                 { id: 'Qwen/Qwen3-32B', label: 'Qwen3-32B（离线兜底）' },
               ]
@@ -916,7 +918,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           setSessions((prev) =>
             prev.map((s) => {
               const curImg = String(s.params.imageModel || 'nano-banana-2')
-              const curChat = String(s.params.chatModel || (gw === 'siliconflow' ? 'Qwen/Qwen2.5-7B-Instruct' : 'gpt-4o'))
+              const curChat = String(s.params.chatModel || (gw === 'siliconflow' ? 'Qwen/Qwen3-VL-8B-Instruct' : 'gpt-4o'))
               let params = s.params
               if (!finalImage.some((o) => o.id === curImg)) {
                 const preferred =
@@ -1383,7 +1385,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
         imageModel: ep.imageModel || 'nano-banana-2',
         chatModel:
           ep.chatModel ||
-          (ep.gatewayProvider === 'siliconflow' ? 'Qwen/Qwen2.5-7B-Instruct' : 'gpt-4o'),
+          (ep.gatewayProvider === 'siliconflow' ? 'Qwen/Qwen3-VL-8B-Instruct' : 'gpt-4o'),
         gatewayProvider: ep.gatewayProvider ?? 'xiaodoubao',
       }
 
@@ -2247,7 +2249,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                                   : String(
                                       chatModelOptions[0]?.id ||
                                         (active?.params.gatewayProvider === 'siliconflow'
-                                          ? 'Qwen/Qwen2.5-7B-Instruct'
+                                          ? 'Qwen/Qwen3-VL-8B-Instruct'
                                           : 'gpt-4o'),
                                     )
                             }
@@ -2783,7 +2785,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             : String(
                                 chatModelOptions[0]?.id ||
                                   (active?.params.gatewayProvider === 'siliconflow'
-                                    ? 'Qwen/Qwen2.5-7B-Instruct'
+                                    ? 'Qwen/Qwen3-VL-8B-Instruct'
                                     : 'gpt-4o'),
                               )
                       }

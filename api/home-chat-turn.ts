@@ -1144,6 +1144,33 @@ function sanitizeOptionalChatModel(raw: unknown): string | null {
   return s
 }
 
+/** 能接收 image_url / video_url 的对话模型（硅基上 Qwen2.5-7B-Instruct 等纯文本会报非 VLM） */
+function looksLikeVisionCapableChatModelId(modelId: string): boolean {
+  const s = String(modelId || '').toLowerCase()
+  if (!s) return false
+  if (s.includes('gpt-4o')) return true
+  if (s.includes('-vl') || s.includes('vl-')) return true
+  if (s.includes('glm-4.5v') || s.includes('glm-4.6v') || s.includes('glm-4.1v')) return true
+  if (s.includes('internvl') || s.includes('llava')) return true
+  if (s.includes('qwen3-omni')) return true
+  if (s.includes('minicpm-v') || s.includes('deepseek-vl')) return true
+  return false
+}
+
+const DEFAULT_SILICONFLOW_VISION_CHAT_MODEL = 'Qwen/Qwen3-VL-8B-Instruct'
+
+function coerceHomeChatModelForMultimodal(
+  gatewayId: AggregateGatewayId,
+  mediaType: MediaType,
+  requested: string,
+): string {
+  const m = String(requested || '').trim()
+  if (mediaType !== 'image' && mediaType !== 'video') return m
+  if (gatewayId !== 'siliconflow') return m
+  if (looksLikeVisionCapableChatModelId(m)) return m
+  return String(process.env.SILICONFLOW_VISION_CHAT_MODEL || DEFAULT_SILICONFLOW_VISION_CHAT_MODEL).trim()
+}
+
 function parseHomeParams(params: any, intentImageCount?: number): ParsedHomeParams {
   const aspectRatio = normalizeAspectRatio(String(params.aspectRatio || '1:1'))
   const resolution = mapResolutionLabel(String(params.resolution || '2K'))
@@ -1614,7 +1641,11 @@ async function executeHomeChatImageJobInBackground(opts: {
   }
   const apiKey = gw.apiKey
   const baseUrl = gw.baseUrl
-  const chatModel = parsedGen.chatModelOverride || gw.chatModel
+  const chatModel = coerceHomeChatModelForMultimodal(
+    gw.id,
+    mediaType,
+    parsedGen.chatModelOverride || gw.chatModel,
+  )
 
   try {
     await patchHomeChatImageJob(jobId, userId, { status: 'running' })
@@ -1732,7 +1763,11 @@ export default async function handler(req: any, res: any) {
     const gw = resolveAggregateGateway(params.gatewayProvider)
     const apiKey = gw.apiKey
     const baseUrl = gw.baseUrl
-    const chatModel = sanitizeOptionalChatModel(params.chatModel) || gw.chatModel
+    const chatModel = coerceHomeChatModelForMultimodal(
+      gw.id,
+      mediaType,
+      sanitizeOptionalChatModel(params.chatModel) || gw.chatModel,
+    )
     const generateMode = String(body.generateMode || params.generateMode || 'final') as GenerateMode
     const previewToken = String(body.previewToken || params.previewToken || '').trim()
     const refImageUrlIn = String(body.refImageUrl || '').trim()
@@ -1761,7 +1796,8 @@ export default async function handler(req: any, res: any) {
       if (gw.id === 'siliconflow') {
         return res.status(200).json({
           success: false,
-          error: '未配置硅基流动：请在服务端设置环境变量 SILICONFLOW_API_KEY（及可选 SILICONFLOW_AI_BASE_URL、SILICONFLOW_CHAT_MODEL）',
+          error:
+            '未配置硅基流动：请在服务端设置环境变量 SILICONFLOW_API_KEY（及可选 SILICONFLOW_AI_BASE_URL、SILICONFLOW_CHAT_MODEL；看图/视频分析可设 SILICONFLOW_VISION_CHAT_MODEL）',
           code: 'SILICONFLOW_NOT_CONFIGURED',
         })
       }

@@ -46,8 +46,9 @@ export function resolveAggregateGateway(raw: unknown): ResolvedAggregateGateway 
       /\/+$/,
       '',
     )
+    /** 首页含看图/视频，须 VLM；纯 7B Instruct 会报「not a VLM」 */
     const chatModel = String(
-      process.env.SILICONFLOW_CHAT_MODEL || 'Qwen/Qwen2.5-7B-Instruct',
+      process.env.SILICONFLOW_CHAT_MODEL || 'Qwen/Qwen3-VL-8B-Instruct',
     ).trim()
     return { id, label: '硅基流动', apiKey, baseUrl, chatModel }
   }
