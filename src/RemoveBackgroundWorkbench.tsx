@@ -6,11 +6,20 @@ import { ImageToolWorkbench, type ImageToolHistoryTask } from './ImageToolWorkbe
 export function RemoveBackgroundWorkbench({
   canGenerate,
   onRefreshUser,
+  onOptimisticCreditsSpend,
 }: {
   canGenerate: boolean
   onRefreshUser?: () => void | Promise<void>
+  onOptimisticCreditsSpend?: (amount: number) => void
 }) {
-  return <ImageToolWorkbench tool="removeBg" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
+  return (
+    <ImageToolWorkbench
+      tool="removeBg"
+      canGenerate={canGenerate}
+      onRefreshUser={onRefreshUser}
+      onOptimisticCreditsSpend={onOptimisticCreditsSpend}
+    />
+  )
 }
 
 export type RemoveBgHistoryTask = ImageToolHistoryTask

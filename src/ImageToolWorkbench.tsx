@@ -29,7 +29,7 @@ import {
 } from './tikgenImageGenPersistence'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
 import { CreditCostWithZap } from './components/CreditCostWithZap'
-import { CREDITS_PER_IMAGE } from './lib/billingCredits'
+import { CREDITS_PER_IMAGE, creditsForImageCount } from './lib/billingCredits'
 
 const MAX_IMAGES = 5
 const HISTORY_MAX = 80
@@ -495,10 +495,12 @@ export function ImageToolWorkbench({
   tool,
   canGenerate,
   onRefreshUser,
+  onOptimisticCreditsSpend,
 }: {
   tool: ImageToolMode
   canGenerate: boolean
   onRefreshUser?: () => void | Promise<void>
+  onOptimisticCreditsSpend?: (amount: number) => void
 }) {
   const rt = RUNTIME[tool]
   const [images, setImages] = useState<Array<{ id: string; url: string; name?: string }>>([])
@@ -817,6 +819,7 @@ export function ImageToolWorkbench({
                   : x,
               ),
             )
+            void onRefreshUser?.()
             return
           }
           stopProgressTicker(taskId)
@@ -1086,6 +1089,7 @@ export function ImageToolWorkbench({
     }
     if (!images.length) return
     const list = [...images]
+    onOptimisticCreditsSpend?.(creditsForImageCount(list.length))
     const refUrls = list.map((x) => x.url)
     const taskId = `${rt.taskPrefix}${Date.now()}_${Math.random().toString(16).slice(2)}`
     const task: ImageToolHistoryTask = {

@@ -42,7 +42,11 @@ import {
 } from './api/homeChat'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
 import { CreditCostWithZap } from './components/CreditCostWithZap'
-import { creditsForHomeChatImageCount } from './lib/billingCredits'
+import {
+  CREDITS_PER_IMAGE,
+  creditsForHomeChatImageCount,
+  optimisticCreditsForHomeChatFinalGen,
+} from './lib/billingCredits'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 
 const STORAGE_KEY = 'tikgen.homeChat.sessions.v1'
@@ -921,11 +925,18 @@ export type HomeNavigateImageTarget = 'imageGen' | 'ecommerce' | 'upscale' | 'tr
 type Props = {
   onGoBenefits: () => void
   onRefreshUser?: () => void | Promise<void>
+  /** 长请求未返回前让顶部积分与后端预付扣款同步（结束后仍以 onRefreshUser 对账） */
+  onOptimisticCreditsSpend?: (amount: number) => void
   /** 首页功能卡片：跳转至图片创作各子模块 */
   onNavigateToImageModule?: (target: HomeNavigateImageTarget) => void
 }
 
-export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageModule }: Props) {
+export function HomeChatModule({
+  onGoBenefits,
+  onRefreshUser,
+  onOptimisticCreditsSpend,
+  onNavigateToImageModule,
+}: Props) {
   const [sessions, setSessions] = useState<HomeChatSession[]>(() => loadSessions())
   const [activeId, setActiveId] = useState<string>(() => {
     try {
@@ -1747,6 +1758,17 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           ? 'final'
           : 'preview'
         : 'final'
+      if (wantsGenerate) {
+        const spend =
+          generateMode === 'preview'
+            ? CREDITS_PER_IMAGE
+            : optimisticCreditsForHomeChatFinalGen({
+                multiRatio: !!ep.multiRatio,
+                abVariant: !!ep.abVariant,
+                imageCount: ep.imageCount,
+              })
+        onOptimisticCreditsSpend?.(spend)
+      }
       const effectivePreviewToken =
         generateMode === 'final' && !newSubjectMediaThisTurn ? previewToken : ''
       if (generateMode === 'preview' || newSubjectMediaThisTurn) setPreviewToken('')
@@ -2090,6 +2112,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 return { ...session, updatedAt: Date.now(), messages: msgs }
               }),
             )
+            void onRefreshUser?.()
             return
           }
 
@@ -2120,6 +2143,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 }
               }),
             )
+            void onRefreshUser?.()
             return
           }
 
@@ -2273,6 +2297,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
             }),
           )
         }
+        void onRefreshUser?.()
         return
       }
       const raw = String(e?.message || '未知错误')
@@ -2318,6 +2343,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           ),
         )
       }
+      void onRefreshUser?.()
     } finally {
       setBusy(false)
       setBusyStage('idle')

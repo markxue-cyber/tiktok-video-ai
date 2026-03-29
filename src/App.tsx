@@ -1986,6 +1986,16 @@ function App() {
     }
   }
 
+  /** 提交即更新顶部积分（服务端已预付扣款，但长请求未返回前 /api/me 不会变） */
+  const optimisticSpendCredits = useCallback((amount: number) => {
+    const n = Math.floor(Number(amount))
+    if (!Number.isFinite(n) || n <= 0) return
+    setUser((u) => {
+      if (!u) return u
+      return { ...u, credits: Math.max(0, Math.floor((u.credits || 0) - n)) }
+    })
+  }, [])
+
   const isAdminBypass = String(user?.email || '').trim().toLowerCase() === 'haoxue2027@gmail.com'
   const canGenerateMedia = isAdminBypass || Boolean(user?.hasAppAccess)
 
@@ -2358,6 +2368,7 @@ function App() {
             <HomeChatModule
               onGoBenefits={gotoBenefits}
               onRefreshUser={refreshCurrentUser}
+              onOptimisticCreditsSpend={optimisticSpendCredits}
               onNavigateToImageModule={(target) => {
                 if (target === 'imageGen') goImageSubNav('imageGen')
                 else if (target === 'ecommerce') goImageSubNav('ecommerce')
@@ -2375,6 +2386,7 @@ function App() {
               onTemplateApplied={() => setImageTemplatePreset(null)}
               canGenerate={canGenerateMedia}
               onRefreshUser={refreshCurrentUser}
+              onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
           <div className={mainNav === 'image' && imageSubNav === 'ecommerce' ? '' : 'hidden'}>
@@ -2385,6 +2397,7 @@ function App() {
               onTemplateApplied={() => setImageTemplatePreset(null)}
               canGenerate={canGenerateMedia}
               onRefreshUser={refreshCurrentUser}
+              onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
           {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
@@ -2394,6 +2407,7 @@ function App() {
               onTabChange={onWorkbenchImageTabChange}
               canGenerate={canGenerateMedia}
               onRefreshUser={refreshCurrentUser}
+              onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
           <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
@@ -2402,10 +2416,15 @@ function App() {
               onTemplateApplied={() => setVideoTemplatePreset(null)}
               canGenerate={canGenerateMedia}
               onRefreshUser={refreshCurrentUser}
+              onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
           <div className={mainNav === 'video' && videoSubNav === 'upscale' ? '' : 'hidden'}>
-            <VideoUpscaleWorkbench canGenerate={canGenerateMedia} onRefreshUser={refreshCurrentUser} />
+            <VideoUpscaleWorkbench
+              canGenerate={canGenerateMedia}
+              onRefreshUser={refreshCurrentUser}
+              onOptimisticCreditsSpend={optimisticSpendCredits}
+            />
           </div>
           {mainNav === 'creativePlaza' ? <CreativePlazaPage /> : null}
           {TEMPLATES_LIBRARY_ENABLED && mainNav === 'templates' && (
@@ -2496,27 +2515,48 @@ function ImageToolsWorkbench({
   onTabChange,
   canGenerate,
   onRefreshUser,
+  onOptimisticCreditsSpend,
 }: {
   tab: ImageToolsTabId
   onTabChange: (t: ImageToolsTabId) => void
   canGenerate: boolean
   onRefreshUser?: () => void | Promise<void>
+  onOptimisticCreditsSpend?: (amount: number) => void
 }) {
   return (
     <div className="space-y-6">
       <WorkbenchSubTabNav ariaLabel="图片工具" items={IMAGE_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
       {/* 保持挂载，避免切换 Tab 时 React 状态与未落盘的 IDB 写入丢失 */}
       <div className={tab === 'removeBg' ? 'block' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
-        <RemoveBackgroundWorkbench canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
+        <RemoveBackgroundWorkbench
+          canGenerate={canGenerate}
+          onRefreshUser={onRefreshUser}
+          onOptimisticCreditsSpend={onOptimisticCreditsSpend}
+        />
       </div>
       <div className={tab === 'upscale' ? 'block' : 'hidden'} aria-hidden={tab !== 'upscale'}>
-        <ImageToolWorkbench tool="upscale" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
+        <ImageToolWorkbench
+          tool="upscale"
+          canGenerate={canGenerate}
+          onRefreshUser={onRefreshUser}
+          onOptimisticCreditsSpend={onOptimisticCreditsSpend}
+        />
       </div>
       <div className={tab === 'compress' ? 'block' : 'hidden'} aria-hidden={tab !== 'compress'}>
-        <ImageToolWorkbench tool="compress" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
+        <ImageToolWorkbench
+          tool="compress"
+          canGenerate={canGenerate}
+          onRefreshUser={onRefreshUser}
+          onOptimisticCreditsSpend={onOptimisticCreditsSpend}
+        />
       </div>
       <div className={tab === 'translate' ? 'block' : 'hidden'} aria-hidden={tab !== 'translate'}>
-        <ImageToolWorkbench tool="translate" canGenerate={canGenerate} onRefreshUser={onRefreshUser} />
+        <ImageToolWorkbench
+          tool="translate"
+          canGenerate={canGenerate}
+          onRefreshUser={onRefreshUser}
+          onOptimisticCreditsSpend={onOptimisticCreditsSpend}
+        />
       </div>
     </div>
   )
@@ -3012,11 +3052,13 @@ function VideoGenerator({
   onTemplateApplied,
   canGenerate,
   onRefreshUser,
+  onOptimisticCreditsSpend,
 }: {
   templatePreset: VideoTemplatePreset | null
   onTemplateApplied: () => void
   canGenerate: boolean
   onRefreshUser?: () => void | Promise<void>
+  onOptimisticCreditsSpend?: (amount: number) => void
 }) {
   type VideoGenTaskItem = {
     id: string
@@ -3720,6 +3762,7 @@ function VideoGenerator({
           errorCode: e?.code || 'UNKNOWN',
           statusText: '',
         })
+        void onRefreshUser?.()
       } finally {
         pollRunningRef.current.delete(submitTaskId)
       }
@@ -3752,6 +3795,7 @@ function VideoGenerator({
     if (!prompt) { alert('请输入视频文案描述'); return }
 
     try {
+      onOptimisticCreditsSpend?.(CREDITS_PER_VIDEO)
       const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage: refImageDataUrl })
       const item: VideoGenTaskItem = {
         id: crypto.randomUUID(),
@@ -3779,6 +3823,7 @@ function VideoGenerator({
       })
     } catch (e: any) {
       Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
+      void onRefreshUser?.()
       const failed: VideoGenTaskItem = {
         id: crypto.randomUUID(),
         createdAt: Date.now(),
@@ -4421,6 +4466,7 @@ function ImageGenerator({
   visible = true,
   canGenerate,
   onRefreshUser,
+  onOptimisticCreditsSpend,
 }: {
   templatePreset: ImageTemplatePreset | null
   onTemplateApplied: () => void
@@ -4431,6 +4477,7 @@ function ImageGenerator({
   /** 是否已完成本产品内付费（生图 API 权限） */
   canGenerate: boolean
   onRefreshUser?: () => void | Promise<void>
+  onOptimisticCreditsSpend?: (amount: number) => void
 }) {
   const isSimpleImageGen = variant === 'simple'
   const idbWorkspaceKey = isSimpleImageGen ? TIKGEN_IG_IDB.workspaceSimple : TIKGEN_IG_IDB.workspace
@@ -6316,6 +6363,7 @@ function ImageGenerator({
     if (!canGenerate) return { slotIndex, ok: false, error: '请先完成本产品内付费后再生成图片' }
     if (!slot.selected) return { slotIndex, ok: false, error: '未选中' }
     if (signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
+    onOptimisticCreditsSpend?.(CREDITS_PER_IMAGE)
     // 简版图片生成：严格使用用户输入提示词，不叠加场景增量约束
     const mergedPrompt = isSimpleImageGen ? String(basePrompt || '').trim() : mergeScenePromptForSlot(basePrompt, slot)
     try {

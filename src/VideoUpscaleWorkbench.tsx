@@ -115,9 +115,11 @@ function saveHistorySlice(tasks: VideoUpscaleHistoryTask[]) {
 export function VideoUpscaleWorkbench({
   canGenerate,
   onRefreshUser,
+  onOptimisticCreditsSpend,
 }: {
   canGenerate: boolean
   onRefreshUser?: () => void | Promise<void>
+  onOptimisticCreditsSpend?: (amount: number) => void
 }) {
   const [file, setFile] = useState<File | null>(null)
   /** 本机文件名或资产库视频名（无 File 对象时展示） */
@@ -480,6 +482,7 @@ export function VideoUpscaleWorkbench({
         setActiveJob(null)
         setErrorBanner(e?.message || '处理失败')
         setErrorCode(e?.code || 'UNKNOWN')
+        void onRefreshUser?.()
       } finally {
         if (upscalePollRunningRef.current === taskId) upscalePollRunningRef.current = null
       }
@@ -544,6 +547,7 @@ export function VideoUpscaleWorkbench({
     setHistory((prev) => [row, ...prev].slice(0, VIDEO_UPSCALE_MAX))
 
     try {
+      onOptimisticCreditsSpend?.(CREDITS_PER_VIDEO)
       const params: VideoEnhanceSubmitParams = {
         inputVideoUrl: publicVideoUrl,
         targetResolution: targetRes,
@@ -566,6 +570,7 @@ export function VideoUpscaleWorkbench({
       setActiveJob(null)
       setErrorBanner(e?.message || '处理失败')
       setErrorCode(e?.code || 'UNKNOWN')
+      void onRefreshUser?.()
     }
   }
 
