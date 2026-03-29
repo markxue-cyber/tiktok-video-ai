@@ -1728,7 +1728,7 @@ async function runImageGenerationAfterAnalysis(ctx: ImageGenCtx): Promise<void> 
     success: true,
     kind: 'mixed',
     analysisText: analysisText || undefined,
-    optimizedPrompt: draft?.optimizedPrompt || optimizedPrompt,
+    optimizedPrompt: previewDraft?.optimizedPrompt || optimizedPrompt,
     imageUrls: imagesOut.map((x) => x.url),
     images: imagesOut,
     nextQuestion: nextQuestionFor(mediaTypeToUse),
