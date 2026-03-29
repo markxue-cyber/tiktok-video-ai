@@ -1,5 +1,5 @@
 // Vercel Serverless Function - 图片生成API（聚合API / OpenAI兼容）
-import { checkAndConsume, finalizeConsumption } from './_billing.js'
+import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, releaseBillingHold } from './_billing.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -69,14 +69,26 @@ export default async function handler(req, res) {
       return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
     }
 
-    // Auth + subscription + idempotency + daily quota
-    const consumed = await checkAndConsume(req, { type: 'image' })
-    if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
-
-    const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const { prompt, model, size, resolution, aspect_ratio, refImage, negativePrompt, negative_prompt, n, count, num_images } = req.body || {}
     const nRaw = Number(n ?? count ?? num_images ?? 1)
     const imageCount = Number.isFinite(nRaw) ? Math.max(1, Math.min(4, Math.floor(nRaw))) : 1
+    const creditsCost = CREDITS_PER_IMAGE * imageCount
+
+    let consumed: any
+    try {
+      consumed = await checkAndConsume(req, { type: 'image', creditsCost })
+    } catch (e: any) {
+      const msg = String(e?.message || '额度校验失败')
+      const t = msg.toLowerCase()
+      const code =
+        t.includes('积分不足') ? 'INSUFFICIENT_CREDITS' : t.includes('今日额度已用尽') ? 'QUOTA_EXHAUSTED' : 'UNKNOWN'
+      return res.status(200).json({ success: false, error: msg, code })
+    }
+    if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
+
+    let needBillingRelease = true
+    try {
+    const baseUrl = process.env.XIAO_DOU_BAO_AI_BASE_URL || 'https://api.linkapi.org/v1'
     const neg = String(negativePrompt || negative_prompt || '').trim()
 
     const modelId = String(model || '').toLowerCase()
@@ -295,7 +307,8 @@ export default async function handler(req, res) {
         output_url: result.imageUrl,
         raw: data,
       })
-      await finalizeConsumption(req, result)
+      await finalizeCreditsBilling(req, result)
+      needBillingRelease = false
       return res.status(200).json({ success: true, ...result })
     }
     if (url) {
@@ -309,7 +322,8 @@ export default async function handler(req, res) {
         output_url: result.imageUrl,
         raw: data,
       })
-      await finalizeConsumption(req, result)
+      await finalizeCreditsBilling(req, result)
+      needBillingRelease = false
       return res.status(200).json({ success: true, ...result })
     }
 
@@ -328,11 +342,15 @@ export default async function handler(req, res) {
       code: 'NO_OUTPUT',
       raw: data || rawText,
     })
+    } finally {
+      if (needBillingRelease) await releaseBillingHold(req).catch(() => {})
+    }
   } catch (e) {
     const msg = String(e?.message || 'Unknown error')
     let code = 'UNKNOWN'
     const t = msg.toLowerCase()
     if (t.includes('请先完成本产品内') || t.includes('付费订单')) code = 'PAYMENT_REQUIRED'
+    else if (t.includes('积分不足')) code = 'INSUFFICIENT_CREDITS'
     else if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
     else if (t.includes('timeout') || t.includes('超时')) code = 'UPSTREAM_TIMEOUT'
     else if (t.includes('model') && (t.includes('does not exist') || t.includes('invalid') || t.includes('not in'))) code = 'MODEL_UNAVAILABLE'

@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { baseUrl, parseJson, serviceHeaders } from './_admin.js'
+import { grantUserCredits } from './_billing.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
@@ -15,6 +16,7 @@ function safeJson(body: any) {
 }
 
 const PLAN_DAYS: Record<string, number> = { trial: 7, basic: 30, pro: 30, enterprise: 30 }
+const PLAN_MONTHLY_CREDITS: Record<string, number> = { trial: 0, basic: 99, pro: 880, enterprise: 2850 }
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).send('Method not allowed')
@@ -101,6 +103,15 @@ export default async function handler(req: any, res: any) {
       },
       body: JSON.stringify(subBody),
     })
+
+    const grant = PLAN_MONTHLY_CREDITS[planId]
+    if (typeof grant === 'number' && grant > 0) {
+      try {
+        await grantUserCredits(String(order.user_id), grant)
+      } catch {
+        // 积分列未迁移时不阻断 webhook
+      }
+    }
 
     return res.status(200).send('ok')
   } catch {

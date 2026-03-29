@@ -145,15 +145,49 @@ export const generateVideoAPI = async (
   return result
 }
 
-// 查询视频状态
+// 查询视频状态（需登录：成片成功时服务端幂等扣积分）
 export const checkVideoStatus = async (taskId: string): Promise<VideoStatusResult> => {
-  const response = await fetch(`/api/generate?taskId=${taskId}`)
-  const data = await response.json()
-  return {
-    status: data.status || 'unknown',
-    videoUrl: data.videoUrl || '',
-    progress: data.progress || '0%',
-    failReason: data.failReason || data.fail_reason,
-    failCode: data.failCode || data.fail_code || data.failCode,
+  const callOnce = async (token: string) => {
+    const response = await fetch(`/api/generate?taskId=${encodeURIComponent(taskId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await response.json()
+    if (response.status === 401) {
+      const err: any = new Error(data?.error || '未登录或登录已失效')
+      err.code = 'AUTH_REQUIRED'
+      throw err
+    }
+    return {
+      status: data.status || 'unknown',
+      videoUrl: data.videoUrl || '',
+      progress: data.progress || '0%',
+      failReason: data.failReason || data.fail_reason,
+      failCode: data.failCode || data.fail_code || data.failCode,
+    } as VideoStatusResult
   }
+
+  let token = localStorage.getItem('tikgen.accessToken') || ''
+  if (!token) throw new Error('请先登录')
+
+  const maxAttempts = 4
+  let lastErr: any
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await callOnce(token)
+    } catch (e: any) {
+      lastErr = e
+      if (looksLikeAuthInvalid(e)) {
+        const refreshed = await refreshAccessTokenIfPossible()
+        if (!refreshed) throw e
+        token = refreshed
+        continue
+      }
+      if (attempt < maxAttempts - 1 && isTransientNetworkError(e)) {
+        await sleep(500 + attempt * 1200)
+        continue
+      }
+      throw e
+    }
+  }
+  throw lastErr || new Error('查询失败')
 }

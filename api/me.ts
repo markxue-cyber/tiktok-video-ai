@@ -123,6 +123,10 @@ export default async function handler(req, res) {
     }
     const hasPaidProduct = Array.isArray(ordJson) && ordJson.length > 0
 
+    const creditsRaw = profile?.credits
+    const creditsNum = Number(creditsRaw)
+    const credits = Number.isFinite(creditsNum) ? Math.max(0, Math.floor(creditsNum)) : 0
+
     return sendJson(res, 200, {
       success: true,
       user: {
@@ -131,6 +135,7 @@ export default async function handler(req, res) {
         name: profile?.display_name || user.email,
         createdAt: user.created_at,
         updatedAt: nowIso(),
+        credits,
       },
       subscription: safeSub,
       hasPaidProduct,

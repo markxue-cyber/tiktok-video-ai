@@ -1,5 +1,5 @@
 // Vercel Serverless — 去除背景（Nano Banana 2 + 参考图），计费同图片生成
-import { checkAndConsume, finalizeConsumption } from './_billing.js'
+import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, releaseBillingHold } from './_billing.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -82,9 +82,18 @@ export default async function handler(req: any, res: any) {
       return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
     }
 
-    const consumed = await checkAndConsume(req, { type: 'image' })
+    let consumed: any
+    try {
+      consumed = await checkAndConsume(req, { type: 'image', creditsCost: CREDITS_PER_IMAGE })
+    } catch (e: any) {
+      const msg = String(e?.message || '额度校验失败')
+      const code = String(msg).includes('积分不足') ? 'INSUFFICIENT_CREDITS' : 'UNKNOWN'
+      return res.status(200).json({ success: false, error: msg, code })
+    }
     if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
 
+    let needBillingRelease = true
+    try {
     const { refImage, resolution, outputFormat } = req.body || {}
     const ref = String(refImage || '').trim()
     if (!ref) {
@@ -184,7 +193,8 @@ export default async function handler(req: any, res: any) {
         output_url: result.imageUrl,
         raw: { ...data, feature: 'remove_background' },
       })
-      await finalizeConsumption(req, result)
+      await finalizeCreditsBilling(req, result)
+      needBillingRelease = false
       return res.status(200).json({ success: true, ...result })
     }
     if (url) {
@@ -198,7 +208,8 @@ export default async function handler(req: any, res: any) {
         output_url: url,
         raw: { ...data, feature: 'remove_background' },
       })
-      await finalizeConsumption(req, result)
+      await finalizeCreditsBilling(req, result)
+      needBillingRelease = false
       return res.status(200).json({ success: true, ...result })
     }
 
@@ -217,11 +228,15 @@ export default async function handler(req: any, res: any) {
       code: 'NO_OUTPUT',
       raw: data || rawText,
     })
+    } finally {
+      if (needBillingRelease) await releaseBillingHold(req).catch(() => {})
+    }
   } catch (e: any) {
     const msg = String(e?.message || 'Unknown error')
     let code = 'UNKNOWN'
     const t = msg.toLowerCase()
-    if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
+    if (t.includes('积分不足')) code = 'INSUFFICIENT_CREDITS'
+    else if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) code = 'QUOTA_EXHAUSTED'
     else if (t.includes('timeout') || t.includes('超时')) code = 'UPSTREAM_TIMEOUT'
     return res.status(200).json({ success: false, error: msg, code })
   }

@@ -1,5 +1,12 @@
 // Vercel Serverless Function - 视频生成API
-import { checkAndConsume, finalizeConsumption } from './_billing.js'
+import {
+  CREDITS_PER_VIDEO,
+  chargeVideoOnSuccess,
+  checkAndConsume,
+  finalizeVideoSubmitHold,
+  releaseBillingHold,
+  requireUser,
+} from './_billing.js'
 
 function mustEnv(name: string) {
   const v = process.env[name]
@@ -90,6 +97,7 @@ export default async function handler(req, res) {
       const t = String(message || '').toLowerCase()
       if (t.includes('未登录') || (t.includes('authorization') && t.includes('bearer'))) return 'AUTH_REQUIRED'
       if (t.includes('请先完成本产品内') || t.includes('付费订单')) return 'PAYMENT_REQUIRED'
+      if (t.includes('积分不足')) return 'INSUFFICIENT_CREDITS'
       if (t.includes('今日额度已用尽') || t.includes('upgrade') || t.includes('quota')) return 'QUOTA_EXHAUSTED'
       if (t.includes('timeout') || t.includes('超时')) return 'UPSTREAM_TIMEOUT'
       if (t.includes('model') && (t.includes('does not exist') || t.includes('invalid field') || t.includes('not in') || t.includes('不存在'))) {
@@ -143,14 +151,27 @@ export default async function handler(req, res) {
       if (!billableConfirmed) {
         return res.status(403).json({ success: false, error: '已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）' })
       }
-      let consumed
+      let consumed: any
       try {
-        consumed = await checkAndConsume(req, { type: 'video' })
+        consumed = await checkAndConsume(req, { type: 'video', creditsCost: CREDITS_PER_VIDEO })
       } catch (e: any) {
         const msg = String(e?.message || '额度校验失败')
         return res.status(200).json({ success: false, error: msg, code: inferCode(msg) })
       }
       if (consumed.already) return res.status(200).json({ success: true, ...(consumed.result || {}) })
+
+      let needBillingRelease = true
+      const failAndRelease = async (payload: { success: false; error: string; code: string; raw?: any }) => {
+        if (needBillingRelease) {
+          try {
+            await releaseBillingHold(req)
+          } catch {
+            /* ignore */
+          }
+          needBillingRelease = false
+        }
+        return res.status(200).json(payload)
+      }
       const {
         prompt,
         model,
@@ -264,7 +285,7 @@ export default async function handler(req, res) {
 
       const enabled = await ensureModelEnabled(String(apiModel), 'video')
       if (!enabled) {
-        return res.status(200).json({ success: false, error: `模型 ${apiModel} 已被后台禁用`, code: 'MODEL_UNAVAILABLE' })
+        return await failAndRelease({ success: false, error: `模型 ${apiModel} 已被后台禁用`, code: 'MODEL_UNAVAILABLE' })
       }
 
       console.log('Submitting with model:', apiModel, isVideoEnhance ? '(video enhance)' : '')
@@ -295,7 +316,7 @@ export default async function handler(req, res) {
 
       const structuredFail = parseVideoSubmitFailure(submitData)
       if (structuredFail) {
-        return res.status(200).json({
+        return await failAndRelease({
           success: false,
           error: structuredFail.msg,
           code: structuredFail.code,
@@ -305,7 +326,7 @@ export default async function handler(req, res) {
 
       if (!submitResponse.ok) {
         const msg = `聚合API HTTP ${submitResponse.status}`
-        return res.status(200).json({
+        return await failAndRelease({
           success: false,
           error: msg,
           code: inferCode(msg),
@@ -316,8 +337,8 @@ export default async function handler(req, res) {
       // 检查是否有错误
       if (submitData.error) {
         const msg = submitData.error.message || JSON.stringify(submitData.error)
-        return res.status(200).json({ 
-          success: false, 
+        return await failAndRelease({
+          success: false,
           error: msg,
           code: inferCode(msg),
         })
@@ -327,8 +348,8 @@ export default async function handler(req, res) {
       const taskId = findTaskIdDeep(submitData)
       
       if (!taskId) {
-        return res.status(200).json({ 
-          success: false, 
+        return await failAndRelease({
+          success: false,
           error: '无法获取任务ID（聚合API未返回可识别的task_id/id）',
           code: 'UPSTREAM_NO_TASKID',
           raw: submitData
@@ -350,16 +371,23 @@ export default async function handler(req, res) {
         output_url: null,
         raw: { submit: submitData, feature: isVideoEnhance ? 'video_enhance' : 'video_generate' },
       })
-      await finalizeConsumption(req, { taskId: taskId, message: result.message }, taskId)
+      await finalizeVideoSubmitHold(req, taskId, result.message)
+      needBillingRelease = false
       return res.status(200).json(result)
     }
 
-    // 查询任务状态 (GET)
+    // 查询任务状态 (GET) — 需登录以便成片成功时幂等扣积分
     if (req.method === 'GET') {
       const taskId = req.query.taskId as string
 
       if (!taskId) {
         return res.status(400).json({ success: false, error: '缺少taskId' })
+      }
+
+      try {
+        await requireUser(req)
+      } catch (e: any) {
+        return res.status(401).json({ success: false, error: e?.message || '未登录（查询进度需携带 Authorization）' })
       }
 
       const statusResponse = await fetch(`https://api.linkapi.org/v2/videos/generations/${taskId}`, {
@@ -375,6 +403,13 @@ export default async function handler(req, res) {
       const outputUrl = statusData.data?.output || statusData.data?.outputs?.[0] || null
       if (status === 'succeeded' || status === 'success' || status === 'completed') {
         await updateTaskByProviderId(taskId, { status: 'succeeded', output_url: outputUrl, raw: statusData })
+        if (outputUrl) {
+          try {
+            await chargeVideoOnSuccess(req, taskId, outputUrl)
+          } catch (e) {
+            console.error('chargeVideoOnSuccess failed', e)
+          }
+        }
       } else if (status === 'failed' || status === 'error') {
         await updateTaskByProviderId(taskId, { status: 'failed', raw: statusData })
       } else {

@@ -83,6 +83,7 @@ export default async function handler(req, res) {
             id: user.id,
             email: user.email || String(email),
             display_name: displayName || user.email || String(email),
+            credits: 9,
           },
         ]),
       })

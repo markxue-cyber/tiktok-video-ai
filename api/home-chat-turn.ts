@@ -3,7 +3,7 @@
  * 禁止在本接口内调用任何视频生成/编辑类上游。
  */
 import { requireUser } from './_supabase.js'
-import { checkAndConsume, finalizeConsumption } from './_billing.js'
+import { CREDITS_PER_IMAGE, checkAndConsume, finalizeCreditsBilling, releaseBillingHold } from './_billing.js'
 import { insertQueuedHomeChatImageJob, patchHomeChatImageJob } from './_homeChatImageJob.js'
 import { handleHomeChatGenStatus } from './_homeChatGenStatusRoute.js'
 import { normalizeGatewayId, resolveAggregateGateway, type AggregateGatewayId } from './_aggregateGateway.js'
@@ -1024,7 +1024,10 @@ async function runNanoBananaGeneration(
   const billableConfirmed = String(reqBill.headers?.['x-confirm-billable'] || '').toLowerCase() === 'true'
   if (!billableConfirmed) throw new Error('已拦截：缺少 X-Confirm-Billable: true（防止误触发计费）')
 
-  const consumed = await checkAndConsume(reqBill, { type: 'image' })
+  const n = Math.max(1, Math.min(4, Math.floor(params.imageCount || 1)))
+  const creditsCost = CREDITS_PER_IMAGE * n
+
+  const consumed = await checkAndConsume(reqBill, { type: 'image', creditsCost })
   if (consumed.already) {
     let r = consumed.result as any
     if (typeof r === 'string') {
@@ -1044,6 +1047,8 @@ async function runNanoBananaGeneration(
     }
     throw new Error('计费幂等记录异常：未找到可复用的图片地址')
   }
+
+  let needBillingRelease = true
 
   const aspect = String(params.aspectRatio || '1:1')
   const resStr = String(params.resolution || '2048')
@@ -1098,8 +1103,6 @@ async function runNanoBananaGeneration(
     height: Number.isFinite(reqH) ? reqH : undefined,
   }
 
-  const n = Math.max(1, Math.min(4, Math.floor(params.imageCount || 1)))
-
   const usedModel = String(params.model || 'nano-banana-2').trim()
   if (usedModel) {
     const enabled = await ensureModelEnabled(usedModel, 'image')
@@ -1113,6 +1116,7 @@ async function runNanoBananaGeneration(
         output_url: null,
         raw: { reason: 'model disabled by admin', from: 'home_chat' },
       })
+      if (needBillingRelease) await releaseBillingHold(reqBill).catch(() => {})
       throw new Error(`模型 ${usedModel} 已被后台禁用`)
     }
   }
@@ -1178,6 +1182,8 @@ async function runNanoBananaGeneration(
       output_url: null,
       raw: { upstream_status: resp.status, upstream: data || raw, from: 'home_chat' },
     })
+    if (needBillingRelease) await releaseBillingHold(reqBill).catch(() => {})
+    needBillingRelease = false
     throw new Error(String(msg))
   }
 
@@ -1209,7 +1215,8 @@ async function runNanoBananaGeneration(
       output_url: result.imageUrl,
       raw: { ...data, from: 'home_chat' },
     })
-    await finalizeConsumption(reqBill, result)
+    await finalizeCreditsBilling(reqBill, result)
+    needBillingRelease = false
     return { ...result, cached: false as const }
   }
   if (url) {
@@ -1223,7 +1230,8 @@ async function runNanoBananaGeneration(
       output_url: result.imageUrl,
       raw: { ...data, from: 'home_chat' },
     })
-    await finalizeConsumption(reqBill, result)
+    await finalizeCreditsBilling(reqBill, result)
+    needBillingRelease = false
     return { ...result, cached: false as const }
   }
 
@@ -1236,6 +1244,8 @@ async function runNanoBananaGeneration(
     output_url: null,
     raw: data || raw,
   })
+  if (needBillingRelease) await releaseBillingHold(reqBill).catch(() => {})
+  needBillingRelease = false
   throw new Error('上游未返回可识别的图片地址（url/b64_json）')
 }
 
