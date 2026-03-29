@@ -260,7 +260,7 @@ export type HomeChatMsg = {
   /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
   streamLen?: number
   /** 用户消息：发送瞬间的参数快照（气泡展示不随底部配置改动） */
-  sendParams?: Pick<HomeChatSession['params'], 'aspectRatio' | 'imageCount' | 'subjectLock'>
+  sendParams?: Pick<HomeChatSession['params'], 'aspectRatio' | 'imageCount'>
 }
 
 export type HomeChatSession = {
@@ -1388,13 +1388,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
       sendParams: {
         aspectRatio: ep.aspectRatio,
         imageCount: ep.imageCount,
-        subjectLock: ep.subjectLock,
       },
     }
 
-    const paramLine = `【${ep.aspectRatio} · ${ep.imageCount}张 · ${
-      ep.subjectLock === 'high' ? '高保真' : '标准保真'
-    }】`
+    const paramLine = `【${ep.aspectRatio} · ${ep.imageCount}张】`
 
     setSessions((prev) =>
       prev.map((x) => {
@@ -2162,53 +2159,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                     onRemove={removePending}
                     onRetry={retryPending}
                   />
-                  <div className="flex items-stretch gap-2">
-                    <div className="relative flex shrink-0 flex-col justify-center self-stretch" ref={plusMenuRef}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setPlusMenuOpen((v) => !v)
-                        }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
-                        title="上传"
-                      >
-                        <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
-                      </button>
-                      {plusMenuOpen ? (
-                        <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
-                          <button
-                            type="button"
-                            className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                            onClick={() => {
-                              setPlusMenuOpen(false)
-                              uploadInputRef.current?.click()
-                            }}
-                          >
-                            从本地上传
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                            onClick={() => openAssetPicker('both')}
-                          >
-                            从资产库选择
-                          </button>
-                        </div>
-                      ) : null}
-                      <input
-                        ref={uploadInputRef}
-                        type="file"
-                        multiple
-                        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                        className="hidden"
-                        onChange={(e) => {
-                          void validateAndUploadFiles(e.target.files)
-                          e.target.value = ''
-                        }}
-                      />
-                    </div>
+                  <div className="flex items-end">
                     <textarea
                       ref={inputRef}
                       value={input}
@@ -2221,19 +2172,66 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       }}
                       placeholder={composerPlaceholder}
                       rows={1}
-                      className="home-chat-composer-textarea min-h-[2.75rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent py-2 pl-0 pr-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
+                      className="home-chat-composer-textarea min-h-[2.75rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
                     />
                   </div>
 
-                  <div className="mt-2 flex items-center gap-2 border-t border-white/[0.06] pt-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-0">
+                  <div className="mt-2 flex items-center gap-2 pt-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="relative shrink-0" ref={plusMenuRef}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPlusMenuOpen((v) => !v)
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
+                          title="上传"
+                        >
+                          <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
+                        </button>
+                        {plusMenuOpen ? (
+                          <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                              onClick={() => {
+                                setPlusMenuOpen(false)
+                                uploadInputRef.current?.click()
+                              }}
+                            >
+                              从本地上传
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                              onClick={() => openAssetPicker('both')}
+                            >
+                              从资产库选择
+                            </button>
+                          </div>
+                        ) : null}
+                        <input
+                          ref={uploadInputRef}
+                          type="file"
+                          multiple
+                          accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                          className="hidden"
+                          onChange={(e) => {
+                            void validateAndUploadFiles(e.target.files)
+                            e.target.value = ''
+                          }}
+                        />
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => {
                           setPlusMenuOpen(false)
                           setParamsOpen((v) => !v)
                         }}
-                        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs transition ${
+                        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-xs transition ${
                           paramsOpen
                             ? 'bg-violet-500/20 text-violet-100'
                             : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
@@ -2245,7 +2243,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       </button>
 
                       <div className="min-w-0 flex-1 overflow-x-auto">
-                        <div className="flex min-w-max items-center gap-1.5 pr-0 text-[11px] text-white/65">
+                        <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
                           <span>比例</span>
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
@@ -2267,8 +2265,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             <option value={2}>2</option>
                             <option value={4}>4</option>
                           </select>
-                          <span className="text-white/25">·</span>
-                          <span>{active?.params.subjectLock === 'high' ? '高保真' : '标准保真'}</span>
                         </div>
                       </div>
                     </div>
@@ -2389,17 +2385,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             <option value="手绘">手绘</option>
                             <option value="赛博朋克">赛博朋克</option>
                             <option value="水墨">水墨</option>
-                          </select>
-                        </label>
-                        <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                          <span className="shrink-0 whitespace-nowrap">主体保真</span>
-                          <select
-                            className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                            value={active?.params.subjectLock || 'high'}
-                            onChange={(e) => updateParams({ subjectLock: e.target.value as any })}
-                          >
-                            <option value="high">高</option>
-                            <option value="medium">中</option>
                           </select>
                         </label>
                         <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
@@ -2545,8 +2530,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <div className="home-chat-user-body whitespace-pre-wrap">{m.text}</div>
                       {m.sendParams ? (
                         <div className="home-chat-meta-row mt-2 text-[11px] leading-snug">
-                          {m.sendParams.aspectRatio} · {m.sendParams.imageCount}张 ·{' '}
-                          {m.sendParams.subjectLock === 'high' ? '高保真' : '标准保真'}
+                          {m.sendParams.aspectRatio} · {m.sendParams.imageCount}张
                         </div>
                       ) : null}
                     </UserBubble>
@@ -2706,53 +2690,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               onRemove={removePending}
               onRetry={retryPending}
             />
-            <div className="flex items-stretch gap-2">
-              <div className="relative flex shrink-0 flex-col justify-center self-stretch" ref={plusMenuRef}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setPlusMenuOpen((v) => !v)
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
-                  title="上传"
-                >
-                  <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
-                </button>
-                {plusMenuOpen ? (
-                  <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                      onClick={() => {
-                        setPlusMenuOpen(false)
-                        uploadInputRef.current?.click()
-                      }}
-                    >
-                      从本地上传
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
-                      onClick={() => openAssetPicker('both')}
-                    >
-                      从资产库选择
-                    </button>
-                  </div>
-                ) : null}
-                <input
-                  ref={uploadInputRef}
-                  type="file"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-                  className="hidden"
-                  onChange={(e) => {
-                    void validateAndUploadFiles(e.target.files)
-                    e.target.value = ''
-                  }}
-                />
-              </div>
+            <div className="flex items-end">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -2765,19 +2703,66 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 }}
                 placeholder={composerPlaceholder}
                 rows={1}
-                className="home-chat-composer-textarea min-h-[2.75rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent py-2 pl-0 pr-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
+                className="home-chat-composer-textarea min-h-[2.75rem] min-w-0 flex-1 resize-none overflow-y-auto !border-transparent !bg-transparent px-2 py-1 text-sm leading-relaxed outline-none !shadow-none ring-0 focus:!border-transparent focus:!shadow-none focus:ring-0"
               />
             </div>
 
-            <div className="mt-2 flex items-center gap-2 border-t border-white/[0.06] pt-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-0">
+            <div className="mt-2 flex items-center gap-2 pt-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="relative shrink-0" ref={plusMenuRef}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPlusMenuOpen((v) => !v)
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/25 hover:bg-white/[0.08] hover:text-violet-100 active:scale-[0.98] disabled:opacity-45"
+                    title="上传"
+                  >
+                    <ImagePlus className="pointer-events-none h-[22px] w-[22px] stroke-[2]" />
+                  </button>
+                  {plusMenuOpen ? (
+                    <div className="absolute bottom-full left-0 z-[60] mb-2 min-w-[11rem] overflow-hidden rounded-xl border border-white/14 bg-[#121522] shadow-xl [isolation:isolate]">
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                        onClick={() => {
+                          setPlusMenuOpen(false)
+                          uploadInputRef.current?.click()
+                        }}
+                      >
+                        从本地上传
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2.5 text-left text-sm text-white/90 hover:bg-white/[0.06]"
+                        onClick={() => openAssetPicker('both')}
+                      >
+                        从资产库选择
+                      </button>
+                    </div>
+                  ) : null}
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+                    className="hidden"
+                    onChange={(e) => {
+                      void validateAndUploadFiles(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
                     setPlusMenuOpen(false)
                     setParamsOpen((v) => !v)
                   }}
-                  className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-1.5 text-xs transition ${
+                  className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-xs transition ${
                     paramsOpen
                       ? 'bg-violet-500/20 text-violet-100'
                       : 'text-white/65 hover:bg-white/[0.06] hover:text-violet-100'
@@ -2789,7 +2774,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 </button>
 
                 <div className="min-w-0 flex-1 overflow-x-auto">
-                  <div className="flex min-w-max items-center gap-1.5 pr-0 text-[11px] text-white/65">
+                  <div className="flex min-w-max items-center gap-2 pr-1 text-[11px] text-white/65">
                     <span>比例</span>
                     <select
                       className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
@@ -2811,8 +2796,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <option value={2}>2</option>
                       <option value={4}>4</option>
                     </select>
-                    <span className="text-white/25">·</span>
-                    <span>{active?.params.subjectLock === 'high' ? '高保真' : '标准保真'}</span>
                   </div>
                 </div>
               </div>
@@ -2931,17 +2914,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <option value="手绘">手绘</option>
                       <option value="赛博朋克">赛博朋克</option>
                       <option value="水墨">水墨</option>
-                    </select>
-                  </label>
-                  <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
-                    <span className="shrink-0 whitespace-nowrap">主体保真</span>
-                    <select
-                      className="tikgen-spec-select min-w-0 flex-1 rounded-lg bg-black/35 px-2 py-1.5 text-white/90"
-                      value={active?.params.subjectLock || 'high'}
-                      onChange={(e) => updateParams({ subjectLock: e.target.value as any })}
-                    >
-                      <option value="high">高</option>
-                      <option value="medium">中</option>
                     </select>
                   </label>
                   <label className="flex min-w-0 items-center gap-2 text-xs text-white/60">
