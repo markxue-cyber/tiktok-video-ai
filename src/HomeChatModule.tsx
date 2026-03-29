@@ -238,8 +238,9 @@ function classifyModelForHomeDropdowns(m: { id?: string; supported_endpoint_type
   )
 
   if (tImg) return { image: true, chat: false }
-  if (tChat) return { image: heurImg, chat: true }
-  return { image: heurImg, chat: heurChat }
+  /** 方舟 ep- 接入点在元数据里可能只标 chat，仍应出现在出图下拉里（OpenAI 出图由服务端再校验 ep-m-） */
+  if (tChat) return { image: heurImg || /^ep-/i.test(id), chat: true }
+  return { image: heurImg || /^ep-/i.test(id), chat: heurChat }
 }
 
 function buildAssistantTextFromTurn(data: HomeChatTurnResult): string {
@@ -952,9 +953,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
 
         let mergedImage = [...new Set(imageIds)].filter((id) => {
           if (gw !== 'bytedance') return true
-          if (isArkBareCatalogImageModelId(id)) return false
-          if (/^ep-/i.test(id) && !/^ep-m-/i.test(id)) return false
-          return true
+          return !isArkBareCatalogImageModelId(id)
         })
         if (
           gw === 'bytedance' &&
@@ -1004,7 +1003,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
           if (disabledImage.has(id)) tags.push('后台已关闭')
           const tagStr = tags.length ? `（${tags.join('，')}）` : ''
           const name = friendlyImg.get(id) || id
-          const base = recommendedImage.has(id) ? `${name}（推荐）` : name
+          let base = recommendedImage.has(id) ? `${name}（推荐）` : name
+          if (gw === 'bytedance' && /^ep-/i.test(id) && !/^ep-m-/i.test(id)) {
+            base = `${base}（OpenAI 出图优先 ep-m-）`
+          }
           imageOptions.push({ id, label: `${base}${tagStr}` })
         }
         imageOptions.sort((a, b) => {
@@ -1050,8 +1052,9 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
               ]
             : [
                 {
-                  id: 'nano-banana-2',
-                  label: '请先在 Vercel 配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-…',
+                  id: 'ark-image-pending-config',
+                  label:
+                    '未拉取到 ep 出图接入点：请在 Vercel 设置 BYTEDANCE_ARK_IMAGE_MODEL=你的 ep- 或 ep-m- ID，并确认已部署；或检查 /api/models 是否报错',
                 },
               ]
         }

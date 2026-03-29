@@ -35,9 +35,9 @@ export default async function handler(req, res) {
     if (!r.ok) {
       return res.status(200).json({ success: false, error: data?.error?.message || data?.message || `请求失败(${r.status})`, raw: data })
     }
-    /** 方舟 OpenAI /images/generations 需 ep-m- 接入点；勿下发裸模型名或非 ep-m- 的 ep- */
+    /** 下发默认出图 id 供下拉里展示；须为 ep- 接入点（可为 ep-m- 或 ep-日期…），勿下发裸模型名 */
     const arkImg =
-      gw.id === 'bytedance' && gw.defaultImageModel && /^ep-m-/i.test(String(gw.defaultImageModel).trim())
+      gw.id === 'bytedance' && gw.defaultImageModel && /^ep-/i.test(String(gw.defaultImageModel).trim())
         ? String(gw.defaultImageModel).trim()
         : undefined
     return res.status(200).json({
