@@ -8,6 +8,21 @@ function modelsListRows(parsed: any): any[] {
   return []
 }
 
+const GENERIC_MODEL_OWNED_BY = new Set(
+  ['custom', 'openai', 'system', 'user', 'api', 'default', 'builtin', 'community', 'public'].map((x) =>
+    x.toLowerCase(),
+  ),
+)
+
+function isMeaningfulModelOwnedBy(ownedBy: string, modelId: string): boolean {
+  const ob = String(ownedBy || '').trim()
+  if (!ob || ob === modelId) return false
+  if (GENERIC_MODEL_OWNED_BY.has(ob.toLowerCase())) return false
+  if (/^organization/i.test(ob)) return false
+  if (ob.length >= 80) return false
+  return true
+}
+
 /** 方舟 /models 单条：尽量取出控制台可见的模型名（非裸 id） */
 function arkModelRowDisplayName(m: any): string {
   if (!m || typeof m !== 'object') return ''
@@ -19,7 +34,7 @@ function arkModelRowDisplayName(m: any): string {
     if (s && s !== id && s.length <= 120) return s
   }
   const ob = String(m.owned_by || '').trim()
-  if (ob && ob !== id && ob.length < 80 && !/^organization/i.test(ob)) return ob
+  if (isMeaningfulModelOwnedBy(ob, id)) return ob
   return ''
 }
 

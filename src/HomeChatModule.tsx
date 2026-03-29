@@ -150,6 +150,22 @@ function isArkBareCatalogImageModelId(id: string): boolean {
   return /seedream|seededit|t2i|jimeng/i.test(s)
 }
 
+/** 小豆包/部分 OpenAI 兼容网关把 owned_by 填成 custom、openai 等占位，不能当展示名（否则下拉里几十条同名） */
+const GENERIC_MODEL_OWNED_BY = new Set(
+  ['custom', 'openai', 'system', 'user', 'api', 'default', 'builtin', 'community', 'public'].map((x) =>
+    x.toLowerCase(),
+  ),
+)
+
+function isMeaningfulModelOwnedBy(ownedBy: string, modelId: string): boolean {
+  const ob = String(ownedBy || '').trim()
+  if (!ob || ob === modelId) return false
+  if (GENERIC_MODEL_OWNED_BY.has(ob.toLowerCase())) return false
+  if (/^organization/i.test(ob)) return false
+  if (ob.length >= 80) return false
+  return true
+}
+
 /** 与 api/models.ts 中 modelsListRows 一致，避免方舟返回 { data: { data: [...] } } 时下拉解析不到名称 */
 function modelsListRowsFromGatewayPayload(parsed: { data?: unknown } | null | undefined): unknown[] {
   const inner = parsed?.data as { data?: unknown } | unknown[] | undefined
@@ -172,7 +188,7 @@ function extractArkModelListDisplayName(m: { id?: string; owned_by?: string; [ke
     if (s && s !== id && s.length <= 120) return s
   }
   const ob = String(m?.owned_by ?? '').trim()
-  if (ob && ob !== id && ob.length < 80 && !/^organization/i.test(ob)) return ob
+  if (isMeaningfulModelOwnedBy(ob, id)) return ob
   return ''
 }
 
