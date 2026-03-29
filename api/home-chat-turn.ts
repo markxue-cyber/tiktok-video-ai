@@ -1,5 +1,5 @@
 /**
- * 首页对话模块 · 单轮编排（GPT-4o 理解 / 意图；nano-banana-2 出图）
+ * 首页对话模块 · 单轮编排（GPT-4o 理解 / 意图；小豆包默认 nano-banana-2-2k 出图）
  * 禁止在本接口内调用任何视频生成/编辑类上游。
  */
 import { requireUser } from './_supabase.js'
@@ -1103,7 +1103,7 @@ async function runNanoBananaGeneration(
     height: Number.isFinite(reqH) ? reqH : undefined,
   }
 
-  const usedModel = String(params.model || 'nano-banana-2').trim()
+  const usedModel = String(params.model || 'nano-banana-2-2k').trim()
   if (usedModel) {
     const enabled = await ensureModelEnabled(usedModel, 'image')
     if (!enabled) {
@@ -1357,7 +1357,7 @@ type ParsedHomeParams = {
   gatewayProvider: AggregateGatewayId
 }
 
-const DEFAULT_HOME_IMAGE_MODEL = 'nano-banana-2'
+const DEFAULT_HOME_IMAGE_MODEL = 'nano-banana-2-2k'
 
 function sanitizeHomeImageModel(raw: unknown): string {
   const s = String(raw ?? '').trim()

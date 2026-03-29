@@ -41,6 +41,8 @@ import {
   type HomeChatTurnResult,
 } from './api/homeChat'
 import { getModelAvailabilityAPI } from './api/modelAvailability'
+import { CreditCostWithZap } from './components/CreditCostWithZap'
+import { creditsForHomeChatImageCount } from './lib/billingCredits'
 import { archiveAiMediaOnce } from './utils/archiveAiMediaOnce'
 
 const STORAGE_KEY = 'tikgen.homeChat.sessions.v1'
@@ -71,21 +73,26 @@ function defaultHomeChatModelForGateway(gw: HomeGatewayProvider): string {
   return 'gpt-4o'
 }
 
+/** 小豆包聚合出图默认（与高级面板「服务商=小豆包」一致） */
+const DEFAULT_XIAODOUBAO_HOME_IMAGE_MODEL = 'nano-banana-2-2k'
+
 function defaultHomeImageModelForGateway(gw: HomeGatewayProvider): string {
   if (gw === 'bytedance') {
     if (bytedanceHomeImageModelFromServer) return bytedanceHomeImageModelFromServer
     return DEFAULT_BYTEDANCE_HOME_IMAGE_MODEL
   }
   if (gw === 'siliconflow') return 'black-forest-labs/FLUX.1-schnell'
-  return 'nano-banana-2'
+  return DEFAULT_XIAODOUBAO_HOME_IMAGE_MODEL
 }
 
 /** 方舟 OpenAI 出图仅认 ep-m-…；ep-20260329… 等会在上游报「模型不支持本 API」 */
 function effectiveHomeImageModelForApiSend(gw: HomeGatewayProvider, stored: string | undefined): string {
   const raw = String(stored ?? '').trim()
-  if (gw !== 'bytedance') return raw || 'nano-banana-2'
-  if (/^ep-m-/i.test(raw)) return raw
-  return defaultHomeImageModelForGateway('bytedance')
+  if (gw === 'bytedance') {
+    if (/^ep-m-/i.test(raw)) return raw
+    return defaultHomeImageModelForGateway('bytedance')
+  }
+  return raw || defaultHomeImageModelForGateway(gw)
 }
 
 /** 高级参数「服务商」：唯一列表，落地页与对话内两处面板共用，避免漏改 */
@@ -102,6 +109,7 @@ const HOME_CHAT_DIRECT_UPLOAD_IMAGE_BYTES = 3 * 1024 * 1024
 
 /** 仅用于展示名：下列表中的 id 必须仍出现在网关 /models 返回里才会出现在下拉中 */
 const HOME_IMAGE_MODEL_LABELS: { id: string; name: string }[] = [
+  { id: 'nano-banana-2-2k', name: 'Nano Banana 2 2K' },
   { id: 'nano-banana-2', name: 'Nano Banana 2' },
   { id: 'seedream', name: 'Seedream 4.5' },
   { id: 'seedream-4.5', name: 'Seedream 4.5 (Alt)' },
@@ -482,7 +490,7 @@ const defaultParams = (): HomeChatSession['params'] => ({
   hdEnhance: true,
   negativePrompt: true,
   refinementIntent: 'auto',
-  imageModel: 'nano-banana-2',
+  imageModel: DEFAULT_XIAODOUBAO_HOME_IMAGE_MODEL,
   chatModel: 'gpt-4o',
   gatewayProvider: 'xiaodoubao',
 })
@@ -1048,6 +1056,7 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                   { id: 'doubao-seedream-3-0-t2i-250415', label: 'Seedream 3.0（离线兜底）' },
                 ]
               : [
+                  { id: 'nano-banana-2-2k', label: 'nano-banana-2-2k（离线兜底·默认）' },
                   { id: 'nano-banana-2', label: 'nano-banana-2（离线兜底）' },
                   { id: 'seedream', label: 'seedream（离线兜底）' },
                   { id: 'flux', label: 'flux（离线兜底）' },
@@ -2401,6 +2410,12 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
   const canSend =
     !busy && (pendingReady || (!!input.trim() && hasThreadMedia))
 
+  /** 与底部「张数」一致：出图时按此张数扣积分（4 分/张） */
+  const homeSendCreditCost = useMemo(
+    () => creditsForHomeChatImageCount(active?.params.imageCount ?? 1),
+    [active?.params.imageCount],
+  )
+
   const lastUserWithMedia = useMemo(() => {
     if (!active?.messages.length) return null
     for (let i = active.messages.length - 1; i >= 0; i--) {
@@ -2629,7 +2644,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       onClick={() => void handleSend()}
                       className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
                     >
-                      发送
+                      <span className="inline-flex items-center gap-1.5">
+                        发送
+                        <CreditCostWithZap amount={homeSendCreditCost} />
+                      </span>
                     </button>
                   </div>
 
@@ -3121,7 +3139,10 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                 onClick={() => void handleSend()}
                 className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-500 via-violet-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(124,58,237,0.28)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100"
               >
-                发送
+                <span className="inline-flex items-center gap-1.5">
+                  发送
+                  <CreditCostWithZap amount={homeSendCreditCost} />
+                </span>
               </button>
             </div>
 

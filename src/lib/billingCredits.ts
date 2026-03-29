@@ -7,6 +7,12 @@ export function creditsForImageCount(count: number): number {
   return CREDITS_PER_IMAGE * n
 }
 
+/** 首页对话出图：与 `api/home-chat-turn` 中 `runNanoBananaGeneration` 张数上限一致 */
+export function creditsForHomeChatImageCount(count: number): number {
+  const n = Math.max(1, Math.min(4, Math.floor(Number(count) || 1)))
+  return CREDITS_PER_IMAGE * n
+}
+
 export function creditsForVideo(): number {
   return CREDITS_PER_VIDEO
 }

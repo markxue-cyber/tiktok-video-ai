@@ -25,7 +25,7 @@ export async function insertQueuedHomeChatImageJob(
   jobId: string,
   modelId?: string,
 ): Promise<void> {
-  const model = String(modelId || 'nano-banana-2').trim() || 'nano-banana-2'
+  const model = String(modelId || 'nano-banana-2-2k').trim() || 'nano-banana-2-2k'
   const resp = await fetch(`${supabaseBaseUrl()}/rest/v1/generation_tasks`, {
     method: 'POST',
     headers: serviceHeaders({
