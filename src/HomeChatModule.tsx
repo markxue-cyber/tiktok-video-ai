@@ -2254,7 +2254,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                             <option value="3:4">3:4</option>
                             <option value="9:16">9:16</option>
                           </select>
-                          <span className="text-white/25">·</span>
                           <span>张数</span>
                           <select
                             className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
@@ -2785,7 +2784,6 @@ export function HomeChatModule({ onGoBenefits, onRefreshUser, onNavigateToImageM
                       <option value="3:4">3:4</option>
                       <option value="9:16">9:16</option>
                     </select>
-                    <span className="text-white/25">·</span>
                     <span>张数</span>
                     <select
                       className="tikgen-spec-select rounded-lg bg-black/35 px-2 py-1 text-white/90"
