@@ -956,6 +956,52 @@ function GenerationLoadingCard({
   )
 }
 
+/** 简版生成历史：单张占位卡内嵌的缩小版「图片生成中」动效（双环 + 文案 + 进度条） */
+function GenerationLoadingInline({
+  title = '图片生成中',
+  subtitle,
+  chips,
+  progressPct,
+  footnote = '生成中…',
+}: {
+  title?: string
+  subtitle: string
+  chips?: readonly string[]
+  progressPct: number
+  footnote?: string
+}) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/36 px-2 py-3 text-white/88">
+      <div className="relative h-10 w-10 shrink-0">
+        <div className="absolute inset-0 rounded-full border-[2px] border-transparent border-t-purple-400 animate-spin" />
+        <div className="absolute inset-[6px] rounded-full border-[2px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
+      </div>
+      <h4 className="text-center text-xs font-semibold leading-tight text-white/95">{title}</h4>
+      <p className="line-clamp-2 max-w-[98%] text-center text-[9px] leading-snug text-white/65">{subtitle}</p>
+      {Array.isArray(chips) && chips.length > 0 ? (
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-1 px-0.5">
+          {chips.map((chip) => (
+            <span
+              key={chip}
+              className="rounded-full border border-white/15 bg-white/5 px-1.5 py-0.5 text-[8px] text-white/75"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <span className="tabular-nums text-sm font-semibold tracking-tight">{progressPct}%</span>
+      <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+      <span className="text-[10px] text-white/60">{footnote}</span>
+    </div>
+  )
+}
+
 const LOADING_COPY = {
   tech: {
     image: {
@@ -6580,6 +6626,7 @@ function ImageGenerator({
       })
       stopProgress()
       await completeGenProgress()
+      setSceneBoardPreparing(false)
       await runBatchGenerateForBoard(builtBoard)
     } catch (e: any) {
       stopProgress()
@@ -7952,25 +7999,13 @@ function ImageGenerator({
             ) : null}
           </div>
         ) : null}
-        {sceneBoardPreparing || (isSimpleImageGen && sceneBatchGenerating) ? (
+        {!isSimpleImageGen && sceneBoardPreparing ? (
           <div className="mb-6">
             <GenerationLoadingCard
-              title={isSimpleImageGen ? '图片生成中' : LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
-              subtitle={
-                isSimpleImageGen
-                  ? sceneBoardPreparing
-                    ? '正在根据提示词规划场景，完成后将自动开始出图…'
-                    : '正在并行生成图片，结果将实时出现在下方生成历史并同步到资产库…'
-                  : '正在规划 6 组场景，完成后可在右侧用「一键生成图片」批量出图'
-              }
+              title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
+              subtitle="正在规划 6 组场景，完成后可在右侧用「一键生成图片」批量出图"
               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
-              progressText={
-                sceneBoardPreparing
-                  ? `准备进度：${Math.max(1, Math.min(99, genProgress))}%`
-                  : isSimpleImageGen
-                    ? '出图进行中…'
-                    : `准备进度：${Math.max(1, Math.min(99, genProgress))}%`
-              }
+              progressText={`准备进度：${Math.max(1, Math.min(99, genProgress))}%`}
             />
           </div>
         ) : null}
@@ -8518,17 +8553,33 @@ function ImageGenerator({
                                               draggable={false}
                                             />
                                           ) : null}
-                                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/36 px-4 text-white/88">
-                                            <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
-                                            <span className="tabular-nums text-sm font-semibold tracking-tight">{pct}%</span>
-                                            <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
-                                              <div
-                                                className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
-                                                style={{ width: `${pct}%` }}
-                                              />
+                                          {isSimpleImageGen ? (
+                                            <GenerationLoadingInline
+                                              subtitle={
+                                                sceneBoardPreparing
+                                                  ? '正在根据提示词规划场景，完成后将自动开始出图…'
+                                                  : '正在并行生成图片，结果将实时出现在下方生成历史…'
+                                              }
+                                              chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
+                                              progressPct={
+                                                sceneBoardPreparing
+                                                  ? Math.max(1, Math.min(99, genProgress))
+                                                  : pct
+                                              }
+                                            />
+                                          ) : (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/36 px-4 text-white/88">
+                                              <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
+                                              <span className="tabular-nums text-sm font-semibold tracking-tight">{pct}%</span>
+                                              <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
+                                                <div
+                                                  className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
+                                                  style={{ width: `${pct}%` }}
+                                                />
+                                              </div>
+                                              <span className="text-[10px] text-white/65">生成中…</span>
                                             </div>
-                                            <span className="text-[10px] text-white/65">生成中…</span>
-                                          </div>
+                                          )}
                                         </div>
                                       </div>
                                     )
