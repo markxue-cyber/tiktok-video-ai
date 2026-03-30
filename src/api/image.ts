@@ -91,10 +91,16 @@ export async function generateImageAPI(params: {
       data = { success: false, error: text }
     }
     if (!resp.ok || !data?.success) {
-      const raw = data?.raw ? `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}` : ''
+      const code = data?.code || 'UNKNOWN'
+      const omitRaw =
+        code === 'AGGREGATE_API_KEY_INVALID' ||
+        code === 'MODEL_UNAVAILABLE' ||
+        code === 'PAYMENT_REQUIRED'
+      const raw =
+        omitRaw || !data?.raw ? '' : `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}`
       const message = (data?.error || `生成失败(${resp.status})`) + raw
       const err: any = new Error(message)
-      err.code = data?.code || 'UNKNOWN'
+      err.code = code
       throw err
     }
     return data

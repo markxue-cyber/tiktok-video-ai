@@ -721,6 +721,14 @@ function summarizeSceneBatchFailures(
   if (failedSelected.length === 1) {
     const s = failedSelected[0]
     const err = String(s.error || '失败')
+    if (
+      /api key not valid|invalid.*api key|密钥无效|xiaodoubao|图片服务上游密钥无效/i.test(err)
+    ) {
+      return {
+        text: `${s.title}：图片服务上游密钥无效或已过期（需在部署环境配置有效的 XIAO_DOU_BAO_API_KEY）。`,
+        code: 'AGGREGATE_API_KEY_INVALID',
+      }
+    }
     const k = classifySceneSlotError(err)
     const code =
       k === 'quota' ? 'QUOTA_EXHAUSTED' : k === 'payment' ? 'PAYMENT_REQUIRED' : k === 'cancelled' ? 'CANCELLED' : 'UNKNOWN'
@@ -3087,6 +3095,10 @@ function HelpCenter() {
     { code: 'UPSTREAM_TIMEOUT', action: '稍后重试，必要时降低分辨率/时长。' },
     { code: 'UPSTREAM_NO_TASKID', action: '上游返回异常，建议重试并保留 request id。' },
     { code: 'UPSTREAM_BAD_REQUEST', action: '上游参数不合法（如缺少文案/模型不匹配）；检查描述与参考素材后重试。' },
+    {
+      code: 'AGGREGATE_API_KEY_INVALID',
+      action: '聚合/画图接口密钥无效或过期：请在部署环境更新 XIAO_DOU_BAO_API_KEY（与 api.linkapi.org 或你的网关一致）。',
+    },
     { code: 'NO_OUTPUT', action: '上游未返回结果，建议更换模型重试。' },
     { code: 'UNKNOWN', action: '复制完整报错与任务ID，通过反馈入口提交。' },
   ]
@@ -6533,6 +6545,13 @@ function ImageGenerator({
     } catch (e: any) {
       if (e?.name === 'AbortError' || signal?.aborted) return { slotIndex, ok: false, error: '已取消' }
       Sentry.captureException(e, { extra: { scene: 'image_generate', model, size, resolution, sceneTitle: slot.title } })
+      if (e?.code === 'AGGREGATE_API_KEY_INVALID') {
+        return {
+          slotIndex,
+          ok: false,
+          error: '图片服务上游密钥无效或已过期（需部署侧更新 XIAO_DOU_BAO_API_KEY）。',
+        }
+      }
       return { slotIndex, ok: false, error: e?.message || '失败' }
     }
   }
@@ -8040,9 +8059,11 @@ function ImageGenerator({
                           ? '积分不足，请充值或升级套餐'
                           : genErrorCode === 'PAYMENT_REQUIRED'
                           ? '需先完成付费'
-                          : genErrorCode === 'UNKNOWN'
-                            ? ''
-                            : genErrorCode
+                          : genErrorCode === 'AGGREGATE_API_KEY_INVALID'
+                            ? '需管理员更新部署环境变量中的聚合画图密钥'
+                            : genErrorCode === 'UNKNOWN'
+                              ? ''
+                              : genErrorCode
                 return hint ? (
                   <span className="text-red-300/80 ml-1">（{hint}）</span>
                 ) : null
@@ -8050,7 +8071,8 @@ function ImageGenerator({
             </span>
             {genErrorCode !== 'QUOTA_EXHAUSTED' &&
             genErrorCode !== 'PAYMENT_REQUIRED' &&
-            genErrorCode !== 'INSUFFICIENT_CREDITS' ? (
+            genErrorCode !== 'INSUFFICIENT_CREDITS' &&
+            genErrorCode !== 'AGGREGATE_API_KEY_INVALID' ? (
               <button
                 type="button"
                 onClick={() => void handleRetryGenBanner()}
