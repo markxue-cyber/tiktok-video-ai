@@ -111,6 +111,20 @@ export default async function handler(req, res) {
     /** 聚合层常返回 code=upstream_error，message 为嵌套 JSON 字符串；勿误判为 NO_TASKID */
     const parseVideoSubmitFailure = (d: any): { msg: string; code: string } | null => {
       if (!d || typeof d !== 'object') return null
+      const stringifyMsg = (m: any): string => {
+        if (m == null || m === '') return ''
+        if (typeof m === 'string') return m
+        if (typeof m === 'number' || typeof m === 'boolean') return String(m)
+        try {
+          return JSON.stringify(m)
+        } catch {
+          return String(m)
+        }
+      }
+      if (d.success === false) {
+        const m = stringifyMsg(d.message ?? d.msg ?? d.error_message ?? d.detail).trim()
+        if (m) return { msg: m.slice(0, 2500), code: inferCode(m) }
+      }
       if (d.error) {
         const msg =
           typeof d.error === 'string'
@@ -120,8 +134,8 @@ export default async function handler(req, res) {
       }
       const codeStr = String(d.code || '').toLowerCase()
       if (codeStr === 'upstream_error' || codeStr === 'error') {
-        const tryParse = (s: string): string => {
-          const t = String(s || '').trim()
+        const tryParse = (raw: any): string => {
+          const t = stringifyMsg(raw).trim()
           if (!t) return ''
           try {
             const j = JSON.parse(t)
@@ -139,7 +153,10 @@ export default async function handler(req, res) {
         }
         const fromMsg = tryParse(d.message)
         const fromUp = tryParse(d.upstream_message)
-        const msg = (fromMsg || fromUp || String(d.message || d.upstream_message || '上游错误')).slice(0, 2500)
+        const msg = (fromMsg || fromUp || stringifyMsg(d.message || d.upstream_message || d.msg) || '上游错误').slice(
+          0,
+          2500,
+        )
         if (msg) return { msg, code: inferCode(msg) }
       }
       return null
@@ -292,6 +309,7 @@ export default async function handler(req, res) {
       console.log('Submitting with model:', apiModel, isVideoEnhance ? '(video enhance)' : '')
 
       try {
+      const seedanceOrDoubao = /seedance|doubao|豆包/i.test(String(apiModel))
       const submitPayload = {
         model: apiModel,
         duration: finalDuration,
@@ -302,6 +320,8 @@ export default async function handler(req, res) {
         content: textPayload,
         prompt: textPayload,
         text: textPayload,
+        // 部分聚合/豆包视频链路要求 OpenAI 式 messages，否则会报 MissingParameter content
+        ...(seedanceOrDoubao ? { messages: [{ role: 'user', content: textPayload }] } : {}),
       }
 
       const submitResponse = await fetch('https://api.linkapi.org/v2/videos/generations', {
@@ -348,13 +368,22 @@ export default async function handler(req, res) {
 
       // 尝试多种可能的字段名/嵌套结构
       const taskId = findTaskIdDeep(submitData)
-      
+
       if (!taskId) {
+        const fallbackErr = parseVideoSubmitFailure(submitData)
+        if (fallbackErr) {
+          return await failAndRelease({
+            success: false,
+            error: fallbackErr.msg,
+            code: fallbackErr.code,
+            raw: submitData,
+          })
+        }
         return await failAndRelease({
           success: false,
           error: '无法获取任务ID（聚合API未返回可识别的task_id/id）',
           code: 'UPSTREAM_NO_TASKID',
-          raw: submitData
+          raw: submitData,
         })
       }
 

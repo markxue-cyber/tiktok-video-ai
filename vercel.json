@@ -1,5 +1,8 @@
 {
   "functions": {
+    "api/generate.ts": {
+      "maxDuration": 300
+    },
     "api/image-generate.ts": {
       "maxDuration": 300
     },

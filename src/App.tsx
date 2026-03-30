@@ -3804,7 +3804,8 @@ function VideoGenerator({
       if (pollRunningRef.current.has(submitTaskId)) return
       pollRunningRef.current.add(submitTaskId)
       try {
-        for (let i = 0; i < 120; i++) {
+        // 每 5s 轮询；Sora 等长任务可能超过 10 分钟，这里给到约 25 分钟（含排队）
+        for (let i = 0; i < 300; i++) {
           if (unmountedRef.current) return
           await new Promise((r) => setTimeout(r, 5000))
           if (unmountedRef.current) return
