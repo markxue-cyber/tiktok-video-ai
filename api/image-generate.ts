@@ -275,9 +275,21 @@ export default async function handler(req, res) {
         (typeof rawText === 'string' && rawText.slice(0, 1000)) ||
         `上游错误(${upstreamResp.status})`
       const text = String(msgFinal || '').toLowerCase()
-      if (text.includes('今日额度已用尽') || text.includes('upgrade') || text.includes('quota')) errorCode = 'QUOTA_EXHAUSTED'
-      if (text.includes('timeout') || text.includes('超时')) errorCode = 'UPSTREAM_TIMEOUT'
-      if (!errorCode) errorCode = 'UPSTREAM_ERROR'
+      const authInvalid =
+        upstreamResp.status === 401 ||
+        upstreamResp.status === 403 ||
+        (text.includes('api key') && (text.includes('invalid') || text.includes('not valid'))) ||
+        text.includes('invalid_api_key') ||
+        text.includes('incorrect api key') ||
+        text.includes('authentication')
+      if (authInvalid) errorCode = 'AGGREGATE_API_KEY_INVALID'
+      else if (text.includes('今日额度已用尽') || text.includes('upgrade') || text.includes('quota')) errorCode = 'QUOTA_EXHAUSTED'
+      else if (text.includes('timeout') || text.includes('超时')) errorCode = 'UPSTREAM_TIMEOUT'
+      else if (!errorCode || errorCode === 'UPSTREAM_ERROR') errorCode = 'UPSTREAM_ERROR'
+      const userFacingError =
+        errorCode === 'AGGREGATE_API_KEY_INVALID'
+          ? '图片服务上游密钥无效或已过期（需在服务器/Vercel 环境变量中配置有效的 XIAO_DOU_BAO_API_KEY，非用户操作问题）。'
+          : msgFinal
       await writeTaskRow({
         user_id: consumed?.user?.id || null,
         type: 'image',
@@ -287,7 +299,7 @@ export default async function handler(req, res) {
         output_url: null,
         raw: { upstream_status: upstreamResp.status, upstream: data || rawText },
       })
-      return res.status(200).json({ success: false, error: msgFinal, code: errorCode, raw: data || rawText })
+      return res.status(200).json({ success: false, error: userFacingError, code: errorCode, raw: data || rawText })
     }
 
     // OpenAI images API shape: { data: [{ url }] } or { data: [{ b64_json }] }

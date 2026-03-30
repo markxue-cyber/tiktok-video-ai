@@ -78,33 +78,7 @@ function guessAspect(w: number, h: number): string {
   return w >= h ? '16:9' : '9:16'
 }
 
-function VideoUpscaleLoadingCard({
-  statusText,
-  progressText,
-}: {
-  statusText?: string
-  progressText?: string
-}) {
-  return (
-    <div className="h-96 rounded-xl border border-white/10 bg-[linear-gradient(180deg,#080a14,#03040a)] px-6 text-center flex flex-col items-center justify-center">
-      <div className="relative w-[88px] h-[88px] mb-3">
-        <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-400 animate-spin" />
-        <div className="absolute inset-[14px] rounded-full border-[3px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
-      </div>
-      <h3 className="text-[28px] leading-none font-semibold text-white">视频增强中</h3>
-      <p className="mt-2 text-sm text-white/70">正在计算运镜轨迹与画面细节，请稍等片刻...</p>
-      <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
-        {['构图', '运镜', '质检'].map((chip) => (
-          <span key={chip} className="px-2.5 py-1 rounded-full text-xs border border-white/15 bg-white/5 text-white/80">
-            {chip}
-          </span>
-        ))}
-      </div>
-      {statusText ? <p className="mt-4 text-sm text-white/75">{statusText}</p> : null}
-      {progressText ? <p className="mt-1 text-xs text-white/55">{progressText}</p> : null}
-    </div>
-  )
-}
+const VIDEO_UPSCALE_LOADING_CHIPS = ['构图', '运镜', '质检'] as const
 
 function saveHistorySlice(tasks: VideoUpscaleHistoryTask[]) {
   const slice = tasks.slice(0, VIDEO_UPSCALE_MAX)
@@ -777,14 +751,7 @@ export function VideoUpscaleWorkbench({
           </div>
         ) : null}
 
-        {activeJob ? (
-          <div className="mb-6">
-            <VideoUpscaleLoadingCard
-              statusText={activeJob.statusText}
-              progressText={`进度：${activeJob.progress}${activeJob.taskId ? ` | 任务ID：${activeJob.taskId}` : ''}`}
-            />
-          </div>
-        ) : resultUrl && !activeJob ? (
+        {resultUrl && !activeJob ? (
           <div className="mb-6 rounded-xl border border-white/12 bg-black/25 p-4">
             <div className="text-sm font-medium text-white/90 mb-2">本次结果</div>
             <video src={resultUrl} className="w-full rounded-xl bg-black" controls playsInline />
@@ -874,10 +841,53 @@ export function VideoUpscaleWorkbench({
                         <div>
                           <div className="text-[10px] text-white/45 mb-1">输出</div>
                           {task.status === 'processing' ? (
-                            <div className="rounded-xl border border-white/12 bg-black/30 aspect-video flex flex-col items-center justify-center gap-2 text-white/70 text-xs px-4">
-                              <RefreshCw className="w-8 h-8 animate-spin opacity-80" />
-                              <span>{task.progress || '0%'}</span>
-                              {task.taskId ? <span className="text-[10px] text-white/40 break-all text-center">{task.taskId}</span> : null}
+                            <div className="rounded-xl border border-white/10 bg-black/30 overflow-hidden aspect-video">
+                              <div className="relative h-full min-h-[11rem] w-full bg-[linear-gradient(180deg,#080a14,#03040a)]">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
+                                  <div className="relative w-[52px] h-[52px] mb-1.5">
+                                    <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-400 animate-spin" />
+                                    <div className="absolute inset-[9px] rounded-full border-[3px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
+                                  </div>
+                                  <h4 className="text-base font-semibold text-white/95">视频增强中</h4>
+                                  <p className="mt-0.5 text-[10px] text-white/65 line-clamp-2 px-1">
+                                    正在提升画质与细节，请稍候…
+                                  </p>
+                                  <div className="mt-1.5 flex items-center justify-center gap-1 flex-wrap">
+                                    {VIDEO_UPSCALE_LOADING_CHIPS.map((chip) => (
+                                      <span
+                                        key={chip}
+                                        className="px-1.5 py-0.5 rounded-full text-[9px] border border-white/15 bg-white/5 text-white/75"
+                                      >
+                                        {chip}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <div className="mt-2 w-[min(92%,14rem)]">
+                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/12">
+                                      <div
+                                        className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
+                                        style={{
+                                          width: `${Math.max(
+                                            2,
+                                            Math.min(
+                                              99,
+                                              Number.parseInt(String(task.progress || '0').replace(/[^\d]/g, ''), 10) || 8,
+                                            ),
+                                          )}%`,
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="mt-1 text-[10px] text-white/70 tabular-nums">
+                                      处理中 {task.progress || '0%'}
+                                      {task.taskId ? (
+                                        <span className="block text-[9px] text-white/45 break-all mt-0.5">
+                                          任务ID：{task.taskId}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           ) : task.status === 'completed' && task.outputUrl ? (
                             <div className="relative rounded-xl overflow-hidden border border-white/12 bg-black/40 aspect-video">

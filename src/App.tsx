@@ -4394,22 +4394,6 @@ function VideoGenerator({
       </div>
       <div className="tikgen-panel rounded-2xl p-6">
         <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
-        {activeTask?.status === 'processing' || activeTask?.status === 'submitting' ? (
-          <div className="mb-5">
-            <GenerationLoadingCard
-              title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.title}
-              subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.subtitle}
-              chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.chips}
-              statusText={activeTask.statusText || '视频生成中...'}
-              progressText={
-                activeTask.status === 'submitting'
-                  ? '正在提交…'
-                  : `进度：${activeTask.progress || '0%'}${activeTask.taskId && !activeTask.taskId.startsWith('pending_') ? ` | 任务ID：${activeTask.taskId}` : ''}`
-              }
-            />
-          </div>
-        ) : null}
-
         {videoTasks.length === 0 ? (
           <div className="h-96 flex items-center justify-center text-white/40 border border-white/12 rounded-xl bg-white/[0.02]">
             <Video className="w-16 h-16 opacity-40" />
@@ -4481,8 +4465,53 @@ function VideoGenerator({
                     {t.errorText || '生成失败'} {t.errorCode && t.errorCode !== 'UNKNOWN' ? `（${t.errorCode}）` : ''}
                   </div>
                 ) : (
-                  <div className="text-xs text-white/60">
-                    {t.status === 'submitting' ? t.statusText || '正在提交任务…' : `任务进行中… ${t.statusText || ''}`}
+                  <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30">
+                    <div className="relative h-44 w-full bg-[linear-gradient(180deg,#080a14,#03040a)]">
+                      <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
+                        <div className="relative w-[56px] h-[56px] mb-2">
+                          <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-400 animate-spin" />
+                          <div className="absolute inset-[10px] rounded-full border-[3px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
+                        </div>
+                        <h4 className="text-xl font-semibold text-white/95">视频生成中</h4>
+                        <p className="mt-1 text-xs text-white/65 line-clamp-2">
+                          {t.status === 'submitting'
+                            ? t.statusText || '正在提交任务…'
+                            : t.statusText || '任务进行中，正在计算运镜轨迹与画面细节…'}
+                        </p>
+                        <div className="mt-2 flex items-center justify-center gap-1.5">
+                          {LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.chips.map((chip) => (
+                            <span
+                              key={`${t.taskId}_${chip}`}
+                              className="px-2 py-0.5 rounded-full text-[10px] border border-white/15 bg-white/5 text-white/75"
+                            >
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3 w-[min(88%,16rem)]">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/12">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
+                              style={{
+                                width: `${Math.max(
+                                  2,
+                                  Math.min(
+                                    99,
+                                    Number.parseInt(String(t.progress || '0').replace(/[^\d]/g, ''), 10) ||
+                                      (t.status === 'submitting' ? 2 : 8),
+                                  ),
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="mt-1 text-[11px] text-white/75">
+                            {t.status === 'submitting'
+                              ? '提交中…'
+                              : `生成中 ${t.progress || '0%'}${t.taskId && !t.taskId.startsWith('pending_') ? ` | 任务ID：${t.taskId}` : ''}`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
