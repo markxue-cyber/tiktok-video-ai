@@ -1513,8 +1513,10 @@ export function ImageToolWorkbench({
 
   return (
     <>
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <div className="grid h-full min-h-0 w-full flex-1 items-stretch gap-6 lg:grid-cols-2">
+        <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-4 sm:p-5">
+          <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
           <div className="flex flex-col gap-6">
             <section className="w-full min-w-0">
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -1657,13 +1659,15 @@ export function ImageToolWorkbench({
               </button>
             </div>
           </div>
+          </div>
         </div>
 
-        <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
-          <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-4 sm:p-5">
+          <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-white/95">生成历史</h2>
           </div>
 
+          <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
           {history.length === 0 ? (
             <div className="min-h-[200px] flex flex-col items-center justify-center text-center text-white/45 border border-white/12 rounded-xl bg-white/[0.02] px-6">
               <ImageIcon className="w-14 h-14 mb-3 opacity-35" />
@@ -1829,6 +1833,8 @@ export function ImageToolWorkbench({
               ))}
             </div>
           ) : null}
+          </div>
+        </div>
         </div>
       </div>
 

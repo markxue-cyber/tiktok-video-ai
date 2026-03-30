@@ -556,8 +556,11 @@ export function VideoUpscaleWorkbench({
     'px-3 py-1.5 rounded-lg text-xs bg-white/[0.04] text-white/80 ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.08] hover:ring-white/[0.12] disabled:opacity-50'
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8">
-      <div className="tikgen-panel rounded-2xl p-6">
+    <>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="grid h-full min-h-0 w-full flex-1 items-stretch gap-8 lg:grid-cols-2">
+      <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-6">
+        <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
         <div className="mb-6">
           <div className="block text-sm font-medium mb-2 text-white/75">上传视频</div>
           <input
@@ -739,11 +742,13 @@ export function VideoUpscaleWorkbench({
             </span>
           )}
         </button>
+        </div>
       </div>
 
-      <div className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
-        <h2 className="text-xl font-bold mb-3 text-white/95">生成历史</h2>
+      <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-4 sm:p-5">
+        <h2 className="mb-3 shrink-0 text-xl font-bold text-white/95">生成历史</h2>
 
+        <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
         {errorBanner ? (
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95">
             <span className="font-medium">上次失败</span> · {errorBanner}
@@ -921,7 +926,10 @@ export function VideoUpscaleWorkbench({
             ))}
           </div>
         ) : null}
+        </div>
       </div>
+    </div>
+    </div>
 
       {showVideoAssetPicker && (
         <div className="fixed inset-0 z-50 bg-black/55 flex items-center justify-center p-4">
@@ -995,6 +1003,6 @@ export function VideoUpscaleWorkbench({
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

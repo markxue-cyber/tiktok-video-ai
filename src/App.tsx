@@ -2068,9 +2068,11 @@ function App() {
 
   const isAdminBypass = String(user?.email || '').trim().toLowerCase() === 'haoxue2027@gmail.com'
   const canGenerateMedia = isAdminBypass || Boolean(user?.hasAppAccess)
-  /** 图片生成 / 电商套图：主区域锁视口高度，左右列内部滚动，避免整页无限拉长 */
-  const imageWorkbenchViewportFill =
-    mainNav === 'image' && (imageSubNav === 'imageGen' || imageSubNav === 'ecommerce')
+  /** 双列工作台（图/视频生成、增强、图片工具）：主区域锁视口高度，左右列内部滚动 */
+  const twoColWorkbenchViewportFill =
+    (mainNav === 'image' &&
+      (imageSubNav === 'imageGen' || imageSubNav === 'ecommerce' || imageSubNav === 'tools')) ||
+    (mainNav === 'video' && (videoSubNav === 'generate' || videoSubNav === 'upscale'))
 
   return (
     <div className="min-h-screen min-w-[1280px] bg-gray-50 flex workbench-root">
@@ -2287,7 +2289,7 @@ function App() {
       </aside>
       <main
         className={`flex-1 min-h-0 ${navCollapsed ? 'ml-20' : 'ml-64'} transition-all ${
-          imageWorkbenchViewportFill ? 'flex h-svh max-h-svh flex-col overflow-hidden' : ''
+          twoColWorkbenchViewportFill ? 'flex h-svh max-h-svh flex-col overflow-hidden' : ''
         }`}
       >
         <header className="shrink-0 bg-white shadow-sm sticky top-0 z-20">
@@ -2447,7 +2449,7 @@ function App() {
               ? 'pt-2 p-6'
               : mainNav === 'home'
                 ? 'p-4'
-                : imageWorkbenchViewportFill
+                : twoColWorkbenchViewportFill
                   ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-6'
                   : 'p-6'
           }
@@ -2501,7 +2503,13 @@ function App() {
             />
           </div>
           {/* 保持挂载：在「图片创作 / 其它主导航」与「图片工具」之间切换时不丢失各工具台状态 */}
-          <div className={mainNav === 'image' && imageSubNav === 'tools' ? '' : 'hidden'}>
+          <div
+            className={
+              mainNav === 'image' && imageSubNav === 'tools'
+                ? 'flex h-full min-h-0 flex-col'
+                : 'hidden'
+            }
+          >
             <ImageToolsWorkbench
               tab={imageToolsTab}
               onTabChange={onWorkbenchImageTabChange}
@@ -2510,7 +2518,13 @@ function App() {
               onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
-          <div className={mainNav === 'video' && videoSubNav === 'generate' ? '' : 'hidden'}>
+          <div
+            className={
+              mainNav === 'video' && videoSubNav === 'generate'
+                ? 'flex h-full min-h-0 flex-col'
+                : 'hidden'
+            }
+          >
             <VideoGenerator
               templatePreset={videoTemplatePreset}
               onTemplateApplied={() => setVideoTemplatePreset(null)}
@@ -2519,7 +2533,13 @@ function App() {
               onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
-          <div className={mainNav === 'video' && videoSubNav === 'upscale' ? '' : 'hidden'}>
+          <div
+            className={
+              mainNav === 'video' && videoSubNav === 'upscale'
+                ? 'flex h-full min-h-0 flex-col'
+                : 'hidden'
+            }
+          >
             <VideoUpscaleWorkbench
               canGenerate={canGenerateMedia}
               onRefreshUser={refreshCurrentUser}
@@ -2656,17 +2676,20 @@ function ImageToolsWorkbench({
   onOptimisticCreditsSpend?: (amount: number) => void
 }) {
   return (
-    <div className="space-y-6">
-      <WorkbenchSubTabNav ariaLabel="图片工具" items={IMAGE_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
+      <div className="shrink-0">
+        <WorkbenchSubTabNav ariaLabel="图片工具" items={IMAGE_TOOLS_TAB_ITEMS} tab={tab} onTabChange={onTabChange} />
+      </div>
       {/* 保持挂载，避免切换 Tab 时 React 状态与未落盘的 IDB 写入丢失 */}
-      <div className={tab === 'removeBg' ? 'block' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
+      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className={tab === 'removeBg' ? 'flex h-full min-h-0 flex-col' : 'hidden'} aria-hidden={tab !== 'removeBg'}>
         <RemoveBackgroundWorkbench
           canGenerate={canGenerate}
           onRefreshUser={onRefreshUser}
           onOptimisticCreditsSpend={onOptimisticCreditsSpend}
         />
       </div>
-      <div className={tab === 'upscale' ? 'block' : 'hidden'} aria-hidden={tab !== 'upscale'}>
+      <div className={tab === 'upscale' ? 'flex h-full min-h-0 flex-col' : 'hidden'} aria-hidden={tab !== 'upscale'}>
         <ImageToolWorkbench
           tool="upscale"
           canGenerate={canGenerate}
@@ -2674,7 +2697,7 @@ function ImageToolsWorkbench({
           onOptimisticCreditsSpend={onOptimisticCreditsSpend}
         />
       </div>
-      <div className={tab === 'compress' ? 'block' : 'hidden'} aria-hidden={tab !== 'compress'}>
+      <div className={tab === 'compress' ? 'flex h-full min-h-0 flex-col' : 'hidden'} aria-hidden={tab !== 'compress'}>
         <ImageToolWorkbench
           tool="compress"
           canGenerate={canGenerate}
@@ -2682,13 +2705,14 @@ function ImageToolsWorkbench({
           onOptimisticCreditsSpend={onOptimisticCreditsSpend}
         />
       </div>
-      <div className={tab === 'translate' ? 'block' : 'hidden'} aria-hidden={tab !== 'translate'}>
+      <div className={tab === 'translate' ? 'flex h-full min-h-0 flex-col' : 'hidden'} aria-hidden={tab !== 'translate'}>
         <ImageToolWorkbench
           tool="translate"
           canGenerate={canGenerate}
           onRefreshUser={onRefreshUser}
           onOptimisticCreditsSpend={onOptimisticCreditsSpend}
         />
+      </div>
       </div>
     </div>
   )
@@ -4207,8 +4231,10 @@ function VideoGenerator({
 
   return (
     <>
-    <div className="grid lg:grid-cols-2 gap-8">
-      <div className="tikgen-panel rounded-2xl p-6">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="grid h-full min-h-0 w-full flex-1 items-stretch gap-8 lg:grid-cols-2">
+      <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-6">
+        <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2 text-white/75">上传参考图</label>
           <div
@@ -4421,9 +4447,11 @@ function VideoGenerator({
             <div className="mt-2 text-xs text-amber-300/95 text-center">请开通会员</div>
           ) : null}
         </div>
+        </div>
       </div>
-      <div className="tikgen-panel rounded-2xl p-6">
-        <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
+      <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-6">
+        <h2 className="mb-6 shrink-0 text-xl font-bold text-white/95">生成结果</h2>
+        <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0">
         {videoTasks.length === 0 ? (
           <div className="h-96 flex items-center justify-center text-white/40 border border-white/12 rounded-xl bg-white/[0.02]">
             <Video className="w-16 h-16 opacity-40" />
@@ -4548,7 +4576,9 @@ function VideoGenerator({
             ))}
           </div>
         )}
+        </div>
       </div>
+    </div>
     </div>
     {resultLightbox ? (
       <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
@@ -7246,7 +7276,7 @@ function ImageGenerator({
 
   return (
     <>
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
     <div
       ref={imageGenRootRef}
       className="grid h-full min-h-0 w-full flex-1 grid-cols-2 items-stretch gap-6 min-w-[1120px]"
