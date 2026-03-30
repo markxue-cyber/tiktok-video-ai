@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Zap } from 'lucide-react'
+import { Zap } from 'lucide-react'
 import { createOrder, getOrderStatus } from './api/payments'
 import { Sentry } from './sentry'
 import {
-  CREDITS_PER_IMAGE,
-  CREDITS_PER_VIDEO,
   TOPUP_CREDITS_PER_YUAN,
   TOPUP_PLAN_ID,
   creditsForTopupYuan,
@@ -126,8 +124,7 @@ export function TopupPackSection({
         <div>
           <h3 className="text-lg font-semibold text-white/95">积分加油包</h3>
           <p className="mt-1 text-sm text-white/60 leading-relaxed">
-            按金额充值积分，支付成功后积分立即到账。兑换比例：1 元 = {TOPUP_CREDITS_PER_YUAN} 积分（单张图约 {CREDITS_PER_IMAGE}{' '}
-            积分，单条视频约 {CREDITS_PER_VIDEO} 积分）。
+            按金额充值积分，支付成功后积分立即到账。兑换比例：1 元 = {TOPUP_CREDITS_PER_YUAN} 积分。
           </p>
         </div>
 
@@ -145,25 +142,15 @@ export function TopupPackSection({
         </div>
 
         {amountYuan > 0 ? (
-          <div className="rounded-xl border border-violet-400/30 bg-gradient-to-br from-violet-500/20 via-fuchsia-500/10 to-white/[0.04] p-4 space-y-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="space-y-3">
             <div className="flex items-center gap-2 text-violet-200 font-semibold">
               <Zap className="w-5 h-5 text-amber-300/95 shrink-0" />
               预计获得 {preview.credits} 积分
             </div>
-            <ul className="text-sm text-white/88 space-y-2">
-              <li className="flex items-start gap-2">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  约可生成图片 {preview.images} 张（按每张 {CREDITS_PER_IMAGE} 积分估算）
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  约可生成视频 {preview.videos} 条（按每条 {CREDITS_PER_VIDEO} 积分估算）
-                </span>
-              </li>
-            </ul>
+            <div className="text-sm text-white/80 space-y-1.5">
+              <div>约可生成图片 {preview.images} 张</div>
+              <div>约可生成视频 {preview.videos} 条</div>
+            </div>
           </div>
         ) : (
           <p className="text-sm text-white/45">输入金额后，将显示积分与可生成量预估。</p>
