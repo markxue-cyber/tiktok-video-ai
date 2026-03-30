@@ -104,7 +104,7 @@ export type VideoGeneratorWorkspaceV1 = {
     resolution?: string
     durationSec?: number
     taskId?: string
-    status?: 'processing' | 'completed' | 'failed'
+    status?: 'submitting' | 'processing' | 'completed' | 'failed'
     progress?: string
     statusText?: string
     errorText?: string

@@ -3163,7 +3163,7 @@ function VideoGenerator({
     resolution: string
     durationSec: number
     taskId: string
-    status: 'processing' | 'completed' | 'failed'
+    status: 'submitting' | 'processing' | 'completed' | 'failed'
     progress: string
     statusText: string
     errorText: string
@@ -3220,10 +3220,17 @@ function VideoGenerator({
     if (!videoTasks.length) return null
     const picked = activeTaskId ? videoTasks.find((t) => t.taskId === activeTaskId) : null
     if (picked) return picked
-    return videoTasks.find((t) => t.status === 'processing') || videoTasks[0]
+    return (
+      videoTasks.find((t) => t.status === 'submitting') ||
+      videoTasks.find((t) => t.status === 'processing') ||
+      videoTasks[0]
+    )
   }, [videoTasks, activeTaskId])
 
-  const processingCount = useMemo(() => videoTasks.filter((t) => t.status === 'processing').length, [videoTasks])
+  const processingCount = useMemo(
+    () => videoTasks.filter((t) => t.status === 'processing' || t.status === 'submitting').length,
+    [videoTasks],
+  )
 
   useEffect(() => {
     void (async () => {
@@ -3272,20 +3279,27 @@ function VideoGenerator({
                   resolution: String(x?.resolution || w.resolution || '720p'),
                   durationSec: Number(x?.durationSec || w.durationSec || 10),
                   taskId: String(x?.taskId || ''),
-                  status: x?.status === 'completed' || x?.status === 'failed' ? x.status : 'processing',
+                  status:
+                    x?.status === 'completed' || x?.status === 'failed'
+                      ? x.status
+                      : x?.status === 'submitting'
+                        ? 'submitting'
+                        : 'processing',
                   progress: String(x?.progress || '0%'),
                   statusText: String(x?.statusText || ''),
                   errorText: String(x?.errorText || ''),
                   errorCode: String(x?.errorCode || 'UNKNOWN'),
                   videoUrl: String(x?.videoUrl || ''),
                 }))
-                .filter((x) => x.taskId)
+                .filter((x) => x.taskId && !String(x.taskId).startsWith('pending_'))
             : []
           if (restoredTasks.length) {
             setVideoTasks(restoredTasks.sort((a, b) => b.createdAt - a.createdAt).slice(0, 20))
             const at = String((w as any).activeTaskId || restoredTasks[0]?.taskId || '')
             setActiveTaskId(at)
-            resumeVideoGenPollRef.current = restoredTasks.filter((x) => x.status === 'processing').map((x) => x.taskId)
+            resumeVideoGenPollRef.current = restoredTasks
+              .filter((x) => x.status === 'processing' && x.taskId && !String(x.taskId).startsWith('pending_'))
+              .map((x) => x.taskId)
           } else if (w.taskId) {
             const oldOne: VideoGenTaskItem = {
               id: crypto.randomUUID(),
@@ -3347,9 +3361,15 @@ function VideoGenerator({
       statusText: activeTask?.statusText || '',
       errorText: activeTask?.errorText || '',
       errorCode: activeTask?.errorCode || 'UNKNOWN',
-      isGenerating: activeTask?.status === 'processing',
-      videoTasks: videoTasks.slice(0, 20),
-      activeTaskId: activeTask?.taskId || activeTaskId,
+      isGenerating: activeTask?.status === 'processing' || activeTask?.status === 'submitting',
+      videoTasks: videoTasks
+        .filter((t) => t.status !== 'submitting' && !String(t.taskId).startsWith('pending_'))
+        .slice(0, 20),
+      activeTaskId: (() => {
+        const tid = activeTask?.taskId || activeTaskId
+        if (tid && String(tid).startsWith('pending_')) return ''
+        return tid
+      })(),
     }
     void tikgenIgIdbSet(TIKGEN_IG_IDB.videoGeneratorWorkspace, snap)
   }, [
@@ -3889,28 +3909,40 @@ function VideoGenerator({
     if (!refImageDataUrl) { alert('请先上传参考图'); return }
     if (!prompt) { alert('请输入视频文案描述'); return }
 
+    const rowId = crypto.randomUUID()
+    const pendingTaskId = `pending_${rowId}`
+    const optimistic: VideoGenTaskItem = {
+      id: rowId,
+      createdAt: Date.now(),
+      prompt: String(prompt || '').slice(0, 160),
+      model,
+      size,
+      resolution,
+      durationSec,
+      taskId: pendingTaskId,
+      status: 'submitting',
+      progress: '0%',
+      statusText: '正在连接服务器并提交任务…',
+      errorText: '',
+      errorCode: 'UNKNOWN',
+      videoUrl: '',
+    }
+    setVideoTasks((prev) => [optimistic, ...prev].slice(0, 20))
+    setActiveTaskId(pendingTaskId)
+
     try {
       onOptimisticCreditsSpend?.(CREDITS_PER_VIDEO)
       const submit = await generateVideoAPI(finalVideoPrompt, model, { aspectRatio: size, durationSec, resolution, refImage: refImageDataUrl })
       const item: VideoGenTaskItem = {
-        id: crypto.randomUUID(),
-        createdAt: Date.now(),
-        prompt: String(prompt || '').slice(0, 160),
-        model,
-        size,
-        resolution,
-        durationSec,
+        ...optimistic,
         taskId: submit.taskId,
         status: 'processing',
         progress: '0%',
         statusText: submit.message || '视频生成中...',
-        errorText: '',
-        errorCode: 'UNKNOWN',
-        videoUrl: '',
       }
-      setVideoTasks((prev) => [item, ...prev.filter((x) => x.taskId !== item.taskId)].slice(0, 20))
-      setActiveTaskId(item.taskId)
-      void pollVideoGenerateTask(item.taskId, {
+      setVideoTasks((prev) => prev.map((t) => (t.taskId === pendingTaskId ? item : t)).slice(0, 20))
+      setActiveTaskId(submit.taskId)
+      void pollVideoGenerateTask(submit.taskId, {
         model: item.model,
         size: item.size,
         resolution: item.resolution,
@@ -3920,22 +3952,15 @@ function VideoGenerator({
       Sentry.captureException(e, { extra: { scene: 'video_generate', model } })
       void onRefreshUser?.()
       const failed: VideoGenTaskItem = {
-        id: crypto.randomUUID(),
-        createdAt: Date.now(),
-        prompt: String(prompt || '').slice(0, 160),
-        model,
-        size,
-        resolution,
-        durationSec,
+        ...optimistic,
         taskId: `failed_${Date.now()}`,
         status: 'failed',
         progress: '0%',
         statusText: '',
         errorText: e?.message || '生成失败',
         errorCode: e?.code || 'UNKNOWN',
-        videoUrl: '',
       }
-      setVideoTasks((prev) => [failed, ...prev].slice(0, 20))
+      setVideoTasks((prev) => prev.map((t) => (t.taskId === pendingTaskId ? failed : t)).slice(0, 20))
       setActiveTaskId(failed.taskId)
     }
   }
@@ -4346,14 +4371,18 @@ function VideoGenerator({
       </div>
       <div className="tikgen-panel rounded-2xl p-6">
         <h2 className="text-xl font-bold mb-6 text-white/95">生成结果</h2>
-        {activeTask?.status === 'processing' ? (
+        {activeTask?.status === 'processing' || activeTask?.status === 'submitting' ? (
           <div className="mb-5">
             <GenerationLoadingCard
               title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.title}
               subtitle={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.subtitle}
               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].video.chips}
               statusText={activeTask.statusText || '视频生成中...'}
-              progressText={`进度：${activeTask.progress || '0%'}${activeTask.taskId ? ` | 任务ID：${activeTask.taskId}` : ''}`}
+              progressText={
+                activeTask.status === 'submitting'
+                  ? '正在提交…'
+                  : `进度：${activeTask.progress || '0%'}${activeTask.taskId && !activeTask.taskId.startsWith('pending_') ? ` | 任务ID：${activeTask.taskId}` : ''}`
+              }
             />
           </div>
         ) : null}
@@ -4385,7 +4414,13 @@ function VideoGenerator({
                           : 'border-amber-400/35 text-amber-200 bg-amber-500/12'
                     }`}
                   >
-                    {t.status === 'completed' ? '已完成' : t.status === 'failed' ? '失败' : `生成中 ${t.progress || '0%'}`}
+                    {t.status === 'completed'
+                      ? '已完成'
+                      : t.status === 'failed'
+                        ? '失败'
+                        : t.status === 'submitting'
+                          ? '提交中'
+                          : `生成中 ${t.progress || '0%'}`}
                   </span>
                 </div>
 
@@ -4423,7 +4458,9 @@ function VideoGenerator({
                     {t.errorText || '生成失败'} {t.errorCode && t.errorCode !== 'UNKNOWN' ? `（${t.errorCode}）` : ''}
                   </div>
                 ) : (
-                  <div className="text-xs text-white/60">任务提交中... {t.statusText || ''}</div>
+                  <div className="text-xs text-white/60">
+                    {t.status === 'submitting' ? t.statusText || '正在提交任务…' : `任务进行中… ${t.statusText || ''}`}
+                  </div>
                 )}
               </div>
             ))}
