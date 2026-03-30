@@ -10614,7 +10614,7 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
           </div>
         </div>
       )}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
         {packages
           .filter((x) => x.enabled !== false)
           .sort((a, b) => {
@@ -10631,30 +10631,31 @@ function Packages({ user, onRefreshUser, packages }: { user: any; onRefreshUser:
             return (
           <div
             key={pkg.plan_id}
-            className={`bg-white rounded-2xl p-6 shadow-lg border-2 ${isCurrent ? 'border-purple-500' : 'border-transparent'}`}
+            className={`flex h-full flex-col bg-white rounded-2xl p-6 shadow-lg border-2 ${isCurrent ? 'border-purple-500' : 'border-transparent'}`}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex shrink-0 items-center justify-between">
               <h3 className="font-bold text-lg">{pkg.name}</h3>
               {isCurrent && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">当前套餐</span>}
             </div>
-            <div className="mt-4">
+            <div className="mt-4 shrink-0">
               <div className="text-3xl font-extrabold">{displayPrice}</div>
             </div>
-            <ul className="mt-4 space-y-2 text-sm text-gray-600">
+            <ul className="mt-4 flex min-h-0 flex-1 flex-col space-y-2 text-sm text-gray-600">
               {features.map((f) => (
                 <li key={f} className="flex items-center">
-                  <Check className="w-4 h-4 text-green-500 mr-2" />
+                  <Check className="w-4 h-4 text-green-500 mr-2 shrink-0" />
                   <span>{f}</span>
                 </li>
               ))}
               {pkg.apply_mode && (
-                <li className="text-xs text-gray-500 mt-2">
+                <li className="mt-2 text-xs text-gray-500">
                   生效规则：{pkg.apply_mode === 'all_users' ? `新老用户都生效${pkg.grace_days ? `（宽限${pkg.grace_days}天）` : ''}` : '仅新用户生效'}
                 </li>
               )}
             </ul>
             <button
-              className={`mt-6 w-full py-3 rounded-xl font-bold ${
+              type="button"
+              className={`mt-6 w-full shrink-0 py-3 rounded-xl font-bold ${
                 priceYuan <= 0 || isCurrent ? 'bg-gray-100 text-gray-700' : 'bg-gradient-to-r from-pink-500 to-purple-500 text-white'
               }`}
               disabled={busyPlan === pkg.plan_id}
