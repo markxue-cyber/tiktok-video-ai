@@ -435,10 +435,52 @@ export default async function handler(req, res) {
       const statusData = await statusResponse.json()
       console.log('Status Response:', JSON.stringify(statusData))
 
-      const status = String(statusData.status || '').toLowerCase()
-      const outputUrl = statusData.data?.output || statusData.data?.outputs?.[0] || null
-      if (status === 'succeeded' || status === 'success' || status === 'completed') {
-        await updateTaskByProviderId(taskId, { status: 'succeeded', output_url: outputUrl, raw: statusData })
+      const pickUrl = (d: any): string => {
+        if (!d || typeof d !== 'object') return ''
+        const outs = d.data?.outputs
+        if (Array.isArray(outs) && outs.length) {
+          const first = outs[0]
+          if (typeof first === 'string' && first.trim().startsWith('http')) return first.trim()
+          if (first && typeof first === 'object') {
+            const u = first.url || first.uri || first.video_url || first.output
+            if (typeof u === 'string' && u.trim().startsWith('http')) return u.trim()
+          }
+        }
+        const u =
+          d.data?.output ||
+          d.data?.outputs?.[0] ||
+          d.data?.video_url ||
+          d.data?.videoUrl ||
+          d.data?.url ||
+          d.output ||
+          d.video_url ||
+          d.videoUrl ||
+          d.result_url ||
+          ''
+        return typeof u === 'string' && u.trim().startsWith('http') ? u.trim() : ''
+      }
+
+      const rawStatus =
+        statusData.status ??
+        statusData.data?.status ??
+        statusData.task_status ??
+        statusData.state ??
+        statusData.data?.state
+      const status = String(rawStatus ?? '').toLowerCase()
+      const outputUrl = pickUrl(statusData)
+
+      const isSuccess =
+        status === 'succeeded' ||
+        status === 'success' ||
+        status === 'completed' ||
+        status === 'complete' ||
+        status === 'done' ||
+        status === 'finished' ||
+        status === 'succeed'
+      const isFailed = status === 'failed' || status === 'error' || status === 'cancelled' || status === 'canceled'
+
+      if (isSuccess) {
+        await updateTaskByProviderId(taskId, { status: 'succeeded', output_url: outputUrl || null, raw: statusData })
         if (outputUrl) {
           try {
             await chargeVideoOnSuccess(req, taskId, outputUrl)
@@ -446,7 +488,7 @@ export default async function handler(req, res) {
             console.error('chargeVideoOnSuccess failed', e)
           }
         }
-      } else if (status === 'failed' || status === 'error') {
+      } else if (isFailed) {
         await updateTaskByProviderId(taskId, { status: 'failed', raw: statusData })
         if (authUserId) {
           try {
@@ -459,14 +501,16 @@ export default async function handler(req, res) {
         await updateTaskByProviderId(taskId, { status: 'processing' })
       }
 
-      const failReason = statusData.fail_reason
-      const failCode = inferCode(failReason || statusData?.error?.message || '')
+      const failReason = statusData.fail_reason ?? statusData.data?.fail_reason
+      const failCode = inferCode(String(failReason || statusData?.error?.message || ''))
+
+      const statusForClient = isSuccess ? 'succeeded' : isFailed ? statusData.status || rawStatus || 'failed' : statusData.status || rawStatus || 'processing'
 
       return res.status(200).json({
         success: true,
-        status: statusData.status,
-        progress: statusData.progress,
-        videoUrl: statusData.data?.output || statusData.data?.outputs?.[0],
+        status: statusForClient,
+        progress: statusData.progress ?? statusData.data?.progress,
+        videoUrl: outputUrl,
         failReason,
         failCode,
       })

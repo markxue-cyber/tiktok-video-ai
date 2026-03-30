@@ -3824,8 +3824,9 @@ function VideoGenerator({
       if (pollRunningRef.current.has(submitTaskId)) return
       pollRunningRef.current.add(submitTaskId)
       try {
-        // 每 5s 轮询；Sora 等长任务可能超过 10 分钟，这里给到约 25 分钟（含排队）
-        for (let i = 0; i < 300; i++) {
+        // 每 5s 轮询；Sora 等排队+生成可能超过 30 分钟，约 60 分钟上限（含排队）
+        const maxPolls = 720
+        for (let i = 0; i < maxPolls; i++) {
           if (unmountedRef.current) return
           await new Promise((r) => setTimeout(r, 5000))
           if (unmountedRef.current) return
@@ -3837,7 +3838,15 @@ function VideoGenerator({
           })
 
           const status = (s.status || '').toLowerCase()
-          if (status === 'succeeded' || status === 'success' || status === 'completed') {
+          const done =
+            status === 'succeeded' ||
+            status === 'success' ||
+            status === 'completed' ||
+            status === 'complete' ||
+            status === 'done' ||
+            status === 'finished' ||
+            status === 'succeed'
+          if (done) {
             if (!s.videoUrl) throw new Error('任务完成但未返回视频地址')
             updateVideoTask(submitTaskId, {
               status: 'completed',
@@ -3866,7 +3875,9 @@ function VideoGenerator({
           }
         }
 
-        const err: any = new Error('生成超时，请稍后在任务列表中查看')
+        const err: any = new Error(
+          '生成等待超时（已在前台轮询约 60 分钟）。若上游仍在排队/渲染，可刷新页面后查看同一条任务是否已出片。',
+        )
         err.code = 'UPSTREAM_TIMEOUT'
         throw err
       } catch (e: any) {
