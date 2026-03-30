@@ -962,13 +962,11 @@ function GenerationLoadingInline({
   subtitle,
   chips,
   progressPct,
-  footnote = '生成中…',
 }: {
   title?: string
   subtitle: string
   chips?: readonly string[]
   progressPct: number
-  footnote?: string
 }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/36 px-2 py-3 text-white/88">
@@ -997,7 +995,6 @@ function GenerationLoadingInline({
           style={{ width: `${progressPct}%` }}
         />
       </div>
-      <span className="text-[10px] text-white/60">{footnote}</span>
     </div>
   )
 }
@@ -6882,6 +6879,23 @@ function ImageGenerator({
   const currentSceneBoardGenerating =
     !!sceneRunBoard && sceneRunBoard.slots.some((s) => s.selected && s.status === 'generating')
 
+  /** 一键批量出图后：隐藏未勾选格，只保留已选场景（生成中/已完成/失败），按原顺序排布 */
+  const ecommerceSceneWorkbenchCompact =
+    !isSimpleImageGen &&
+    !!sceneRunBoard &&
+    (sceneBatchGenerating ||
+      sceneRunBoard.slots.some(
+        (s) => s.selected && (s.status === 'generating' || s.status === 'done' || s.status === 'failed'),
+      ))
+
+  const sceneWorkbenchSlotsForGrid = useMemo(() => {
+    if (!sceneRunBoard) return [] as { slot: SceneRunSlot; sidx: number }[]
+    if (isSimpleImageGen || !ecommerceSceneWorkbenchCompact) {
+      return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx }))
+    }
+    return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx })).filter(({ slot }) => slot.selected)
+  }, [sceneRunBoard, isSimpleImageGen, ecommerceSceneWorkbenchCompact])
+
   const workbenchOpsLocked =
     workbenchFullAnalysisBusy ||
     productAnalysisOnlyBusy ||
@@ -8032,9 +8046,21 @@ function ImageGenerator({
                     </span>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-white/45">
-                    以下 6 格在<strong className="font-medium text-white/58">当前爆款风格 / 主描述</strong>
-                    之上标注「每张图的镜头类型」；可只勾选需要的格再批量生成。与主描述有重复用词时，以<strong className="font-medium text-white/58">当前格标题与说明</strong>
-                    为准。
+                    {ecommerceSceneWorkbenchCompact ? (
+                      <>
+                        以下为<strong className="font-medium text-white/58">已勾选场景</strong>
+                        ，按原顺序排列；未勾选的格已收起。镜头说明仍基于
+                        <strong className="font-medium text-white/58">当前爆款风格 / 主描述</strong>
+                        ，与主描述重复时以<strong className="font-medium text-white/58">当前格标题与说明</strong>为准。
+                      </>
+                    ) : (
+                      <>
+                        以下 6 格在<strong className="font-medium text-white/58">当前爆款风格 / 主描述</strong>
+                        之上标注「每张图的镜头类型」；可只勾选需要的格再批量生成。与主描述有重复用词时，以
+                        <strong className="font-medium text-white/58">当前格标题与说明</strong>
+                        为准。
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -8079,7 +8105,7 @@ function ImageGenerator({
               </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-stretch overflow-visible">
-              {sceneRunBoard.slots.map((slot, sidx) => {
+              {sceneWorkbenchSlotsForGrid.map(({ slot, sidx }) => {
                 const rawDesc = (slot.description || slot.imagePrompt || '').replace(/\s+/g, ' ').trim()
                 const hoverFull = styleCardSummary(rawDesc, 400)
                 const mosaicThumb = sceneRunBoard.refThumb || refImageDataUrl || ''
