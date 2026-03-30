@@ -119,8 +119,8 @@ export function TopupPackSection({
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="tikgen-panel rounded-2xl p-6 border border-white/10 space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="space-y-6">
         <div>
           <h3 className="text-lg font-semibold text-white/95">积分加油包</h3>
           <p className="mt-1 text-sm text-white/60 leading-relaxed">
@@ -174,7 +174,7 @@ export function TopupPackSection({
       </div>
 
       {payInfo && (
-        <div className="mt-8 tikgen-panel rounded-2xl p-6 border border-white/10">
+        <div className="pt-2 space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <div className="font-bold text-lg text-white/95">请扫码支付</div>
