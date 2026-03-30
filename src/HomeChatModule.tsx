@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Image as ImageIcon,
   ImagePlus,
   Pencil,
   Pin,
@@ -3011,17 +3012,42 @@ export function HomeChatModule({
             {busy && busyStage !== 'analyze' ? (
               <div className="flex justify-start">
                 <AssistantBubble>
-                  <div className="home-chat-busy-row flex items-center gap-2.5">
-                    <TypingDots />
-                    <span className="text-sm">
-                      {busyStage === 'identify'
-                        ? '正在识别商品特征…'
-                        : busyStage === 'optimize'
-                          ? '正在优化出图提示词…'
-                          : busyStage === 'generate'
-                            ? '正在调用模型生成商品图…'
-                            : 'AI 正在处理…'}
-                    </span>
+                  <div className="flex w-full min-w-0 flex-col gap-3">
+                    <div className="home-chat-busy-row flex items-center gap-2.5">
+                      <TypingDots />
+                      <span className="text-sm">
+                        {busyStage === 'identify'
+                          ? '正在识别商品特征…'
+                          : busyStage === 'optimize'
+                            ? '正在优化出图提示词…'
+                            : busyStage === 'generate'
+                              ? '正在调用模型生成商品图…'
+                              : 'AI 正在处理…'}
+                      </span>
+                    </div>
+                    {busyStage === 'generate' ? (
+                      <div
+                        className="home-chat-gen-placeholder relative mt-0.5 w-full max-w-[min(100%,17.5rem)] overflow-hidden rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-500/[0.12] via-white/[0.03] to-fuchsia-500/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                        role="img"
+                        aria-label="商品图生成中占位预览"
+                      >
+                        <div className="home-chat-gen-placeholder-shimmer pointer-events-none" aria-hidden />
+                        <div className="relative aspect-[4/3] w-full">
+                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(167,139,250,0.18),transparent_55%)]" />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
+                            <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 shadow-inner">
+                              <ImageIcon className="h-9 w-9 text-violet-300/80" strokeWidth={1.35} aria-hidden />
+                            </div>
+                            <span className="home-chat-gen-placeholder-caption text-center text-[11px] font-medium tracking-wide">
+                              图片生成中
+                            </span>
+                            <span className="home-chat-gen-placeholder-sub text-center text-[10px] leading-tight">
+                              示意图 · 非成片
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </AssistantBubble>
               </div>
