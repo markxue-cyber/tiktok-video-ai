@@ -3033,17 +3033,16 @@ export function HomeChatModule({
                       >
                         <div className="home-chat-gen-placeholder-shimmer pointer-events-none" aria-hidden />
                         <div className="relative aspect-[4/3] w-full">
-                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(167,139,250,0.18),transparent_55%)]" />
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4">
-                            <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 shadow-inner">
-                              <ImageIcon className="h-9 w-9 text-violet-300/80" strokeWidth={1.35} aria-hidden />
+                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_85%_70%_at_50%_50%,rgba(167,139,250,0.16),transparent_65%)]" />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 py-5">
+                            <div className="flex flex-col items-center justify-center gap-2.5">
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 shadow-inner">
+                                <ImageIcon className="h-9 w-9 text-violet-300/80" strokeWidth={1.35} aria-hidden />
+                              </div>
+                              <span className="home-chat-gen-placeholder-caption text-center text-[11px] font-medium leading-snug tracking-wide">
+                                图片生成中
+                              </span>
                             </div>
-                            <span className="home-chat-gen-placeholder-caption text-center text-[11px] font-medium tracking-wide">
-                              图片生成中
-                            </span>
-                            <span className="home-chat-gen-placeholder-sub text-center text-[10px] leading-tight">
-                              示意图 · 非成片
-                            </span>
                           </div>
                         </div>
                       </div>

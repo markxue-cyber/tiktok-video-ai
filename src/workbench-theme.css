@@ -308,11 +308,6 @@
   -webkit-text-fill-color: rgba(255, 255, 255, 0.58) !important;
 }
 
-.workbench-root .home-chat-gen-placeholder-sub {
-  color: rgba(255, 255, 255, 0.38) !important;
-  -webkit-text-fill-color: rgba(255, 255, 255, 0.38) !important;
-}
-
 .workbench-root .home-chat-chip-label {
   color: rgba(255, 255, 255, 0.55) !important;
   -webkit-text-fill-color: rgba(255, 255, 255, 0.55) !important;
