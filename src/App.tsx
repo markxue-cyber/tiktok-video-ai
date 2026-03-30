@@ -308,11 +308,10 @@ type SceneRunBoard = {
   slots: SceneRunSlot[]
 }
 
-/** 是否允许点「一键生成图片」：已选中里仍有 pending / failed 即可（可与其它槽并发生成中） */
+/** 是否允许点「一键生成图片」：已选中里仍有 pending / failed（与 runBatchGenerateForBoard / 积分预估一致） */
 function sceneBoardAllowsBatchGenerate(board: SceneRunBoard | null): boolean {
   if (!board) return false
-  const sel = board.slots.filter((s) => s.selected)
-  return sel.length > 0
+  return board.slots.some((s) => s.selected && (s.status === 'pending' || s.status === 'failed'))
 }
 
 /** 删除主参考/放弃看板时：把进行中的槽视为未出图，便于历史记为「已完成」且只展示已出好的图 */
@@ -8183,12 +8182,10 @@ function ImageGenerator({
                         <span>一键生成图片</span>
                         <CreditCostWithZap amount={ecommercePendingCredits} />
                       </span>
+                    ) : sceneRunBoard.slots.some((s) => s.selected) ? (
+                      <span className="text-white/75">本轮已全部生成</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span>一键生成图片</span>
-                        <span className="text-white/85">每张</span>
-                        <CreditCostWithZap amount={CREDITS_PER_IMAGE} />
-                      </span>
+                      <span className="text-white/55">请勾选要生成的场景</span>
                     )}
                   </button>
                   <button
