@@ -972,7 +972,7 @@ function GenerationLoadingInline({
   progressPct,
 }: {
   title?: string
-  subtitle: string
+  subtitle?: string
   chips?: readonly string[]
   progressPct: number
 }) {
@@ -983,7 +983,9 @@ function GenerationLoadingInline({
         <div className="absolute inset-[6px] rounded-full border-[2px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
       </div>
       <h4 className="text-center text-xs font-semibold leading-tight text-white/95">{title}</h4>
-      <p className="line-clamp-2 max-w-[98%] text-center text-[9px] leading-snug text-white/65">{subtitle}</p>
+      {subtitle ? (
+        <p className="line-clamp-2 max-w-[98%] text-center text-[9px] leading-snug text-white/65">{subtitle}</p>
+      ) : null}
       {Array.isArray(chips) && chips.length > 0 ? (
         <div className="flex max-w-full flex-wrap items-center justify-center gap-1 px-0.5">
           {chips.map((chip) => (
@@ -8684,7 +8686,7 @@ function ImageGenerator({
                                               subtitle={
                                                 sceneBoardPreparing
                                                   ? '正在根据提示词规划场景，完成后将自动开始出图…'
-                                                  : '正在并行生成图片，结果将实时出现在下方生成历史…'
+                                                  : undefined
                                               }
                                               chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
                                               progressPct={
