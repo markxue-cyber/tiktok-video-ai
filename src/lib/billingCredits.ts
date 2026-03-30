@@ -2,6 +2,28 @@
 export const CREDITS_PER_IMAGE = 4
 export const CREDITS_PER_VIDEO = 8
 
+/** 加油包：每 1 元兑换积分（与 `TOPUP_CREDITS_PER_YUAN` 环境变量 / 服务端 `getTopupCreditsPerYuan` 默认一致） */
+export const TOPUP_CREDITS_PER_YUAN = 10
+
+/** 与下单接口 `planId: credit_topup` 一致 */
+export const TOPUP_PLAN_ID = 'credit_topup'
+
+export function creditsForTopupYuan(yuan: number): number {
+  const y = Math.floor(Number(yuan))
+  if (!Number.isFinite(y) || y <= 0) return 0
+  return y * TOPUP_CREDITS_PER_YUAN
+}
+
+export function estimateImagesFromCredits(credits: number): number {
+  const c = Math.max(0, Math.floor(Number(credits) || 0))
+  return Math.floor(c / CREDITS_PER_IMAGE)
+}
+
+export function estimateVideosFromCredits(credits: number): number {
+  const c = Math.max(0, Math.floor(Number(credits) || 0))
+  return Math.floor(c / CREDITS_PER_VIDEO)
+}
+
 export function creditsForImageCount(count: number): number {
   const n = Math.max(1, Math.min(6, Math.floor(Number(count) || 1)))
   return CREDITS_PER_IMAGE * n

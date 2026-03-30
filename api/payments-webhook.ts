@@ -1,6 +1,12 @@
 import crypto from 'crypto'
 import { baseUrl, parseJson, serviceHeaders } from './_admin.js'
-import { grantSubscriptionCreditsOnce, PLAN_MONTHLY_CREDITS } from './_billing.js'
+import {
+  TOPUP_PLAN_ID,
+  creditsForTopupYuan,
+  grantSubscriptionCreditsOnce,
+  grantUserCredits,
+  PLAN_MONTHLY_CREDITS,
+} from './_billing.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
@@ -72,6 +78,19 @@ export default async function handler(req: any, res: any) {
       headers: { ...jsonHeaders, Prefer: 'return=minimal' },
       body: JSON.stringify({ status: 'paid', paid_at: new Date().toISOString(), raw: data }),
     })
+
+    if (planId === TOPUP_PLAN_ID) {
+      const yuan = Math.floor(Number(order.amount_cents || 0) / 100)
+      const credits = creditsForTopupYuan(yuan)
+      if (credits > 0) {
+        try {
+          await grantUserCredits(String(order.user_id), credits)
+        } catch {
+          // 缺列等不阻断 webhook 应答
+        }
+      }
+      return res.status(200).send('ok')
+    }
 
     const days = PLAN_DAYS[planId] || 30
     const subResp = await fetch(

@@ -123,6 +123,7 @@ import './workbench-theme.css'
 import { ImageToolWorkbench } from './ImageToolWorkbench'
 import { RemoveBackgroundWorkbench } from './RemoveBackgroundWorkbench'
 import { LandingV2 } from './LandingV2'
+import { TopupPackSection } from './TopupPackSection'
 import { buildDownloadProxyUrl, triggerProxyDownload } from './utils/downloadProxy'
 import { CreditCostWithZap } from './components/CreditCostWithZap'
 import { CREDITS_PER_IMAGE, CREDITS_PER_VIDEO, creditsForImageCount } from './lib/billingCredits'
@@ -1263,6 +1264,15 @@ function App() {
   const [videoTemplatePreset, setVideoTemplatePreset] = useState<VideoTemplatePreset | null>(null)
   const [imageTemplatePreset, setImageTemplatePreset] = useState<ImageTemplatePreset | null>(null)
   const [packageCatalog, setPackageCatalog] = useState<PackageConfigItem[]>(DEFAULT_PACKAGES)
+  const [benefitsSubNav, setBenefitsSubNav] = useState<'packages' | 'topup'>(() => {
+    try {
+      const v = sessionStorage.getItem('tikgen.sess.benefitsSubNav')
+      if (v === 'packages' || v === 'topup') return v
+    } catch {
+      // ignore
+    }
+    return 'packages'
+  })
   const [showFeedback, setShowFeedback] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -1305,6 +1315,14 @@ function App() {
       // ignore
     }
   }, [mainNav])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('tikgen.sess.benefitsSubNav', benefitsSubNav)
+    } catch {
+      // ignore
+    }
+  }, [benefitsSubNav])
 
   /** 深链：?workspace=image.tools.upscale | image.generate | video.generate | video.upscale（兼容 video.tools.*、video.analyze）（先于 URL 同步执行，避免竞态） */
   useLayoutEffect(() => {
@@ -2230,7 +2248,8 @@ function App() {
                 {mainNav === 'creativePlaza' && '创意广场'}
                 {mainNav === 'tasks' && '任务中心'}
                 {mainNav === 'assets' && '资产库'}
-                {mainNav === 'benefits' && '个人权益'}
+                {mainNav === 'benefits' && benefitsSubNav === 'packages' && '个人权益 · 套餐'}
+                {mainNav === 'benefits' && benefitsSubNav === 'topup' && '个人权益 · 加油包'}
                 {mainNav === 'developer' && isDevAdmin && '开发者后台'}
               </h1>
             </div>
@@ -2442,7 +2461,39 @@ function App() {
             />
           )}
           {mainNav === 'assets' && <Assets />}
-          {mainNav === 'benefits' && <Packages user={user} onRefreshUser={refreshCurrentUser} packages={packageCatalog} />}
+          {mainNav === 'benefits' && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap gap-2 justify-center border-b border-white/10 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setBenefitsSubNav('packages')}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    benefitsSubNav === 'packages'
+                      ? 'bg-white/12 text-white ring-1 ring-white/20'
+                      : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  套餐
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBenefitsSubNav('topup')}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    benefitsSubNav === 'topup'
+                      ? 'bg-white/12 text-white ring-1 ring-white/20'
+                      : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  加油包
+                </button>
+              </div>
+              {benefitsSubNav === 'packages' ? (
+                <Packages user={user} onRefreshUser={refreshCurrentUser} packages={packageCatalog} />
+              ) : (
+                <TopupPackSection onRefreshUser={refreshCurrentUser} />
+              )}
+            </div>
+          )}
           {mainNav === 'tasks' && <TaskCenter />}
           {mainNav === 'developer' && isDevAdmin && <DeveloperConsole />}
         </div>

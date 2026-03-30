@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { baseUrl, parseJson, serviceHeaders } from './_admin.js'
 import { requireBearerUser } from './_authBearer.js'
+import { TOPUP_PLAN_ID, creditsForTopupYuan } from './_billing.js'
 
 function md5(s: string) {
   return crypto.createHash('md5').update(s, 'utf8').digest('hex').toLowerCase()
@@ -74,28 +75,50 @@ export default async function handler(req: any, res: any) {
     }
     const jsonHeaders = { ...headers, Prefer: 'return=minimal' as const }
 
-    const cfgResp = await fetch(
-      `${rest}/package_configs?plan_id=eq.${encodeURIComponent(pid)}&deleted_at=is.null&select=*`,
-      { method: 'GET', headers: serviceHeaders() },
-    )
-    const cfgRows = await parseJson(cfgResp)
-    if (!cfgResp.ok) {
-      return res.status(400).json({
-        success: false,
-        error: cfgRows?.message || cfgRows?.hint || '读取套餐配置失败',
-        raw: cfgRows,
-      })
-    }
-    const cfg = Array.isArray(cfgRows) ? cfgRows[0] : cfgRows
-    if (!cfg) return res.status(400).json({ success: false, error: '套餐不存在或已下线' })
-    if (cfg.enabled === false) return res.status(400).json({ success: false, error: '套餐当前不可购买' })
+    let plan: { amountCents: number; name: string; days: number }
+    let topupCredits = 0
 
-    const plan = {
-      amountCents: Number(cfg.price_cents || 0),
-      name: String(cfg.name || pid),
-      days: 30,
+    if (pid === TOPUP_PLAN_ID) {
+      const amountYuan = Math.floor(Number((req.body as { amountYuan?: unknown })?.amountYuan))
+      if (!Number.isFinite(amountYuan) || amountYuan < 1) {
+        return res.status(400).json({ success: false, error: '充值金额须为大于 0 的整数（元）' })
+      }
+      if (amountYuan > 50_000) {
+        return res.status(400).json({ success: false, error: '单次充值金额过高，请调小后重试' })
+      }
+      topupCredits = creditsForTopupYuan(amountYuan)
+      if (topupCredits <= 0) {
+        return res.status(400).json({ success: false, error: '积分换算异常，请稍后重试' })
+      }
+      plan = {
+        amountCents: amountYuan * 100,
+        name: `积分加油包 ¥${amountYuan}`,
+        days: 0,
+      }
+    } else {
+      const cfgResp = await fetch(
+        `${rest}/package_configs?plan_id=eq.${encodeURIComponent(pid)}&deleted_at=is.null&select=*`,
+        { method: 'GET', headers: serviceHeaders() },
+      )
+      const cfgRows = await parseJson(cfgResp)
+      if (!cfgResp.ok) {
+        return res.status(400).json({
+          success: false,
+          error: cfgRows?.message || cfgRows?.hint || '读取套餐配置失败',
+          raw: cfgRows,
+        })
+      }
+      const cfg = Array.isArray(cfgRows) ? cfgRows[0] : cfgRows
+      if (!cfg) return res.status(400).json({ success: false, error: '套餐不存在或已下线' })
+      if (cfg.enabled === false) return res.status(400).json({ success: false, error: '套餐当前不可购买' })
+
+      plan = {
+        amountCents: Number(cfg.price_cents || 0),
+        name: String(cfg.name || pid),
+        days: 30,
+      }
+      if (plan.amountCents <= 0) return res.status(400).json({ success: false, error: '试用版不需要支付' })
     }
-    if (plan.amountCents <= 0) return res.status(400).json({ success: false, error: '试用版不需要支付' })
 
     const aid = process.env.XORPAY_AID
     const secret = process.env.XORPAY_APP_SECRET
@@ -108,7 +131,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const orderId = `ord_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`
-    const name = `TikGen AI ${plan.name}（${plan.days}天）`
+    const name =
+      pid === TOPUP_PLAN_ID
+        ? `TikGen AI ${plan.name}`
+        : `TikGen AI ${plan.name}（${plan.days}天）`
     /** 产品侧暂仅开放支付宝；忽略请求体中的 pay_type，避免误传 native */
     const type = 'alipay'
     const price = (plan.amountCents / 100).toFixed(2)
@@ -122,7 +148,16 @@ export default async function handler(req: any, res: any) {
       currency: 'CNY',
       status: 'created',
       plan_id: pid,
-      raw: { createdFrom: 'create-order', payType: type },
+      raw:
+        pid === TOPUP_PLAN_ID
+          ? {
+              createdFrom: 'create-order',
+              payType: type,
+              kind: 'topup',
+              amountYuan: Math.floor(plan.amountCents / 100),
+              credits: topupCredits,
+            }
+          : { createdFrom: 'create-order', payType: type },
     }
 
     const insResp = await fetch(`${rest}/orders`, {

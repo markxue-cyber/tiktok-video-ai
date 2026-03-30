@@ -9,6 +9,22 @@ const PLAN_LIMITS = {
 export const CREDITS_PER_IMAGE = 4
 export const CREDITS_PER_VIDEO = 8
 
+/** 加油包订单 plan_id；勿在 package_configs 中占用 */
+export const TOPUP_PLAN_ID = 'credit_topup'
+
+/** 每 1 元人民币兑换积分（与前端 `TOPUP_CREDITS_PER_YUAN` 对齐，可用环境变量覆盖） */
+export function getTopupCreditsPerYuan() {
+  const n = Number(process.env.TOPUP_CREDITS_PER_YUAN)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 10
+}
+
+/** 整数元 → 积分（加油包） */
+export function creditsForTopupYuan(yuan) {
+  const y = Math.floor(Number(yuan))
+  if (!Number.isFinite(y) || y <= 0) return 0
+  return y * getTopupCreditsPerYuan()
+}
+
 /** 付费档每月发放积分（与 api/payments-webhook、package 文案一致） */
 export const PLAN_MONTHLY_CREDITS = { trial: 0, basic: 99, pro: 880, enterprise: 2850 }
 export const PAID_SUBSCRIPTION_PLANS = new Set(['basic', 'pro', 'enterprise'])

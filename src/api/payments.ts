@@ -10,7 +10,10 @@ function parseApiJson(text: string, fallbackMsg: string) {
   }
 }
 
-export async function createOrder(params: { planId: string; payType?: string }, accessToken: string) {
+export async function createOrder(
+  params: { planId: string; payType?: string; /** 加油包：整数元，与 `TOPUP_PLAN_ID` 联用 */ amountYuan?: number },
+  accessToken: string,
+) {
   const resp = await fetch('/api/payments/create-order', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
