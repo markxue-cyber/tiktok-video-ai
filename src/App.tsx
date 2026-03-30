@@ -7217,8 +7217,8 @@ function ImageGenerator({
 
   return (
     <>
-    <div ref={imageGenRootRef} className="grid grid-cols-2 gap-6 min-w-[1120px]">
-      <div className="tikgen-panel rounded-2xl p-4 sm:p-5 overflow-visible">
+    <div ref={imageGenRootRef} className="grid min-h-0 grid-cols-2 items-stretch gap-6 min-w-[1120px]">
+      <div className="tikgen-panel h-full min-h-0 rounded-2xl p-4 sm:p-5 overflow-visible">
         <div className="flex flex-col gap-6">
         <section>
           <div className="mb-2 flex items-center gap-1.5">
@@ -8071,8 +8071,12 @@ function ImageGenerator({
         </div>
         </div>
       </div>
-      <div ref={imageGenHistoryTopRef} className="tikgen-panel rounded-2xl p-4 sm:p-5 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto overflow-x-visible">
-        <h2 className="text-xl font-bold mb-3 text-white/95">生成历史</h2>
+      <div
+        ref={imageGenHistoryTopRef}
+        className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-4 sm:p-5"
+      >
+        <h2 className="mb-3 shrink-0 text-xl font-bold text-white/95">生成历史</h2>
+        <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto">
         {genErrorText && !sceneBoardPreparing ? (
           <div className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100/95 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <span className="break-words">
@@ -8725,6 +8729,7 @@ function ImageGenerator({
             ))}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
     {typeof document !== 'undefined' &&
