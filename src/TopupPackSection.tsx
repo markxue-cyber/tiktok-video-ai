@@ -122,17 +122,17 @@ export function TopupPackSection({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-2xl p-6 shadow border space-y-6">
+      <div className="tikgen-panel rounded-2xl p-6 border border-white/10 space-y-6">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">积分加油包</h3>
-          <p className="mt-1 text-sm text-gray-500 leading-relaxed">
+          <h3 className="text-lg font-semibold text-white/95">积分加油包</h3>
+          <p className="mt-1 text-sm text-white/60 leading-relaxed">
             按金额充值积分，支付成功后积分立即到账。兑换比例：1 元 = {TOPUP_CREDITS_PER_YUAN} 积分（单张图约 {CREDITS_PER_IMAGE}{' '}
             积分，单条视频约 {CREDITS_PER_VIDEO} 积分）。
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">充值金额（元）</label>
+          <label className="block text-sm font-medium text-white/75 mb-2">充值金额（元）</label>
           <input
             type="text"
             inputMode="numeric"
@@ -140,29 +140,33 @@ export function TopupPackSection({
             placeholder="请输入正整数，例如 50"
             value={amountRaw}
             onChange={(e) => setAmountRaw(e.target.value.replace(/\D/g, ''))}
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-lg font-medium text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+            className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-lg font-medium text-white placeholder:text-white/35 focus:ring-2 focus:ring-violet-500/80 focus:border-violet-400/40 outline-none"
           />
         </div>
 
         {amountYuan > 0 ? (
-          <div className="rounded-xl bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-100 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-violet-900 font-semibold">
-              <Zap className="w-5 h-5" />
+          <div className="rounded-xl border border-violet-400/30 bg-gradient-to-br from-violet-500/20 via-fuchsia-500/10 to-white/[0.04] p-4 space-y-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="flex items-center gap-2 text-violet-200 font-semibold">
+              <Zap className="w-5 h-5 text-amber-300/95 shrink-0" />
               预计获得 {preview.credits} 积分
             </div>
-            <ul className="text-sm text-gray-700 space-y-1.5">
-              <li className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                约可生成图片 {preview.images} 张（按每张 {CREDITS_PER_IMAGE} 积分估算）
+            <ul className="text-sm text-white/88 space-y-2">
+              <li className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>
+                  约可生成图片 {preview.images} 张（按每张 {CREDITS_PER_IMAGE} 积分估算）
+                </span>
               </li>
-              <li className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                约可生成视频 {preview.videos} 条（按每条 {CREDITS_PER_VIDEO} 积分估算）
+              <li className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>
+                  约可生成视频 {preview.videos} 条（按每条 {CREDITS_PER_VIDEO} 积分估算）
+                </span>
               </li>
             </ul>
           </div>
         ) : (
-          <p className="text-sm text-gray-400">输入金额后，将显示积分与可生成量预估。</p>
+          <p className="text-sm text-white/45">输入金额后，将显示积分与可生成量预估。</p>
         )}
 
         <div className="flex flex-wrap items-center gap-3">
@@ -174,26 +178,32 @@ export function TopupPackSection({
           >
             {busy ? '下单中…' : '立即充值'}
           </button>
-          <span className="text-sm text-gray-500">当前仅支持支付宝</span>
+          <span className="text-sm text-white/50">当前仅支持支付宝</span>
         </div>
 
-        {!!payError && <div className="p-3 rounded-xl bg-red-50 text-red-600 text-sm whitespace-pre-wrap">{payError}</div>}
+        {!!payError && (
+          <div className="p-3 rounded-xl border border-red-400/35 bg-red-500/15 text-red-100 text-sm whitespace-pre-wrap">{payError}</div>
+        )}
       </div>
 
       {payInfo && (
-        <div className="mt-8 bg-white rounded-2xl p-6 shadow-lg border">
+        <div className="mt-8 tikgen-panel rounded-2xl p-6 border border-white/10">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-bold text-lg">请扫码支付</div>
-              <div className="text-sm text-gray-500 mt-1">订单号：{payInfo.orderId}</div>
-              <div className="text-sm mt-1">
+              <div className="font-bold text-lg text-white/95">请扫码支付</div>
+              <div className="text-sm text-white/55 mt-1">订单号：{payInfo.orderId}</div>
+              <div className="text-sm mt-1 text-white/80">
                 状态：
-                <span className={`ml-1 font-medium ${payInfo.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                <span className={`ml-1 font-medium ${payInfo.status === 'paid' ? 'text-emerald-400' : 'text-amber-300'}`}>
                   {payInfo.status === 'paid' ? '已支付，积分已到账' : '待支付'}
                 </span>
               </div>
             </div>
-            <button type="button" onClick={() => setPayInfo(null)} className="px-3 py-1.5 rounded-lg border text-sm">
+            <button
+              type="button"
+              onClick={() => setPayInfo(null)}
+              className="px-3 py-1.5 rounded-lg border border-white/15 text-white/85 text-sm hover:bg-white/[0.06]"
+            >
               关闭
             </button>
           </div>
@@ -202,16 +212,16 @@ export function TopupPackSection({
               {(() => {
                 const src = xorpayQrImageSrc(payInfo.qrcode || payInfo.payUrl)
                 return src ? (
-                  <img src={src} alt="支付二维码" className="w-56 h-56 rounded-xl border bg-white object-contain" />
+                  <img src={src} alt="支付二维码" className="w-56 h-56 rounded-xl border border-white/15 bg-white object-contain" />
                 ) : (
-                  <div className="w-56 h-56 rounded-xl border bg-gray-50 flex items-center justify-center text-gray-400 text-sm px-3 text-center">
+                  <div className="w-56 h-56 rounded-xl border border-white/12 bg-white/[0.04] flex items-center justify-center text-white/50 text-sm px-3 text-center">
                     未拿到支付串，请使用下方链接
                   </div>
                 )
               })()}
             </div>
             <div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-white/65 leading-relaxed">
                 - 支付完成后积分自动入账
                 <br />
                 - 若二维码不可扫，可点击下方链接跳转支付
@@ -230,7 +240,7 @@ export function TopupPackSection({
                 type="button"
                 onClick={() => void checkPaidNow()}
                 disabled={checkingPaid}
-                className="mt-3 ml-0 md:ml-3 px-4 py-2 rounded-xl border font-medium disabled:opacity-50"
+                className="mt-3 ml-0 md:ml-3 px-4 py-2 rounded-xl border border-white/18 text-white/90 font-medium hover:bg-white/[0.06] disabled:opacity-50"
               >
                 {checkingPaid ? '检查中...' : '我已支付，检查到账'}
               </button>
