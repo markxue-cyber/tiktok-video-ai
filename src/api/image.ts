@@ -45,6 +45,12 @@ function isTransientNetworkError(err: any): boolean {
   )
 }
 
+/** 服务端已归类的瞬时上游错误，可自动重试（每次新 Idempotency-Key） */
+function isTransientUpstreamImageCode(err: any): boolean {
+  const code = String(err?.code || '')
+  return code === 'UPSTREAM_BAD_RESPONSE' || code === 'UPSTREAM_TIMEOUT'
+}
+
 function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms))
 }
@@ -95,7 +101,8 @@ export async function generateImageAPI(params: {
       const omitRaw =
         code === 'AGGREGATE_API_KEY_INVALID' ||
         code === 'MODEL_UNAVAILABLE' ||
-        code === 'PAYMENT_REQUIRED'
+        code === 'PAYMENT_REQUIRED' ||
+        code === 'UPSTREAM_BAD_RESPONSE'
       const raw =
         omitRaw || !data?.raw ? '' : `\nraw: ${JSON.stringify(data.raw).slice(0, 1200)}`
       const message = (data?.error || `生成失败(${resp.status})`) + raw
@@ -127,7 +134,7 @@ export async function generateImageAPI(params: {
         token = refreshed
         continue
       }
-      if (attempt < maxAttempts - 1 && isTransientNetworkError(e)) {
+      if (attempt < maxAttempts - 1 && (isTransientNetworkError(e) || isTransientUpstreamImageCode(e))) {
         await sleep(500 + attempt * 1200)
         continue
       }

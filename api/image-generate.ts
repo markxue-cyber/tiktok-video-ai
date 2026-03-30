@@ -28,6 +28,63 @@ async function writeTaskRow(payload: any) {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms))
+}
+
+/** OpenAI 兼容：是否已拿到可落盘的图片输出 */
+function hasImageOutput(data: any): boolean {
+  if (!data || typeof data !== 'object') return false
+  const pick = (v: any) => (typeof v === 'string' ? v : '')
+  const first = Array.isArray(data.data) ? data.data[0] : null
+  const url = pick(first?.url) || pick(data.output) || pick(data?.result?.url)
+  const b64 = pick(first?.b64_json) || pick(data?.b64_json) || pick(data?.image_base64)
+  return !!(url || b64)
+}
+
+/** 上游 JSON 里显式报错（含 HTTP 200 但 body 为 new_api_error 等情况） */
+function hasExplicitUpstreamErrorBody(data: any): boolean {
+  if (!data || typeof data !== 'object') return false
+  if (data.error != null) return true
+  const c = String((data as any).code || '').toLowerCase()
+  return c === 'bad_response_body'
+}
+
+function extractUpstreamMsg(data: any, rawText: string, status: number): string {
+  const errObj = data?.error
+  const fromObj =
+    (errObj && typeof errObj === 'object' && (errObj as any).message) ||
+    (typeof errObj === 'string' ? errObj : '') ||
+    (typeof data?.message === 'string' ? data.message : '') ||
+    ''
+  if (fromObj) return String(fromObj)
+  if (typeof rawText === 'string' && rawText) {
+    try {
+      const p = JSON.parse(rawText)
+      return String(p?.error?.message || p?.message || rawText.slice(0, 1000))
+    } catch {
+      return rawText.slice(0, 1000)
+    }
+  }
+  return `上游错误(${status})`
+}
+
+/** 聚合网关瞬时异常：空/截断 body、解析失败等，可重试 */
+function isTransientUpstreamImageError(msg: string, data: any): boolean {
+  const m = String(msg || '').toLowerCase()
+  const c = String((data?.error && typeof data.error === 'object' && (data.error as any).code) || data?.code || '').toLowerCase()
+  return (
+    c === 'bad_response_body' ||
+    m.includes('unexpected end of json') ||
+    m.includes('bad_response_body') ||
+    (m.includes('负载') && m.includes('饱和')) ||
+    m.includes('socket hang up') ||
+    m.includes('econnreset') ||
+    m.includes('bad gateway') ||
+    m.includes('service unavailable')
+  )
+}
+
 async function ensureModelEnabled(modelId: string, type: 'video' | 'image' | 'llm') {
   try {
     const serviceKey = mustEnv('SUPABASE_SERVICE_ROLE_KEY')
@@ -230,6 +287,21 @@ export default async function handler(req, res) {
     }
     let { resp: upstreamResp, raw: rawText, parsed: data } = await callUpstream(usedModel || undefined)
 
+    // 同一模型下对瞬时上游错误做有限重试（截断 JSON、bad_response_body、负载饱和等）
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const msgProbe = extractUpstreamMsg(data, rawText, upstreamResp.status)
+      const failed =
+        !upstreamResp.ok ||
+        (upstreamResp.ok && hasExplicitUpstreamErrorBody(data) && !hasImageOutput(data))
+      if (!failed) break
+      if (!isTransientUpstreamImageError(msgProbe, data)) break
+      await sleep(700 + attempt * 500)
+      const r = await callUpstream(usedModel || undefined)
+      upstreamResp = r.resp
+      rawText = r.raw
+      data = r.parsed
+    }
+
     let errorCode = 'UPSTREAM_ERROR'
     if (!upstreamResp.ok) {
       let msg =
@@ -285,11 +357,14 @@ export default async function handler(req, res) {
       if (authInvalid) errorCode = 'AGGREGATE_API_KEY_INVALID'
       else if (text.includes('今日额度已用尽') || text.includes('upgrade') || text.includes('quota')) errorCode = 'QUOTA_EXHAUSTED'
       else if (text.includes('timeout') || text.includes('超时')) errorCode = 'UPSTREAM_TIMEOUT'
+      else if (isTransientUpstreamImageError(msgFinal, data) || text.includes('bad_response_body')) errorCode = 'UPSTREAM_BAD_RESPONSE'
       else if (!errorCode || errorCode === 'UPSTREAM_ERROR') errorCode = 'UPSTREAM_ERROR'
       const userFacingError =
         errorCode === 'AGGREGATE_API_KEY_INVALID'
           ? '图片服务上游密钥无效或已过期（需在服务器/Vercel 环境变量中配置有效的 XIAO_DOU_BAO_API_KEY，非用户操作问题）。'
-          : msgFinal
+          : errorCode === 'UPSTREAM_BAD_RESPONSE'
+            ? '上游返回数据异常，请稍后重试。若多次失败可联系客服。'
+            : msgFinal
       await writeTaskRow({
         user_id: consumed?.user?.id || null,
         type: 'image',
@@ -300,6 +375,38 @@ export default async function handler(req, res) {
         raw: { upstream_status: upstreamResp.status, upstream: data || rawText },
       })
       return res.status(200).json({ success: false, error: userFacingError, code: errorCode, raw: data || rawText })
+    }
+
+    // HTTP 200 但 body 为错误（部分聚合网关用 JSON 错误对象而非 4xx）
+    if (upstreamResp.ok && !hasImageOutput(data) && hasExplicitUpstreamErrorBody(data)) {
+      const msgFinal = extractUpstreamMsg(data, rawText, upstreamResp.status)
+      const text = String(msgFinal || '').toLowerCase()
+      let errCode = 'UPSTREAM_ERROR'
+      const authInvalid =
+        (text.includes('api key') && (text.includes('invalid') || text.includes('not valid'))) ||
+        text.includes('invalid_api_key') ||
+        text.includes('incorrect api key') ||
+        text.includes('authentication')
+      if (authInvalid) errCode = 'AGGREGATE_API_KEY_INVALID'
+      else if (text.includes('今日额度已用尽') || text.includes('upgrade') || text.includes('quota')) errCode = 'QUOTA_EXHAUSTED'
+      else if (text.includes('timeout') || text.includes('超时')) errCode = 'UPSTREAM_TIMEOUT'
+      else if (isTransientUpstreamImageError(msgFinal, data) || text.includes('bad_response_body')) errCode = 'UPSTREAM_BAD_RESPONSE'
+      const userFacingError =
+        errCode === 'AGGREGATE_API_KEY_INVALID'
+          ? '图片服务上游密钥无效或已过期（需在服务器/Vercel 环境变量中配置有效的 XIAO_DOU_BAO_API_KEY，非用户操作问题）。'
+          : errCode === 'UPSTREAM_BAD_RESPONSE'
+            ? '上游返回数据异常，请稍后重试。若多次失败可联系客服。'
+            : msgFinal
+      await writeTaskRow({
+        user_id: consumed?.user?.id || null,
+        type: 'image',
+        model: usedModel || model || null,
+        status: 'failed',
+        provider_task_id: null,
+        output_url: null,
+        raw: { upstream_status: upstreamResp.status, upstream: data || rawText },
+      })
+      return res.status(200).json({ success: false, error: userFacingError, code: errCode, raw: data || rawText })
     }
 
     // OpenAI images API shape: { data: [{ url }] } or { data: [{ b64_json }] }
