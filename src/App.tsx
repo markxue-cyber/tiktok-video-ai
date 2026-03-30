@@ -2068,6 +2068,9 @@ function App() {
 
   const isAdminBypass = String(user?.email || '').trim().toLowerCase() === 'haoxue2027@gmail.com'
   const canGenerateMedia = isAdminBypass || Boolean(user?.hasAppAccess)
+  /** 图片生成 / 电商套图：主区域锁视口高度，左右列内部滚动，避免整页无限拉长 */
+  const imageWorkbenchViewportFill =
+    mainNav === 'image' && (imageSubNav === 'imageGen' || imageSubNav === 'ecommerce')
 
   return (
     <div className="min-h-screen min-w-[1280px] bg-gray-50 flex workbench-root">
@@ -2282,8 +2285,12 @@ function App() {
           )}
         </nav>
       </aside>
-      <main className={`flex-1 ${navCollapsed ? 'ml-20' : 'ml-64'} transition-all`}>
-        <header className="bg-white shadow-sm sticky top-0 z-20">
+      <main
+        className={`flex-1 min-h-0 ${navCollapsed ? 'ml-20' : 'ml-64'} transition-all ${
+          imageWorkbenchViewportFill ? 'flex h-svh max-h-svh flex-col overflow-hidden' : ''
+        }`}
+      >
+        <header className="shrink-0 bg-white shadow-sm sticky top-0 z-20">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">
@@ -2434,7 +2441,17 @@ function App() {
             </div>
           </div>
         </header>
-        <div className={mainNav === 'assets' ? 'pt-2 p-6' : mainNav === 'home' ? 'p-4' : 'p-6'}>
+        <div
+          className={
+            mainNav === 'assets'
+              ? 'pt-2 p-6'
+              : mainNav === 'home'
+                ? 'p-4'
+                : imageWorkbenchViewportFill
+                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-6'
+                  : 'p-6'
+          }
+        >
           {mainNav === 'home' ? (
             <HomeChatModule
               onGoBenefits={gotoBenefits}
@@ -2449,7 +2466,13 @@ function App() {
             />
           ) : null}
           {/* Keep generators mounted so in-flight tasks survive nav switches. */}
-          <div className={mainNav === 'image' && imageSubNav === 'imageGen' ? '' : 'hidden'}>
+          <div
+            className={
+              mainNav === 'image' && imageSubNav === 'imageGen'
+                ? 'flex h-full min-h-0 flex-col'
+                : 'hidden'
+            }
+          >
             <ImageGenerator
               variant="simple"
               visible={mainNav === 'image' && imageSubNav === 'imageGen'}
@@ -2460,7 +2483,13 @@ function App() {
               onOptimisticCreditsSpend={optimisticSpendCredits}
             />
           </div>
-          <div className={mainNav === 'image' && imageSubNav === 'ecommerce' ? '' : 'hidden'}>
+          <div
+            className={
+              mainNav === 'image' && imageSubNav === 'ecommerce'
+                ? 'flex h-full min-h-0 flex-col'
+                : 'hidden'
+            }
+          >
             <ImageGenerator
               variant="ecommerce"
               visible={mainNav === 'image' && imageSubNav === 'ecommerce'}
@@ -7217,8 +7246,13 @@ function ImageGenerator({
 
   return (
     <>
-    <div ref={imageGenRootRef} className="grid min-h-0 grid-cols-2 items-stretch gap-6 min-w-[1120px]">
-      <div className="tikgen-panel h-full min-h-0 rounded-2xl p-4 sm:p-5 overflow-visible">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div
+      ref={imageGenRootRef}
+      className="grid h-full min-h-0 w-full flex-1 grid-cols-2 items-stretch gap-6 min-w-[1120px]"
+    >
+      <div className="tikgen-panel flex h-full min-h-0 flex-col overflow-x-visible rounded-2xl p-4 sm:p-5">
+        <div className="min-h-0 flex-1 overflow-x-visible overflow-y-auto pr-0.5">
         <div className="flex flex-col gap-6">
         <section>
           <div className="mb-2 flex items-center gap-1.5">
@@ -8070,6 +8104,7 @@ function ImageGenerator({
           ) : null}
         </div>
         </div>
+        </div>
       </div>
       <div
         ref={imageGenHistoryTopRef}
@@ -8731,6 +8766,7 @@ function ImageGenerator({
         ) : null}
         </div>
       </div>
+    </div>
     </div>
     {typeof document !== 'undefined' &&
     stylePromptHoverIdx !== null &&
