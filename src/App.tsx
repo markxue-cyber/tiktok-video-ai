@@ -1791,6 +1791,16 @@ function App() {
     }
   }, [showUserMenu])
 
+  /** 提交即更新顶部积分（服务端已预付扣款，但长请求未返回前 /api/me 不会变）——须放在 landing/auth 早退之前，避免 Hooks 数量不一致（React #310） */
+  const optimisticSpendCredits = useCallback((amount: number) => {
+    const n = Math.floor(Number(amount))
+    if (!Number.isFinite(n) || n <= 0) return
+    setUser((u) => {
+      if (!u) return u
+      return { ...u, credits: Math.max(0, Math.floor((u.credits || 0) - n)) }
+    })
+  }, [])
+
   if (page === 'landing')
     return (
       <LandingV2
@@ -2055,16 +2065,6 @@ function App() {
       // ignore refresh failures in manual action
     }
   }
-
-  /** 提交即更新顶部积分（服务端已预付扣款，但长请求未返回前 /api/me 不会变） */
-  const optimisticSpendCredits = useCallback((amount: number) => {
-    const n = Math.floor(Number(amount))
-    if (!Number.isFinite(n) || n <= 0) return
-    setUser((u) => {
-      if (!u) return u
-      return { ...u, credits: Math.max(0, Math.floor((u.credits || 0) - n)) }
-    })
-  }, [])
 
   const isAdminBypass = String(user?.email || '').trim().toLowerCase() === 'haoxue2027@gmail.com'
   const canGenerateMedia = isAdminBypass || Boolean(user?.hasAppAccess)
