@@ -977,20 +977,20 @@ function GenerationLoadingInline({
 }) {
   const pct = Math.max(1, Math.min(99, progressPct))
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/36 px-2 py-3 text-white/88">
-      <div className="relative h-10 w-10 shrink-0">
+    <div className="absolute inset-0 flex flex-col items-center justify-start pt-3 sm:pt-4 bg-black/36 px-2 pb-3 text-white/88">
+      <div className="relative mb-3 h-10 w-10 shrink-0 sm:mb-3.5">
         <div className="absolute inset-0 rounded-full border-[2px] border-transparent border-t-purple-400 animate-spin" />
         <div className="absolute inset-[6px] rounded-full border-[2px] border-transparent border-r-cyan-300 [animation:spin_1s_linear_infinite_reverse]" />
       </div>
-      <h4 className="text-center text-xs font-semibold leading-tight text-white/95">
+      <h4 className="text-center text-xs font-semibold leading-snug text-white/95">
         {title}{' '}
         <span className="tabular-nums">{pct}%</span>
       </h4>
       {subtitle ? (
-        <p className="line-clamp-2 max-w-[98%] text-center text-[9px] leading-snug text-white/65">{subtitle}</p>
+        <p className="mt-1 line-clamp-2 max-w-[98%] text-center text-[9px] leading-snug text-white/65">{subtitle}</p>
       ) : null}
       {Array.isArray(chips) && chips.length > 0 ? (
-        <div className="flex max-w-full flex-wrap items-center justify-center gap-1 px-0.5">
+        <div className="mt-2 flex max-w-full flex-wrap items-center justify-center gap-1 px-0.5">
           {chips.map((chip) => (
             <span
               key={chip}
@@ -8332,19 +8332,23 @@ function ImageGenerator({
                 )
                 const isSlotGenerating = slot.status === 'generating'
                 const genPct = isSlotGenerating ? Math.max(1, Math.min(99, sceneSlotGenProgress[sidx] ?? 2)) : 0
+                const cardToggleDisabled = ecommerceSceneWorkbenchCompact || isSlotGenerating
                 return (
                   <div
                     key={slot.key}
-                    role="button"
-                    tabIndex={isSlotGenerating ? -1 : 0}
+                    role={cardToggleDisabled ? 'group' : 'button'}
+                    tabIndex={cardToggleDisabled ? -1 : 0}
                     aria-busy={isSlotGenerating}
                     aria-disabled={isSlotGenerating}
                     onClick={() => {
                       if (isSlotGenerating) return
+                      /** 紧凑模式只展示已勾选格：再点整卡会取消勾选，卡片会从列表消失，易误触；此时改由非紧凑区勾选 */
+                      if (ecommerceSceneWorkbenchCompact) return
                       toggleSceneSlotSelected(sceneRunBoard.id, sidx)
                     }}
                     onKeyDown={(e) => {
                       if (isSlotGenerating) return
+                      if (ecommerceSceneWorkbenchCompact) return
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         toggleSceneSlotSelected(sceneRunBoard.id, sidx)
@@ -8354,7 +8358,13 @@ function ImageGenerator({
                       slot.selected
                         ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
                         : 'border-white/[0.07] bg-black/12 opacity-55'
-                    } ${isSlotGenerating ? 'cursor-wait pointer-events-none' : 'cursor-pointer'}`}
+                    } ${
+                      isSlotGenerating
+                        ? 'cursor-wait pointer-events-none'
+                        : ecommerceSceneWorkbenchCompact
+                          ? 'cursor-default'
+                          : 'cursor-pointer'
+                    }`}
                   >
                     {/* 固定顶栏高度：标题最多 2 行 + 描述 1 行；顶栏 overflow-visible 避免描述 hover 浮层被卡片裁切 */}
                     <div className="relative z-10 flex h-[5.25rem] shrink-0 flex-col overflow-visible px-2.5 pb-1.5 pt-2">
