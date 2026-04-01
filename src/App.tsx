@@ -2324,7 +2324,7 @@ function App() {
                 onClick={() => setMainNav('home')}
               />
               <NavSectionLabel>图片创作</NavSectionLabel>
-              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[12px]">
+              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[20px]">
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
@@ -2358,7 +2358,7 @@ function App() {
               </div>
 
               <NavSectionLabel>视频创作</NavSectionLabel>
-              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[12px]">
+              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[20px]">
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
