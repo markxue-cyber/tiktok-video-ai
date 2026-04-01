@@ -8436,16 +8436,12 @@ function ImageGenerator({
                         <div className="absolute inset-0">
                           {mosaicBase}
                           {selectionMark}
-                          <div className="pointer-events-none absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2.5 bg-black/35 px-4 text-white/92 text-[11px] backdrop-blur-[3px]">
-                            <RefreshCw className="w-7 h-7 animate-spin opacity-90" aria-hidden />
-                            <span className="tabular-nums text-sm font-semibold tracking-tight">{genPct}%</span>
-                            <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
-                              <div
-                                className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
-                                style={{ width: `${genPct}%` }}
-                              />
-                            </div>
-                            <span className="text-[10px] text-white/65">生成中…</span>
+                          <div className="pointer-events-none absolute inset-0 z-[1] backdrop-blur-[3px]">
+                            <GenerationLoadingInline
+                              title={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}
+                              chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
+                              progressPct={genPct}
+                            />
                           </div>
                         </div>
                       ) : slot.status === 'failed' && slot.selected ? (
