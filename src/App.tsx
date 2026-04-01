@@ -1636,6 +1636,13 @@ function App() {
   }, [mainNav])
 
   useEffect(() => {
+    // Hidden from nav: fallback if restored from stale local/session state.
+    if (mainNav === 'creativePlaza' || mainNav === 'tasks') {
+      setMainNav('home')
+    }
+  }, [mainNav])
+
+  useEffect(() => {
     if (!accessToken || page !== 'home') return
     if (assetsWarmupDoneForToken === accessToken) return
     assetsWarmupDoneForToken = accessToken
@@ -2147,17 +2154,9 @@ function App() {
                 active={mainNav === 'video' && videoSubNav === 'upscale'}
                 onClick={() => goVideoSubNav('upscale')}
               />
-              <NavPrimary
-                collapsed
-                icon={<LayoutGrid className="w-5 h-5" />}
-                label="创意广场"
-                active={mainNav === 'creativePlaza'}
-                onClick={() => setMainNav('creativePlaza')}
-              />
               {TEMPLATES_LIBRARY_ENABLED ? (
                 <NavPrimary collapsed icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
               ) : null}
-              <NavPrimary collapsed icon={<ListTodo className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
               <NavPrimary
                 collapsed
                 icon={<Folder className="w-5 h-5" />}
@@ -2252,17 +2251,9 @@ function App() {
                 />
               </div>
 
-              <NavPrimary
-                collapsed={false}
-                icon={<LayoutGrid className="w-5 h-5" />}
-                label="创意广场"
-                active={mainNav === 'creativePlaza'}
-                onClick={() => setMainNav('creativePlaza')}
-              />
               {TEMPLATES_LIBRARY_ENABLED ? (
                 <NavPrimary collapsed={false} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
               ) : null}
-              <NavPrimary collapsed={false} icon={<ListTodo className="w-5 h-5" />} label="任务中心" active={mainNav === 'tasks'} onClick={() => setMainNav('tasks')} />
               <NavPrimary
                 collapsed={false}
                 icon={<Folder className="w-5 h-5" />}
