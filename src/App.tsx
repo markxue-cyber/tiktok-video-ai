@@ -328,6 +328,42 @@ function sceneBoardForgetInflightSlots(board: SceneRunBoard): SceneRunBoard {
   }
 }
 
+function sceneSlotStatusRank(st: SceneRunSlot['status']): number {
+  return st === 'done' ? 4 : st === 'failed' ? 3 : st === 'generating' ? 2 : 1
+}
+
+/** 同 id 两版槽位合并：保留进度更高的一侧（避免 hydrate 竞态丢「生成中/已完成」） */
+function mergeSceneSlotsPreferProgress(a: SceneRunSlot[], b: SceneRunSlot[]): SceneRunSlot[] {
+  const n = Math.max(a.length, b.length)
+  return Array.from({ length: n }, (_, i) => {
+    const s = a[i]
+    const t = b[i]
+    if (!s) return t!
+    if (!t) return s
+    return sceneSlotStatusRank(s.status) >= sceneSlotStatusRank(t.status) ? s : t
+  })
+}
+
+/** IDB/LS 异步恢复晚于用户操作时：不能把旧快照整块 setState 盖掉，否则 batchLayoutCommitted 与槽位进度会丢 */
+function mergeSceneRunBoardOnHydrate(persisted: SceneRunBoard, current: SceneRunBoard | null): SceneRunBoard {
+  if (!current) return persisted
+  if (current.id !== persisted.id) return current
+  if (current.ts > persisted.ts) return current
+  if (current.ts < persisted.ts) {
+    return {
+      ...persisted,
+      batchLayoutCommitted: persisted.batchLayoutCommitted === true || current.batchLayoutCommitted === true,
+      slots: mergeSceneSlotsPreferProgress(persisted.slots, current.slots),
+    }
+  }
+  return {
+    ...persisted,
+    ...current,
+    batchLayoutCommitted: current.batchLayoutCommitted === true || persisted.batchLayoutCommitted === true,
+    slots: mergeSceneSlotsPreferProgress(current.slots, persisted.slots),
+  }
+}
+
 type SceneSlotGenResult =
   | { slotIndex: number; ok: true; imageUrl: string }
   | { slotIndex: number; ok: false; error: string }
@@ -4889,8 +4925,12 @@ function ImageGenerator({
       setImageGenHistory(hMerge)
 
       const bLs = boardFromRaw(loadSceneRunBoardFromLocalStorage(lsBoardKey))
-      const bMerge = bIdb && bIdb.id && Array.isArray(bIdb.slots) && bIdb.slots.length > 0 ? bIdb : bLs
-      if (bMerge) setSceneRunBoard(bMerge)
+      const fromIdb =
+        bIdb && typeof bIdb.id === 'string' && Array.isArray(bIdb.slots) && bIdb.slots.length > 0
+          ? boardFromRaw(bIdb as unknown as Record<string, unknown>)
+          : null
+      const bMerge = fromIdb || bLs
+      if (bMerge) setSceneRunBoard((cur) => mergeSceneRunBoardOnHydrate(bMerge, cur))
 
       if (refsIdb && Array.isArray(refsIdb) && refsIdb.length) setRefImages(refsIdb)
 
@@ -7039,11 +7079,14 @@ function ImageGenerator({
 
   const sceneWorkbenchSlotsForGrid = useMemo(() => {
     if (!sceneRunBoard) return [] as { slot: SceneRunSlot; sidx: number }[]
-    if (isSimpleImageGen || !sceneRunBoard.batchLayoutCommitted) {
+    const batchLayoutActive =
+      sceneBatchGenerating &&
+      sceneRunBoard.slots.some((s) => s.selected && s.status === 'generating')
+    if (isSimpleImageGen || (!sceneRunBoard.batchLayoutCommitted && !batchLayoutActive)) {
       return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx }))
     }
     return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx })).filter(({ slot }) => slot.selected)
-  }, [sceneRunBoard, isSimpleImageGen])
+  }, [sceneRunBoard, isSimpleImageGen, sceneBatchGenerating])
 
   const workbenchOpsLocked =
     workbenchFullAnalysisBusy ||
