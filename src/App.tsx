@@ -2324,7 +2324,7 @@ function App() {
                 onClick={() => setMainNav('home')}
               />
               <NavSectionLabel>图片创作</NavSectionLabel>
-              <div className="space-y-0.5">
+              <div className="space-y-0">
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
@@ -2358,7 +2358,7 @@ function App() {
               </div>
 
               <NavSectionLabel>视频创作</NavSectionLabel>
-              <div className="space-y-0.5">
+              <div className="space-y-0">
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
@@ -2837,10 +2837,10 @@ function ImageToolsWorkbench({
   )
 }
 
-/** 侧栏分组标题（对齐「工具」「平台」）：小号灰色，仅作分类不可点 */
+/** 侧栏一级分组标题（图片创作 / 视频创作 / 资产）：小号灰色，仅作分类不可点 */
 function NavSectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-4 pt-3 pb-1.5 text-[13px] font-medium text-gray-400 select-none" role="presentation">
+    <div className="px-4 pt-3 pb-[5px] text-[13px] font-medium text-gray-400 select-none" role="presentation">
       {children}
     </div>
   )
