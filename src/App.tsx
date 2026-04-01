@@ -2293,6 +2293,7 @@ function App() {
               ) : null}
               <NavPrimary
                 collapsed
+                compactNavLabel
                 icon={<Folder className="w-5 h-5" />}
                 label="资产库"
                 active={mainNav === 'assets'}
@@ -2382,6 +2383,7 @@ function App() {
               <NavSectionLabel>资产</NavSectionLabel>
               <NavPrimary
                 collapsed={false}
+                compactNavLabel
                 icon={<Folder className="w-5 h-5" />}
                 label="资产库"
                 active={mainNav === 'assets'}
@@ -2856,6 +2858,9 @@ function NavPrimary({
   /** 相对默认导航字号缩小 2px（约 16→14） */
   compactNavLabel = false,
 }: any) {
+  const navIconWrap = `inline-flex shrink-0 items-center justify-center [&_svg]:!h-[1em] [&_svg]:!w-[1em] [&_svg]:!block ${
+    compactNavLabel ? 'text-sm' : 'text-base'
+  }`
   return (
     <button
       onMouseEnter={onMouseEnter}
@@ -2869,7 +2874,9 @@ function NavPrimary({
             : 'bg-transparent text-gray-600 cursor-default'
       }`}
     >
-      {icon}
+      <span className={navIconWrap} aria-hidden>
+        {icon}
+      </span>
       {!collapsed && (
         <span className="flex items-center gap-2 min-w-0">
           <span className={`font-medium truncate ${compactNavLabel ? 'text-sm' : ''}`}>{label}</span>
@@ -2914,17 +2921,24 @@ function NavSecondaryToolsFlyout({
         onClick={onActivateDefault}
         title={label}
         className={`group relative w-full flex items-center justify-between gap-1 px-4 py-3 rounded-xl transition-[background-color,box-shadow] duration-200 ${
+          compactNavLabel ? 'text-sm' : 'text-base'
+        } ${
           active
             ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-none'
             : 'bg-transparent text-gray-700 hover:bg-white/[0.06]'
         }`}
       >
-        <span className="flex items-center space-x-3 min-w-0">
-          {icon}
-          <span className={`font-medium truncate ${compactNavLabel ? 'text-sm' : ''}`}>{label}</span>
+        <span className="flex min-w-0 flex-1 items-center space-x-3">
+          <span
+            className="inline-flex shrink-0 items-center justify-center [&_svg]:!h-[1em] [&_svg]:!w-[1em] [&_svg]:!block"
+            aria-hidden
+          >
+            {icon}
+          </span>
+          <span className="font-medium truncate">{label}</span>
         </span>
         <ChevronRight
-          className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''} ${
+          className={`h-[1em] w-[1em] shrink-0 transition-transform ${open ? 'rotate-90' : ''} ${
             active ? 'text-white/90 opacity-90' : 'opacity-45 text-gray-500'
           }`}
           aria-hidden
