@@ -2315,31 +2315,25 @@ function App() {
                 active={mainNav === 'home'}
                 onClick={() => setMainNav('home')}
               />
-              <NavPrimary
-                collapsed={false}
-                icon={<Image className="w-5 h-5" />}
-                label="图片创作"
-                active={mainNav === 'image'}
-                onClick={() => goImageSubNav('imageGen')}
-              />
-              <div className="pl-3 space-y-1">
-                <NavSecondary
+              <NavSectionLabel>图片创作</NavSectionLabel>
+              <div className="space-y-0.5">
+                <NavPrimary
                   collapsed={false}
-                  icon={<Sparkles className="w-4 h-4" />}
+                  icon={<Sparkles className="w-5 h-5" />}
                   label="图片生成"
                   active={mainNav === 'image' && imageSubNav === 'imageGen'}
                   onClick={() => goImageSubNav('imageGen')}
                 />
-                <NavSecondary
+                <NavPrimary
                   collapsed={false}
-                  icon={<Layers className="w-4 h-4" />}
+                  icon={<Layers className="w-5 h-5" />}
                   label="电商套图"
                   badge="推荐"
                   active={mainNav === 'image' && imageSubNav === 'ecommerce'}
                   onClick={() => goImageSubNav('ecommerce')}
                 />
                 <NavSecondaryToolsFlyout
-                  icon={<Wrench className="w-4 h-4" />}
+                  icon={<Wrench className="w-5 h-5" />}
                   label="图片工具"
                   active={mainNav === 'image' && imageSubNav === 'tools'}
                   flyoutItems={IMAGE_TOOLS_TAB_ITEMS.map(({ id, label }) => ({ id, label }))}
@@ -2352,27 +2346,18 @@ function App() {
                 />
               </div>
 
-              <NavPrimary
-                collapsed={false}
-                icon={<Clapperboard className="w-5 h-5" />}
-                label="视频创作"
-                active={mainNav === 'video'}
-                onClick={() => {
-                  setMainNav('video')
-                  setVideoSubNav(FIRST_VIDEO_SUB_NAV)
-                }}
-              />
-              <div className="pl-3 space-y-1">
-                <NavSecondary
+              <NavSectionLabel>视频创作</NavSectionLabel>
+              <div className="space-y-0.5">
+                <NavPrimary
                   collapsed={false}
-                  icon={<Video className="w-4 h-4" />}
+                  icon={<Video className="w-5 h-5" />}
                   label="视频生成"
                   active={mainNav === 'video' && videoSubNav === 'generate'}
                   onClick={() => goVideoSubNav('generate')}
                 />
-                <NavSecondary
+                <NavPrimary
                   collapsed={false}
-                  icon={<WandSparkles className="w-4 h-4" />}
+                  icon={<WandSparkles className="w-5 h-5" />}
                   label="视频增强"
                   active={mainNav === 'video' && videoSubNav === 'upscale'}
                   onClick={() => goVideoSubNav('upscale')}
@@ -2837,6 +2822,15 @@ function ImageToolsWorkbench({
   )
 }
 
+/** 侧栏分组标题（对齐「工具」「平台」）：小号灰色，仅作分类不可点 */
+function NavSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-4 pt-3 pb-1.5 text-[11px] font-medium text-gray-400 select-none" role="presentation">
+      {children}
+    </div>
+  )
+}
+
 function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, clickable = true, badge = '' }: any) {
   return (
     <button
@@ -2867,30 +2861,6 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
   )
 }
 
-function NavSecondary({ icon, label, active, onClick, collapsed, className = '', badge = '' }: any) {
-  return (
-    <button
-      onClick={onClick}
-      title={collapsed ? label : undefined}
-      className={`w-full flex items-center space-x-2 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-75 ease-out text-sm ${
-        active ? 'bg-purple-50 text-purple-700 shadow-none' : 'bg-transparent text-gray-600 hover:bg-white/[0.06]'
-      } ${className}`}
-    >
-      {icon}
-      {!collapsed && (
-        <span className="flex items-center gap-2 min-w-0">
-          <span className="truncate">{label}</span>
-          {badge ? (
-            <span className="inline-flex items-center rounded-full border border-violet-300/40 bg-violet-500/12 px-1.5 py-[2px] text-[10px] font-medium leading-none tracking-wide text-violet-200/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-              {badge}
-            </span>
-          ) : null}
-        </span>
-      )}
-    </button>
-  )
-}
-
 /** 展开侧栏：二级「图片工具」悬停显示三级目录 */
 function NavSecondaryToolsFlyout({
   icon,
@@ -2916,15 +2886,22 @@ function NavSecondaryToolsFlyout({
         type="button"
         onClick={onActivateDefault}
         title={label}
-        className={`w-full flex items-center justify-between gap-1 px-4 py-2 rounded-lg transition-[background-color,box-shadow] duration-75 ease-out text-sm ${
-          active ? 'bg-purple-50 text-purple-700 shadow-none' : 'bg-transparent text-gray-600 hover:bg-white/[0.06]'
+        className={`group relative w-full flex items-center justify-between gap-1 px-4 py-3 rounded-xl transition-[background-color,box-shadow] duration-200 ${
+          active
+            ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-none'
+            : 'bg-transparent text-gray-700 hover:bg-white/[0.06]'
         }`}
       >
-        <span className="flex items-center space-x-2 min-w-0">
+        <span className="flex items-center space-x-3 min-w-0">
           {icon}
-          <span className="truncate">{label}</span>
+          <span className="font-medium truncate">{label}</span>
         </span>
-        <ChevronRight className={`w-3.5 h-3.5 shrink-0 opacity-45 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden />
+        <ChevronRight
+          className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''} ${
+            active ? 'text-white/90 opacity-90' : 'opacity-45 text-gray-500'
+          }`}
+          aria-hidden
+        />
       </button>
       {open ? (
         <div
