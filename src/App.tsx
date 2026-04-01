@@ -2237,6 +2237,7 @@ function App() {
             <>
               <NavPrimary
                 collapsed
+                compactNavLabel
                 icon={<Home className="w-5 h-5" />}
                 label="首页"
                 active={mainNav === 'home'}
@@ -2244,6 +2245,7 @@ function App() {
               />
               <NavPrimary
                 collapsed
+                compactNavLabel
                 icon={<Sparkles className="w-5 h-5" />}
                 label="图片生成"
                 active={mainNav === 'image' && imageSubNav === 'imageGen'}
@@ -2251,6 +2253,7 @@ function App() {
               />
               <NavPrimary
                 collapsed
+                compactNavLabel
                 icon={<Layers className="w-5 h-5" />}
                 label="电商套图"
                 badge="推荐"
@@ -2258,6 +2261,7 @@ function App() {
                 onClick={() => goImageSubNav('ecommerce')}
               />
               <NavCollapsedToolsFlyout
+                compactNavLabel
                 icon={<Wrench className="w-5 h-5" />}
                 label="图片工具"
                 active={mainNav === 'image' && imageSubNav === 'tools'}
@@ -2270,6 +2274,7 @@ function App() {
               />
               <NavPrimary
                 collapsed
+                compactNavLabel
                 icon={<Video className="w-5 h-5" />}
                 label="视频生成"
                 active={mainNav === 'video' && videoSubNav === 'generate'}
@@ -2277,6 +2282,7 @@ function App() {
               />
               <NavPrimary
                 collapsed
+                compactNavLabel
                 icon={<WandSparkles className="w-5 h-5" />}
                 label="视频增强"
                 active={mainNav === 'video' && videoSubNav === 'upscale'}
@@ -2310,6 +2316,7 @@ function App() {
             <>
               <NavPrimary
                 collapsed={false}
+                compactNavLabel
                 icon={<Home className="w-5 h-5" />}
                 label="首页"
                 active={mainNav === 'home'}
@@ -2319,6 +2326,7 @@ function App() {
               <div className="space-y-0.5">
                 <NavPrimary
                   collapsed={false}
+                  compactNavLabel
                   icon={<Sparkles className="w-5 h-5" />}
                   label="图片生成"
                   active={mainNav === 'image' && imageSubNav === 'imageGen'}
@@ -2326,6 +2334,7 @@ function App() {
                 />
                 <NavPrimary
                   collapsed={false}
+                  compactNavLabel
                   icon={<Layers className="w-5 h-5" />}
                   label="电商套图"
                   badge="推荐"
@@ -2333,6 +2342,7 @@ function App() {
                   onClick={() => goImageSubNav('ecommerce')}
                 />
                 <NavSecondaryToolsFlyout
+                  compactNavLabel
                   icon={<Wrench className="w-5 h-5" />}
                   label="图片工具"
                   active={mainNav === 'image' && imageSubNav === 'tools'}
@@ -2350,6 +2360,7 @@ function App() {
               <div className="space-y-0.5">
                 <NavPrimary
                   collapsed={false}
+                  compactNavLabel
                   icon={<Video className="w-5 h-5" />}
                   label="视频生成"
                   active={mainNav === 'video' && videoSubNav === 'generate'}
@@ -2357,6 +2368,7 @@ function App() {
                 />
                 <NavPrimary
                   collapsed={false}
+                  compactNavLabel
                   icon={<WandSparkles className="w-5 h-5" />}
                   label="视频增强"
                   active={mainNav === 'video' && videoSubNav === 'upscale'}
@@ -2367,6 +2379,7 @@ function App() {
               {TEMPLATES_LIBRARY_ENABLED ? (
                 <NavPrimary collapsed={false} icon={<Library className="w-5 h-5" />} label="模板库" active={mainNav === 'templates'} onClick={() => setMainNav('templates')} />
               ) : null}
+              <NavSectionLabel>资产</NavSectionLabel>
               <NavPrimary
                 collapsed={false}
                 icon={<Folder className="w-5 h-5" />}
@@ -2825,13 +2838,24 @@ function ImageToolsWorkbench({
 /** 侧栏分组标题（对齐「工具」「平台」）：小号灰色，仅作分类不可点 */
 function NavSectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-4 pt-3 pb-1.5 text-[11px] font-medium text-gray-400 select-none" role="presentation">
+    <div className="px-4 pt-3 pb-1.5 text-[13px] font-medium text-gray-400 select-none" role="presentation">
       {children}
     </div>
   )
 }
 
-function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, clickable = true, badge = '' }: any) {
+function NavPrimary({
+  icon,
+  label,
+  active,
+  onClick,
+  onMouseEnter,
+  collapsed,
+  clickable = true,
+  badge = '',
+  /** 相对默认导航字号缩小 2px（约 16→14） */
+  compactNavLabel = false,
+}: any) {
   return (
     <button
       onMouseEnter={onMouseEnter}
@@ -2848,7 +2872,7 @@ function NavPrimary({ icon, label, active, onClick, onMouseEnter, collapsed, cli
       {icon}
       {!collapsed && (
         <span className="flex items-center gap-2 min-w-0">
-          <span className="font-medium truncate">{label}</span>
+          <span className={`font-medium truncate ${compactNavLabel ? 'text-sm' : ''}`}>{label}</span>
           {badge ? (
             <span className="inline-flex items-center rounded-full border border-violet-300/40 bg-violet-500/12 px-1.5 py-[2px] text-[10px] font-medium leading-none tracking-wide text-violet-200/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
               {badge}
@@ -2870,6 +2894,7 @@ function NavSecondaryToolsFlyout({
   activeThirdId,
   onActivateDefault,
   onPickThird,
+  compactNavLabel = false,
 }: {
   icon: ReactNode
   label: string
@@ -2878,6 +2903,8 @@ function NavSecondaryToolsFlyout({
   activeThirdId: string | null
   onActivateDefault: () => void
   onPickThird: (id: string) => void
+  /** 与 NavPrimary.compactNavLabel 一致 */
+  compactNavLabel?: boolean
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -2894,7 +2921,7 @@ function NavSecondaryToolsFlyout({
       >
         <span className="flex items-center space-x-3 min-w-0">
           {icon}
-          <span className="font-medium truncate">{label}</span>
+          <span className={`font-medium truncate ${compactNavLabel ? 'text-sm' : ''}`}>{label}</span>
         </span>
         <ChevronRight
           className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''} ${
@@ -2941,6 +2968,7 @@ function NavCollapsedToolsFlyout({
   flyoutItems,
   onClickDefault,
   onPickTool,
+  compactNavLabel = false,
 }: {
   icon: ReactNode
   label: string
@@ -2948,6 +2976,7 @@ function NavCollapsedToolsFlyout({
   flyoutItems: { id: string; label: string }[]
   onClickDefault: () => void
   onPickTool: (id: string) => void
+  compactNavLabel?: boolean
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -2956,7 +2985,7 @@ function NavCollapsedToolsFlyout({
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <NavPrimary collapsed icon={icon} label={label} active={active} onClick={onClickDefault} />
+      <NavPrimary collapsed compactNavLabel={compactNavLabel} icon={icon} label={label} active={active} onClick={onClickDefault} />
       {open ? (
         <div
           className="absolute left-full top-0 z-[90] pl-2 -ml-1"
