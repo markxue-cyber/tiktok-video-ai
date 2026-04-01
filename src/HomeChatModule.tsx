@@ -341,6 +341,8 @@ export type HomeChatMsg = {
   followUps?: string[]
   /** 首轮流式：首字未到时在气泡内展示加载态，勿与快捷指令同时出现 */
   pendingAnalysis?: boolean
+  /** 异步出图任务 id：写入 localStorage，刷新/离开页面后可继续轮询直至完成 */
+  pendingImageJobId?: string
   /** 展示用：流式已显示长度（仅最后一条助手消息可能使用） */
   streamLen?: number
   /** 用户消息：发送瞬间的参数快照（气泡展示不随底部配置改动） */
@@ -518,6 +520,90 @@ function newSession(): HomeChatSession {
   }
 }
 
+/** 异步出图：轮询直到成功/失败/超时（与 handleSend 内逻辑一致，供恢复任务复用） */
+async function pollHomeChatImageJobUntilDone(
+  jobId: string,
+  signal: AbortSignal,
+): Promise<HomeChatTurnResult | null> {
+  const deadline = Date.now() + 320_000
+  let resolved: HomeChatTurnResult | null = null
+  while (Date.now() < deadline) {
+    if (signal.aborted) {
+      const err = new Error('Aborted')
+      err.name = 'AbortError'
+      throw err
+    }
+    await new Promise((r) => setTimeout(r, 2500))
+    const st = await homeChatGenStatusAPI(jobId, { signal })
+    if (st?.status === 'succeeded' && st.result && typeof st.result === 'object') {
+      resolved = { ...(st.result as HomeChatTurnResult) }
+      break
+    }
+    if (st?.status === 'failed') {
+      const r = st.result as HomeChatTurnResult | { error?: string } | undefined
+      if (r && typeof r === 'object' && 'success' in r) {
+        resolved = r as HomeChatTurnResult
+      } else {
+        resolved = {
+          success: false,
+          error: String(
+            (r as { error?: string })?.error || st.jobError || st.error || '出图失败',
+          ),
+          code: 'IMAGE_JOB_FAILED',
+        }
+      }
+      break
+    }
+    if (st?.success === false && st.code === 'NOT_FOUND') {
+      resolved = { success: false, error: '出图任务不存在或已过期', code: 'NOT_FOUND' }
+      break
+    }
+    if (st?.success === false && st.code === 'GEN_STATUS_CACHE_304') {
+      resolved = {
+        success: false,
+        error: String(st.error || '状态查询被缓存拦截，请刷新页面后重试'),
+        code: 'GEN_STATUS_CACHE_304',
+      }
+      break
+    }
+    if (st && typeof st === 'object' && Object.keys(st as object).length === 0) {
+      resolved = {
+        success: false,
+        error: '无法读取出图状态（可能被 CDN/浏览器缓存），请刷新页面后重试',
+        code: 'GEN_STATUS_EMPTY',
+      }
+      break
+    }
+  }
+  return resolved
+}
+
+function homeChatImageGenFailureUserText(data2: HomeChatTurnResult): string {
+  const code = String(data2?.code || '')
+  const msgRaw = String(data2?.error || '出图失败')
+  return code === 'NOT_PRODUCT_IMAGE'
+    ? String(data2?.error || '参考图不太像商品主体，请换图或先仅分析。')
+    : code === 'IMAGE_GEN_EMPTY'
+      ? String(
+          data2?.error ||
+            '未收到有效出图结果，请重试；若多次出现可暂时关闭「自动优化提示词」或减少生成张数。',
+        )
+      : code === 'UPSTREAM_TIMEOUT'
+        ? '出图超时，请稍后重试或先生成预览图。'
+        : code === 'RATE_LIMITED'
+          ? '操作过于频繁，请稍后再试。'
+          : code === 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT'
+            ? String(
+                data2?.error ||
+                  '方舟 OpenAI 出图须 ep-m-… 接入点。请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…。',
+              )
+            : code === 'IMAGE_JOB_FAILED'
+              ? /does not support this api/i.test(String(data2?.error || msgRaw))
+                ? '出图失败：方舟 OpenAI 出图须 ep-m-… 接入点；请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…（ep-日期… 类常为 Seedream 5，不支持本出图 URL）。'
+                : String(data2?.error || '出图任务失败，请重试。')
+              : msgRaw
+}
+
 function loadSessions(): HomeChatSession[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -541,6 +627,23 @@ function saveSessions(sessions: HomeChatSession[]) {
   } catch {
     // ignore
   }
+}
+
+/** 首次挂载一次：从 localStorage 恢复会话与当前 tab，避免每次进首页都新建空对话 */
+function getInitialHomeChatBoot(): { sessions: HomeChatSession[]; activeId: string } {
+  const loaded = loadSessions()
+  const sessions = loaded.length > 0 ? loaded : [newSession()]
+  let storedActive = ''
+  try {
+    storedActive = localStorage.getItem(ACTIVE_KEY) || ''
+  } catch {
+    /* ignore */
+  }
+  const activeId =
+    storedActive && sessions.some((row) => row.id === storedActive)
+      ? storedActive
+      : [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0]!.id
+  return { sessions, activeId }
 }
 
 function sessionTitleFrom(firstUserText: string, mediaType: 'image' | 'video') {
@@ -939,16 +1042,17 @@ export function HomeChatModule({
   onOptimisticCreditsSpend,
   onNavigateToImageModule,
 }: Props) {
-  const [sessions, setSessions] = useState<HomeChatSession[]>(() => loadSessions())
-  const [activeId, setActiveId] = useState<string>(() => {
-    try {
-      return localStorage.getItem(ACTIVE_KEY) || ''
-    } catch {
-      return ''
-    }
-  })
+  const homeBootRef = useRef<{ sessions: HomeChatSession[]; activeId: string } | null>(null)
+  if (homeBootRef.current === null) {
+    homeBootRef.current = getInitialHomeChatBoot()
+  }
+  const [sessions, setSessions] = useState<HomeChatSession[]>(() => homeBootRef.current!.sessions)
+  const [activeId, setActiveId] = useState<string>(() => homeBootRef.current!.activeId)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  /** 供异步出图恢复 effect 读取：不能把 busy 放进 effect 依赖，否则 setBusy(true) 会触发 cleanup 误 abort 轮询 */
+  const busyRef = useRef(false)
+  busyRef.current = busy
   const [busyStage, setBusyStage] = useState<'idle' | 'identify' | 'analyze' | 'optimize' | 'generate'>('idle')
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
@@ -976,6 +1080,8 @@ export function HomeChatModule({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const plusMenuRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  /** 防止 StrictMode / 依赖抖动导致同一出图任务重复起轮询 */
+  const homeImageRecoveryKeyRef = useRef<string | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   /** 上传失败点「重试」时复用同一 File，无需重新选择 */
@@ -996,37 +1102,6 @@ export function HomeChatModule({
     return !!getLastMediaFromMessages(active.messages)
   }, [active])
 
-  /** 每次进入首页模块：新建一条空会话，原当前会话保留在历史列表中 */
-  useLayoutEffect(() => {
-    const s = newSession()
-    let trimmed = false
-    setSessions((prev) => {
-      let next = [s, ...prev]
-      if (next.length > MAX_SESSIONS) {
-        trimmed = true
-        const oldestFirst = [...next].sort((a, b) => a.updatedAt - b.updatedAt)
-        let over = next.length - MAX_SESSIONS
-        for (const row of oldestFirst) {
-          if (over <= 0) break
-          if (row.pinned) continue
-          next = next.filter((x) => x.id !== row.id)
-          over -= 1
-        }
-      }
-      return next
-    })
-    if (trimmed) {
-      setToast('已达到 100 条历史会话上限，已自动删除最早未置顶会话')
-      window.setTimeout(() => setToast(''), 4000)
-    }
-    setActiveId(s.id)
-    try {
-      localStorage.setItem(ACTIVE_KEY, s.id)
-    } catch {
-      // ignore
-    }
-  }, [])
-
   useEffect(() => {
     saveSessions(sessions)
   }, [sessions])
@@ -1038,6 +1113,203 @@ export function HomeChatModule({
       // ignore
     }
   }, [activeId])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
+
+  /** 刷新页面或从其它导航返回后：若本地仍记着异步出图 job，继续轮询直到完成（服务端任务不依赖前端是否挂载） */
+  useEffect(() => {
+    if (busyRef.current) return
+    const s = sessions.find((x) => x.id === activeId)
+    if (!s) return
+
+    const pendingMsg = [...s.messages].reverse().find((m) => {
+      if (m.role !== 'assistant' || !m.pendingImageJobId) return false
+      const hasImgs =
+        (Array.isArray(m.images) && m.images.some(Boolean)) ||
+        (Array.isArray(m.imageItems) && m.imageItems.some((x) => !!x?.url))
+      return !hasImgs
+    })
+    if (!pendingMsg?.pendingImageJobId) return
+
+    const jid = pendingMsg.pendingImageJobId
+    const sessionId = s.id
+    const assistantMsgId = pendingMsg.id
+    const recoveryKey = `${sessionId}:${assistantMsgId}:${jid}`
+    if (homeImageRecoveryKeyRef.current === recoveryKey) return
+    homeImageRecoveryKeyRef.current = recoveryKey
+
+    const ac = new AbortController()
+
+    let promptForArchive = ''
+    for (let i = s.messages.length - 1; i >= 0; i--) {
+      const um = s.messages[i]
+      if (um.role === 'user') {
+        promptForArchive = um.text
+        break
+      }
+    }
+
+    void (async () => {
+      try {
+        setBusy(true)
+        setBusyStage('generate')
+        const resolved = await pollHomeChatImageJobUntilDone(jid, ac.signal)
+        const data2: HomeChatTurnResult =
+          resolved ||
+          ({
+            success: false,
+            error: '出图等待超时，请重试或简化需求（如先 1 张预览）。',
+            code: 'UPSTREAM_TIMEOUT',
+          } as HomeChatTurnResult)
+
+        if (!data2?.success) {
+          const msg = homeChatImageGenFailureUserText(data2)
+          setSessions((prev) =>
+            prev.map((session) => {
+              if (session.id !== sessionId) return session
+              return {
+                ...session,
+                updatedAt: Date.now(),
+                messages: session.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        text: `${m.text}\n\n【出图未完成】${msg}`,
+                        blocked: true,
+                        pendingImageJobId: undefined,
+                      }
+                    : m,
+                ),
+              }
+            }),
+          )
+          void onRefreshUser?.()
+          return
+        }
+
+        const imageItems: HomeChatImageItem[] = Array.isArray(data2.images)
+          ? data2.images.filter((x) => !!x?.url)
+          : []
+        const imgs: string[] = imageItems.length
+          ? imageItems.map((x) => x.url)
+          : Array.isArray(data2.imageUrls)
+            ? data2.imageUrls.filter(Boolean)
+            : []
+
+        if (data2.previewToken) setPreviewToken(String(data2.previewToken))
+
+        if (!imgs.length) {
+          const emptyMsg =
+            '【出图未完成】服务端返回成功但未包含图片地址，请重试；若持续出现请联系支持或暂时关闭「自动优化提示词」。'
+          setSessions((prev) =>
+            prev.map((session) => {
+              if (session.id !== sessionId) return session
+              return {
+                ...session,
+                updatedAt: Date.now(),
+                messages: session.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        text: `${m.text}\n\n${emptyMsg}`,
+                        blocked: true,
+                        pendingImageJobId: undefined,
+                      }
+                    : m,
+                ),
+              }
+            }),
+          )
+          void onRefreshUser?.()
+          return
+        }
+
+        const extraOpt = data2.optimizedPrompt
+          ? `\n\n【优化后提示词】\n${String(data2.optimizedPrompt)}`
+          : ''
+        setSessions((prev) =>
+          prev.map((session) => {
+            if (session.id !== sessionId) return session
+            const msgs = session.messages.map((m) =>
+              m.id === assistantMsgId
+                ? (() => {
+                    const nextText = `${m.text}${extraOpt}`
+                    return {
+                      ...m,
+                      text: nextText,
+                      streamLen:
+                        typeof m.streamLen === 'number'
+                          ? Math.min(m.streamLen, m.text.length)
+                          : m.text.length,
+                      images: imgs.length ? imgs : undefined,
+                      imageItems: imageItems.length ? imageItems : undefined,
+                      pendingImageJobId: undefined,
+                      followUps:
+                        data2.quickActions && data2.quickActions.length
+                          ? [...data2.quickActions, ...(data2.previewToken ? ['确认高清生成'] : [])]
+                          : m.followUps,
+                    }
+                  })()
+                : m,
+            )
+            const firstImg = imgs[0]
+            if (imgs.length && session.params.syncToAssets) {
+              let idx = 0
+              const d = new Date()
+              const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+              for (const url of imgs) {
+                idx += 1
+                const name = `对话生成_${ymd}_${idx}.png`
+                void archiveAiMediaOnce({
+                  url,
+                  type: 'image',
+                  name,
+                  metadata: {
+                    source_label: '对话生成 - 首页模块',
+                    session_id: sessionId,
+                    aspect_ratio: session.params.aspectRatio,
+                    style: session.params.style,
+                    resolution: coerceHomeResolution(session.params.resolution),
+                    prompt: promptForArchive,
+                  },
+                })
+              }
+            }
+            return {
+              ...session,
+              updatedAt: Date.now(),
+              messages: msgs,
+              lastGeneratedRefUrl:
+                firstImg && isPersistableLastGenRefUrl(firstImg) ? firstImg : session.lastGeneratedRefUrl,
+            }
+          }),
+        )
+
+        void onRefreshUser?.()
+      } catch (e: unknown) {
+        if ((e as { name?: string })?.name !== 'AbortError') {
+          console.error(e)
+        }
+      } finally {
+        if (homeImageRecoveryKeyRef.current === recoveryKey) {
+          homeImageRecoveryKeyRef.current = null
+        }
+        setBusy(false)
+        setBusyStage('idle')
+      }
+    })()
+
+    return () => {
+      ac.abort()
+      if (homeImageRecoveryKeyRef.current === recoveryKey) {
+        homeImageRecoveryKeyRef.current = null
+      }
+    }
+  }, [sessions, activeId, onRefreshUser])
 
   /**
    * 对话 / 出图模型下拉：GET /api/models?gateway= ，合并网关 type 与 id 启发式；type 无法识别时保留启发式，避免列表被清空。
@@ -2015,60 +2287,20 @@ export function HomeChatModule({
           /** Vercel：第二轮 202 + waitUntil 后台出图，浏览器短连接轮询状态，避免长时间占用单次 fetch */
           if (data2?.async && data2?.imageJobId) {
             const jid = String(data2.imageJobId)
-            const deadline = Date.now() + 320_000
-            let resolved: HomeChatTurnResult | null = null
-            while (Date.now() < deadline) {
-              if (abortRef.current?.signal.aborted) {
-                const err = new Error('Aborted')
-                err.name = 'AbortError'
-                throw err
-              }
-              await new Promise((r) => setTimeout(r, 2500))
-              const st = await homeChatGenStatusAPI(jid, { signal: abortRef.current?.signal })
-              if (st?.status === 'succeeded' && st.result && typeof st.result === 'object') {
-                resolved = { ...(st.result as HomeChatTurnResult) }
-                break
-              }
-              if (st?.status === 'failed') {
-                const r = st.result as HomeChatTurnResult | { error?: string } | undefined
-                if (r && typeof r === 'object' && 'success' in r) {
-                  resolved = r as HomeChatTurnResult
-                } else {
-                  resolved = {
-                    success: false,
-                    error: String(
-                      (r as { error?: string })?.error ||
-                        st.jobError ||
-                        st.error ||
-                        '出图失败',
-                    ),
-                    code: 'IMAGE_JOB_FAILED',
-                  }
+            setSessions((prev) =>
+              prev.map((x) => {
+                if (x.id !== activeId) return x
+                return {
+                  ...x,
+                  updatedAt: Date.now(),
+                  messages: x.messages.map((m) =>
+                    m.id === assistantMsgId ? { ...m, pendingImageJobId: jid } : m,
+                  ),
                 }
-                break
-              }
-              if (st?.success === false && st.code === 'NOT_FOUND') {
-                resolved = { success: false, error: '出图任务不存在或已过期', code: 'NOT_FOUND' }
-                break
-              }
-              if (st?.success === false && st.code === 'GEN_STATUS_CACHE_304') {
-                resolved = {
-                  success: false,
-                  error: String(st.error || '状态查询被缓存拦截，请刷新页面后重试'),
-                  code: 'GEN_STATUS_CACHE_304',
-                }
-                break
-              }
-              // 304 等异常下 body 可能为空 {}，避免空转到超时
-              if (st && typeof st === 'object' && Object.keys(st as object).length === 0) {
-                resolved = {
-                  success: false,
-                  error: '无法读取出图状态（可能被 CDN/浏览器缓存），请刷新页面后重试',
-                  code: 'GEN_STATUS_EMPTY',
-                }
-                break
-              }
-            }
+              }),
+            )
+            const pollSignal = abortRef.current?.signal ?? new AbortController().signal
+            const resolved = await pollHomeChatImageJobUntilDone(jid, pollSignal)
             data2 =
               resolved ||
               ({
@@ -2079,36 +2311,18 @@ export function HomeChatModule({
           }
 
           if (!data2?.success) {
-            const code = String(data2?.code || '')
-            const msgRaw = String(data2?.error || '出图失败')
-            const msg =
-              code === 'NOT_PRODUCT_IMAGE'
-                ? String(data2?.error || '参考图不太像商品主体，请换图或先仅分析。')
-                : code === 'IMAGE_GEN_EMPTY'
-                  ? String(
-                      data2?.error ||
-                        '未收到有效出图结果，请重试；若多次出现可暂时关闭「自动优化提示词」或减少生成张数。',
-                    )
-                : code === 'UPSTREAM_TIMEOUT'
-                  ? '出图超时，请稍后重试或先生成预览图。'
-                  : code === 'RATE_LIMITED'
-                    ? '操作过于频繁，请稍后再试。'
-                  : code === 'ARK_IMAGE_MODEL_NEEDS_ENDPOINT'
-                    ? String(
-                        data2?.error ||
-                          '方舟 OpenAI 出图须 ep-m-… 接入点。请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…。',
-                      )
-                  : code === 'IMAGE_JOB_FAILED'
-                    ? /does not support this api/i.test(String(data2?.error || msgRaw))
-                      ? '出图失败：方舟 OpenAI 出图须 ep-m-… 接入点；请配置 BYTEDANCE_ARK_IMAGE_MODEL=ep-m-…（ep-日期… 类常为 Seedream 5，不支持本出图 URL）。'
-                      : String(data2?.error || '出图任务失败，请重试。')
-                    : msgRaw
+            const msg = homeChatImageGenFailureUserText(data2)
             setSessions((prev) =>
               prev.map((session) => {
                 if (session.id !== activeId) return session
                 const msgs = session.messages.map((m) =>
                   m.id === assistantMsgId
-                    ? { ...m, text: `${m.text}\n\n【出图未完成】${msg}`, blocked: true }
+                    ? {
+                        ...m,
+                        text: `${m.text}\n\n【出图未完成】${msg}`,
+                        blocked: true,
+                        pendingImageJobId: undefined,
+                      }
                     : m,
                 )
                 return { ...session, updatedAt: Date.now(), messages: msgs }
@@ -2140,7 +2354,9 @@ export function HomeChatModule({
                   ...session,
                   updatedAt: Date.now(),
                   messages: session.messages.map((m) =>
-                    m.id === assistantMsgId ? { ...m, text: `${m.text}\n\n${msg}`, blocked: true } : m,
+                    m.id === assistantMsgId
+                      ? { ...m, text: `${m.text}\n\n${msg}`, blocked: true, pendingImageJobId: undefined }
+                      : m,
                   ),
                 }
               }),
@@ -2168,6 +2384,7 @@ export function HomeChatModule({
                             : m.text.length,
                         images: imgs.length ? imgs : undefined,
                         imageItems: imageItems.length ? imageItems : undefined,
+                        pendingImageJobId: undefined,
                         followUps:
                           data2.quickActions && data2.quickActions.length
                             ? [...data2.quickActions, ...(data2.previewToken ? ['确认高清生成'] : [])]
@@ -2248,6 +2465,7 @@ export function HomeChatModule({
                       imageItems: imageItems.length ? imageItems : undefined,
                       streamLen: 0,
                       pendingAnalysis: false,
+                      pendingImageJobId: undefined,
                       followUps:
                         data.quickActions && data.quickActions.length
                           ? [...data.quickActions, ...(data.previewToken ? ['确认高清生成'] : [])]
@@ -2291,10 +2509,22 @@ export function HomeChatModule({
           setSessions((prev) =>
             prev.map((x) => {
               if (x.id !== activeId) return x
+              const hit = x.messages.find((row) => row.id === assistantMsgId)
+              const hasImgs =
+                !!hit &&
+                ((Array.isArray(hit.images) && hit.images.some(Boolean)) ||
+                  (Array.isArray(hit.imageItems) && hit.imageItems.some((z) => !!z?.url)))
+              const keepAssistant =
+                !!hit &&
+                (String(hit.text || '').trim().length > 0 || !!hit.pendingImageJobId || hasImgs)
               return {
                 ...x,
                 updatedAt: Date.now(),
-                messages: x.messages.filter((m) => m.id !== assistantMsgId),
+                messages: keepAssistant
+                  ? x.messages.map((row) =>
+                      row.id === assistantMsgId ? { ...row, pendingAnalysis: false } : row,
+                    )
+                  : x.messages.filter((row) => row.id !== assistantMsgId),
               }
             }),
           )
