@@ -963,7 +963,7 @@ function GenerationLoadingCard({
   )
 }
 
-/** 简版生成历史：单张占位卡内嵌的缩小版「图片生成中」动效（双环 + 文案 + 进度条） */
+/** 简版生成历史：单张占位卡内嵌的缩小版「图片生成中」动效（双环 + 文案 + 进度文案） */
 function GenerationLoadingInline({
   title = '图片生成中',
   subtitle,
@@ -997,13 +997,7 @@ function GenerationLoadingInline({
           ))}
         </div>
       ) : null}
-      <span className="tabular-nums text-sm font-semibold tracking-tight">{progressPct}%</span>
-      <div className="h-1.5 w-[min(88%,7rem)] overflow-hidden rounded-full bg-white/12">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-violet-400/90 to-fuchsia-400/85 transition-[width] duration-300 ease-out"
-          style={{ width: `${progressPct}%` }}
-        />
-      </div>
+      <p className="tabular-nums text-sm font-semibold tracking-tight text-white/88">{`生成进度：${Math.max(1, Math.min(99, progressPct))}%`}</p>
     </div>
   )
 }
