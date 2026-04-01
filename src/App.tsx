@@ -306,6 +306,8 @@ type SceneRunBoard = {
   refThumb: string
   basePrompt: string
   slots: SceneRunSlot[]
+  /** 用户已点过「一键生成图片」：网格仅展示已勾选格，并按原顺序排布；未点之前始终展示 6 格 */
+  batchLayoutCommitted?: boolean
 }
 
 /** 是否允许点「一键生成图片」：已选中里仍有 pending / failed（与 runBatchGenerateForBoard / 积分预估一致） */
@@ -4858,6 +4860,7 @@ function ImageGenerator({
         refThumb: String(p.refThumb || ''),
         basePrompt: String(p.basePrompt || ''),
         slots: p.slots as SceneRunSlot[],
+        batchLayoutCommitted: p.batchLayoutCommitted === true,
       }
     }
     void (async () => {
@@ -6704,6 +6707,7 @@ function ImageGenerator({
         ts: Date.now(),
         refThumb,
         basePrompt: prompt.trim(),
+        batchLayoutCommitted: false,
         slots: rows.map((sc) => ({
           key: sc.key,
           title: sc.title,
@@ -6857,6 +6861,10 @@ function ImageGenerator({
     })
     if (!indices.length) return
 
+    /** 电商：仅在实际发起批量出图时锁定布局（未点「一键生成图片」前始终展示 6 格，可任意勾选/取消） */
+    const snapForRun: SceneRunBoard =
+      !isSimpleImageGen ? { ...snap, batchLayoutCommitted: true } : snap
+
     let batchSignal: AbortSignal | undefined
     if (isSimpleImageGen) {
       const ac = new AbortController()
@@ -6864,8 +6872,8 @@ function ImageGenerator({
       batchSignal = ac.signal
     }
 
-    const basePrompt = snap.basePrompt
-    const slotSnap = indices.map((i) => ({ i, slot: { ...snap.slots[i] } }))
+    const basePrompt = snapForRun.basePrompt
+    const slotSnap = indices.map((i) => ({ i, slot: { ...snapForRun.slots[i] } }))
     const refUrl = refImageDataUrl || undefined
     const neg = optimizedNegativePrompt || undefined
     sceneBatchDepthRef.current += 1
@@ -6874,15 +6882,15 @@ function ImageGenerator({
     setGenErrorCode('UNKNOWN')
     const pendingSet = new Set(indices)
     const boardGenerating: SceneRunBoard = {
-      ...snap,
-      slots: snap.slots.map((s, i) =>
+      ...snapForRun,
+      slots: snapForRun.slots.map((s, i) =>
         pendingSet.has(i)
           ? { ...s, status: 'generating' as const, error: undefined, imageUrl: undefined }
           : s,
       ),
     }
     setSceneRunBoard((b) => {
-      if (!b || b.id !== snap.id) return b
+      if (!b || b.id !== snapForRun.id) return b
       return boardGenerating
     })
     upsertImageHistoryFromBoard(boardGenerating)
@@ -6890,7 +6898,7 @@ function ImageGenerator({
       await new Promise<void>((r) => setTimeout(r, 0))
       let boardLive = boardGenerating
       const tasks = slotSnap.map(async ({ i, slot }) => {
-        const result = await executeSceneSlotGenerationOnce(snap.id, i, basePrompt, slot, refUrl, neg, batchSignal)
+        const result = await executeSceneSlotGenerationOnce(snapForRun.id, i, basePrompt, slot, refUrl, neg, batchSignal)
         boardLive = {
           ...boardLive,
           slots: boardLive.slots.map((s, si) => {
@@ -6899,7 +6907,7 @@ function ImageGenerator({
             return { ...s, status: 'failed' as const, imageUrl: undefined, error: 'error' in result ? result.error : '失败' }
           }),
         }
-        applySceneSlotResultsToBoard(snap.id, [result])
+        applySceneSlotResultsToBoard(snapForRun.id, [result])
         upsertImageHistoryFromBoard(boardLive)
       })
       await Promise.all(tasks)
@@ -6915,6 +6923,7 @@ function ImageGenerator({
 
   const cloneBoardForNewBatchRun = (board: SceneRunBoard): SceneRunBoard => ({
     ...board,
+    batchLayoutCommitted: true,
     id: `ig_${Date.now()}_${Math.random().toString(16).slice(2)}`,
     ts: Date.now(),
     slots: board.slots.map((s) =>
@@ -7024,19 +7033,17 @@ function ImageGenerator({
   const currentSceneBoardGenerating =
     !!sceneRunBoard && sceneRunBoard.slots.some((s) => s.selected && s.status === 'generating')
 
-  /** 一键批量出图后：进入紧凑模式文案，但网格始终展示全部 6 格，避免取消勾选时卡片瞬间消失。 */
+  /** 用户已点击「一键生成图片」后：文案切换 + 网格只展示已勾选场景，并按原槽位顺序排布 */
   const ecommerceSceneWorkbenchCompact =
-    !isSimpleImageGen &&
-    !!sceneRunBoard &&
-    (sceneBatchGenerating ||
-      sceneRunBoard.slots.some(
-        (s) => s.selected && (s.status === 'generating' || s.status === 'done' || s.status === 'failed'),
-      ))
+    !isSimpleImageGen && !!sceneRunBoard && sceneRunBoard.batchLayoutCommitted === true
 
   const sceneWorkbenchSlotsForGrid = useMemo(() => {
     if (!sceneRunBoard) return [] as { slot: SceneRunSlot; sidx: number }[]
-    return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx }))
-  }, [sceneRunBoard])
+    if (isSimpleImageGen || !sceneRunBoard.batchLayoutCommitted) {
+      return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx }))
+    }
+    return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx })).filter(({ slot }) => slot.selected)
+  }, [sceneRunBoard, isSimpleImageGen])
 
   const workbenchOpsLocked =
     workbenchFullAnalysisBusy ||
