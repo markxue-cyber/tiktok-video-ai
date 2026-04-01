@@ -2246,6 +2246,7 @@ function App() {
               <NavPrimary
                 collapsed
                 compactNavLabel
+                denseNavRow
                 icon={<Sparkles className="w-5 h-5" />}
                 label="图片生成"
                 active={mainNav === 'image' && imageSubNav === 'imageGen'}
@@ -2254,6 +2255,7 @@ function App() {
               <NavPrimary
                 collapsed
                 compactNavLabel
+                denseNavRow
                 icon={<Layers className="w-5 h-5" />}
                 label="电商套图"
                 badge="推荐"
@@ -2262,6 +2264,7 @@ function App() {
               />
               <NavCollapsedToolsFlyout
                 compactNavLabel
+                denseNavRow
                 icon={<Wrench className="w-5 h-5" />}
                 label="图片工具"
                 active={mainNav === 'image' && imageSubNav === 'tools'}
@@ -2275,6 +2278,7 @@ function App() {
               <NavPrimary
                 collapsed
                 compactNavLabel
+                denseNavRow
                 icon={<Video className="w-5 h-5" />}
                 label="视频生成"
                 active={mainNav === 'video' && videoSubNav === 'generate'}
@@ -2283,6 +2287,7 @@ function App() {
               <NavPrimary
                 collapsed
                 compactNavLabel
+                denseNavRow
                 icon={<WandSparkles className="w-5 h-5" />}
                 label="视频增强"
                 active={mainNav === 'video' && videoSubNav === 'upscale'}
@@ -2324,10 +2329,11 @@ function App() {
                 onClick={() => setMainNav('home')}
               />
               <NavSectionLabel>图片创作</NavSectionLabel>
-              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[20px]">
+              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[32px]">
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
+                  denseNavRow
                   icon={<Sparkles className="w-5 h-5" />}
                   label="图片生成"
                   active={mainNav === 'image' && imageSubNav === 'imageGen'}
@@ -2336,6 +2342,7 @@ function App() {
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
+                  denseNavRow
                   icon={<Layers className="w-5 h-5" />}
                   label="电商套图"
                   badge="推荐"
@@ -2344,6 +2351,7 @@ function App() {
                 />
                 <NavSecondaryToolsFlyout
                   compactNavLabel
+                  denseNavRow
                   icon={<Wrench className="w-5 h-5" />}
                   label="图片工具"
                   active={mainNav === 'image' && imageSubNav === 'tools'}
@@ -2358,10 +2366,11 @@ function App() {
               </div>
 
               <NavSectionLabel>视频创作</NavSectionLabel>
-              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[20px]">
+              <div className="space-y-0 [&>*:not(:first-child)]:-mt-[32px]">
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
+                  denseNavRow
                   icon={<Video className="w-5 h-5" />}
                   label="视频生成"
                   active={mainNav === 'video' && videoSubNav === 'generate'}
@@ -2370,6 +2379,7 @@ function App() {
                 <NavPrimary
                   collapsed={false}
                   compactNavLabel
+                  denseNavRow
                   icon={<WandSparkles className="w-5 h-5" />}
                   label="视频增强"
                   active={mainNav === 'video' && videoSubNav === 'upscale'}
@@ -2857,16 +2867,19 @@ function NavPrimary({
   badge = '',
   /** 相对默认导航字号缩小 2px（约 16→14） */
   compactNavLabel = false,
+  /** 图片/视频创作下二级项：减小行高，与负 margin 配合更紧凑 */
+  denseNavRow = false,
 }: any) {
   const navIconWrap = `inline-flex shrink-0 items-center justify-center [&_svg]:!h-[1em] [&_svg]:!w-[1em] [&_svg]:!block ${
     compactNavLabel ? 'text-sm' : 'text-base'
   }`
+  const navRowPy = denseNavRow ? 'py-1.5' : 'py-3'
   return (
     <button
       onMouseEnter={onMouseEnter}
       onClick={clickable ? onClick : undefined}
       title={collapsed ? label : undefined}
-      className={`group relative w-full flex items-center ${collapsed ? 'justify-center px-2 overflow-visible' : 'space-x-3 px-4'} py-3 rounded-xl transition-[background-color,box-shadow] duration-200 ${
+      className={`group relative w-full flex items-center ${collapsed ? 'justify-center px-2 overflow-visible' : 'space-x-3 px-4'} ${navRowPy} rounded-xl transition-[background-color,box-shadow] duration-200 ${
         active
           ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-none'
           : clickable
@@ -2902,6 +2915,7 @@ function NavSecondaryToolsFlyout({
   onActivateDefault,
   onPickThird,
   compactNavLabel = false,
+  denseNavRow = false,
 }: {
   icon: ReactNode
   label: string
@@ -2912,15 +2926,17 @@ function NavSecondaryToolsFlyout({
   onPickThird: (id: string) => void
   /** 与 NavPrimary.compactNavLabel 一致 */
   compactNavLabel?: boolean
+  denseNavRow?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const rowPy = denseNavRow ? 'py-1.5' : 'py-3'
   return (
     <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button
         type="button"
         onClick={onActivateDefault}
         title={label}
-        className={`group relative w-full flex items-center justify-between gap-1 px-4 py-3 rounded-xl transition-[background-color,box-shadow] duration-200 ${
+        className={`group relative w-full flex items-center justify-between gap-1 px-4 ${rowPy} rounded-xl transition-[background-color,box-shadow] duration-200 ${
           compactNavLabel ? 'text-sm' : 'text-base'
         } ${
           active
@@ -2983,6 +2999,7 @@ function NavCollapsedToolsFlyout({
   onClickDefault,
   onPickTool,
   compactNavLabel = false,
+  denseNavRow = false,
 }: {
   icon: ReactNode
   label: string
@@ -2991,6 +3008,7 @@ function NavCollapsedToolsFlyout({
   onClickDefault: () => void
   onPickTool: (id: string) => void
   compactNavLabel?: boolean
+  denseNavRow?: boolean
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -2999,7 +3017,15 @@ function NavCollapsedToolsFlyout({
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <NavPrimary collapsed compactNavLabel={compactNavLabel} icon={icon} label={label} active={active} onClick={onClickDefault} />
+      <NavPrimary
+        collapsed
+        compactNavLabel={compactNavLabel}
+        denseNavRow={denseNavRow}
+        icon={icon}
+        label={label}
+        active={active}
+        onClick={onClickDefault}
+      />
       {open ? (
         <div
           className="absolute left-full top-0 z-[90] pl-2 -ml-1"
