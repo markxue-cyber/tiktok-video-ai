@@ -8735,29 +8735,24 @@ function ImageGenerator({
                                               draggable={false}
                                             />
                                           ) : null}
-                                          {isSimpleImageGen ? (
-                                            <GenerationLoadingInline
-                                              subtitle={
-                                                sceneBoardPreparing
-                                                  ? '正在根据提示词规划场景，完成后将自动开始出图…'
-                                                  : undefined
-                                              }
-                                              chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
-                                              progressPct={
-                                                sceneBoardPreparing
-                                                  ? Math.max(1, Math.min(99, genProgress))
-                                                  : pct
-                                              }
-                                            />
-                                          ) : (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/36 px-4 text-white/88">
-                                              <RefreshCw className="w-6 h-6 animate-spin opacity-90" aria-hidden />
-                                              <p className="text-center text-xs font-semibold leading-tight text-white/95">
-                                                {LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title}{' '}
-                                                <span className="tabular-nums">{pct}%</span>
-                                              </p>
-                                            </div>
-                                          )}
+                                          <GenerationLoadingInline
+                                            title={
+                                              isSimpleImageGen
+                                                ? undefined
+                                                : LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.title
+                                            }
+                                            subtitle={
+                                              sceneBoardPreparing
+                                                ? '正在根据提示词规划场景，完成后将自动开始出图…'
+                                                : undefined
+                                            }
+                                            chips={LOADING_COPY[ACTIVE_LOADING_COPY_STYLE].image.chips}
+                                            progressPct={
+                                              sceneBoardPreparing
+                                                ? Math.max(1, Math.min(99, genProgress))
+                                                : pct
+                                            }
+                                          />
                                         </div>
                                       </div>
                                     )
