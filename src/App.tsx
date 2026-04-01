@@ -7024,7 +7024,7 @@ function ImageGenerator({
   const currentSceneBoardGenerating =
     !!sceneRunBoard && sceneRunBoard.slots.some((s) => s.selected && s.status === 'generating')
 
-  /** 一键批量出图后：隐藏未勾选格，只保留已选场景（生成中/已完成/失败），按原顺序排布 */
+  /** 一键批量出图后：进入紧凑模式文案，但网格始终展示全部 6 格，避免取消勾选时卡片瞬间消失。 */
   const ecommerceSceneWorkbenchCompact =
     !isSimpleImageGen &&
     !!sceneRunBoard &&
@@ -7035,11 +7035,8 @@ function ImageGenerator({
 
   const sceneWorkbenchSlotsForGrid = useMemo(() => {
     if (!sceneRunBoard) return [] as { slot: SceneRunSlot; sidx: number }[]
-    if (isSimpleImageGen || !ecommerceSceneWorkbenchCompact) {
-      return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx }))
-    }
-    return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx })).filter(({ slot }) => slot.selected)
-  }, [sceneRunBoard, isSimpleImageGen, ecommerceSceneWorkbenchCompact])
+    return sceneRunBoard.slots.map((slot, sidx) => ({ slot, sidx }))
+  }, [sceneRunBoard])
 
   const workbenchOpsLocked =
     workbenchFullAnalysisBusy ||
@@ -8332,7 +8329,7 @@ function ImageGenerator({
                 )
                 const isSlotGenerating = slot.status === 'generating'
                 const genPct = isSlotGenerating ? Math.max(1, Math.min(99, sceneSlotGenProgress[sidx] ?? 2)) : 0
-                const cardToggleDisabled = ecommerceSceneWorkbenchCompact || isSlotGenerating
+                const cardToggleDisabled = isSlotGenerating
                 return (
                   <div
                     key={slot.key}
@@ -8342,13 +8339,10 @@ function ImageGenerator({
                     aria-disabled={isSlotGenerating}
                     onClick={() => {
                       if (isSlotGenerating) return
-                      /** 紧凑模式只展示已勾选格：再点整卡会取消勾选，卡片会从列表消失，易误触；此时改由非紧凑区勾选 */
-                      if (ecommerceSceneWorkbenchCompact) return
                       toggleSceneSlotSelected(sceneRunBoard.id, sidx)
                     }}
                     onKeyDown={(e) => {
                       if (isSlotGenerating) return
-                      if (ecommerceSceneWorkbenchCompact) return
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         toggleSceneSlotSelected(sceneRunBoard.id, sidx)
@@ -8359,11 +8353,7 @@ function ImageGenerator({
                         ? 'border-white/18 bg-black/28 shadow-[0_0_0_1px_rgba(167,139,250,0.2)]'
                         : 'border-white/[0.07] bg-black/12 opacity-55'
                     } ${
-                      isSlotGenerating
-                        ? 'cursor-wait pointer-events-none'
-                        : ecommerceSceneWorkbenchCompact
-                          ? 'cursor-default'
-                          : 'cursor-pointer'
+                      isSlotGenerating ? 'cursor-wait pointer-events-none' : 'cursor-pointer'
                     }`}
                   >
                     {/* 固定顶栏高度：标题最多 2 行 + 描述 1 行；顶栏 overflow-visible 避免描述 hover 浮层被卡片裁切 */}
