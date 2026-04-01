@@ -2302,10 +2302,10 @@ function App() {
                 }}
                 onClick={() => setMainNav('assets')}
               />
-              <NavPrimary collapsed icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
               {isDevAdmin ? (
                 <NavPrimary
                   collapsed
+                  compactNavLabel
                   icon={<ShieldCheck className="w-5 h-5" />}
                   label="开发者后台"
                   active={mainNav === 'developer'}
@@ -2392,10 +2392,10 @@ function App() {
                 }}
                 onClick={() => setMainNav('assets')}
               />
-              <NavPrimary collapsed={false} icon={<Crown className="w-5 h-5" />} label="个人权益" active={mainNav === 'benefits'} onClick={() => setMainNav('benefits')} />
               {isDevAdmin ? (
                 <NavPrimary
                   collapsed={false}
+                  compactNavLabel
                   icon={<ShieldCheck className="w-5 h-5" />}
                   label="开发者后台"
                   active={mainNav === 'developer'}
