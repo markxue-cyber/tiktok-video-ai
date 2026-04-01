@@ -621,6 +621,27 @@ function loadSessions(): HomeChatSession[] {
   }
 }
 
+/** 刷新后仍停留在「正在输出商用分析…」且无正文：多为请求挂起未写入终态，加载时收尾 */
+function sanitizeStaleHomeChatSessions(sessions: HomeChatSession[], now: number): HomeChatSession[] {
+  const STALE_MS = 12 * 60 * 1000
+  return sessions.map((s) => {
+    if (now - s.updatedAt <= STALE_MS) return s
+    let changed = false
+    const messages = s.messages.map((m) => {
+      if (m.role !== 'assistant' || !m.pendingAnalysis || String(m.text || '').trim()) return m
+      changed = true
+      return {
+        ...m,
+        pendingAnalysis: false,
+        text: '请求长时间未返回（可能已中断或网络超时）。请重试发送，或简化需求后重试。',
+        blocked: true,
+        followUps: ['重试', '减少生成张数后重试', '仅分析不生成', '重新上传素材'],
+      }
+    })
+    return changed ? { ...s, messages, updatedAt: now } : s
+  })
+}
+
 function saveSessions(sessions: HomeChatSession[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
@@ -631,7 +652,7 @@ function saveSessions(sessions: HomeChatSession[]) {
 
 /** 首次挂载一次：从 localStorage 恢复会话与当前 tab，避免每次进首页都新建空对话 */
 function getInitialHomeChatBoot(): { sessions: HomeChatSession[]; activeId: string } {
-  const loaded = loadSessions()
+  const loaded = sanitizeStaleHomeChatSessions(loadSessions(), Date.now())
   const sessions = loaded.length > 0 ? loaded : [newSession()]
   let storedActive = ''
   try {

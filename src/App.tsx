@@ -308,6 +308,8 @@ type SceneRunBoard = {
   slots: SceneRunSlot[]
   /** 用户已点过「一键生成图片」：网格仅展示已勾选格，并按原顺序排布；未点之前始终展示 6 格 */
   batchLayoutCommitted?: boolean
+  /** 本轮开始将槽位置为 generating 的时间戳；用于恢复时识别「假生成中」并超时收尾 */
+  genWaveStartedAt?: number
 }
 
 /** 是否允许点「一键生成图片」：已选中里仍有 pending / failed（与 runBatchGenerateForBoard / 积分预估一致） */
@@ -353,6 +355,7 @@ function mergeSceneRunBoardOnHydrate(persisted: SceneRunBoard, current: SceneRun
     return {
       ...persisted,
       batchLayoutCommitted: persisted.batchLayoutCommitted === true || current.batchLayoutCommitted === true,
+      genWaveStartedAt: current.genWaveStartedAt ?? persisted.genWaveStartedAt,
       slots: mergeSceneSlotsPreferProgress(persisted.slots, current.slots),
     }
   }
@@ -360,6 +363,7 @@ function mergeSceneRunBoardOnHydrate(persisted: SceneRunBoard, current: SceneRun
     ...persisted,
     ...current,
     batchLayoutCommitted: current.batchLayoutCommitted === true || persisted.batchLayoutCommitted === true,
+    genWaveStartedAt: current.genWaveStartedAt ?? persisted.genWaveStartedAt,
     slots: mergeSceneSlotsPreferProgress(current.slots, persisted.slots),
   }
 }
@@ -899,6 +903,95 @@ function buildHistoryTaskFromSceneBoard(
     errorMessage,
     errorHintCode,
   }
+}
+
+/** 持久化恢复的「生成中」若超过此时长仍未结束，视为已中断（避免永远卡在 94%） */
+const STALE_SCENE_GEN_MS = 45 * 60 * 1000
+/** 旧存档无 genWaveStartedAt 时，用看板创建时间判断 */
+const LEGACY_SCENE_GEN_STALE_MS = 55 * 60 * 1000
+/** 生成历史中仍为 active 且创建超过此时长 → 收尾为失败/部分完成（略大于常见整批耗时，避免误杀） */
+const STALE_HISTORY_ACTIVE_MS = 90 * 60 * 1000
+
+function sanitizeStaleSceneRunBoard(board: SceneRunBoard, now: number): SceneRunBoard {
+  const hasGen = board.slots.some((s) => s.selected && s.status === 'generating')
+  if (!hasGen) return board
+  const waveAt = board.genWaveStartedAt
+  let stale = false
+  if (typeof waveAt === 'number' && now - waveAt > STALE_SCENE_GEN_MS) stale = true
+  else if (typeof waveAt !== 'number' && now - board.ts > LEGACY_SCENE_GEN_STALE_MS) stale = true
+  if (stale) {
+    const err = '请求超时或已中断（未收到服务器结果），请对该场景重试'
+    return {
+      ...board,
+      genWaveStartedAt: undefined,
+      slots: board.slots.map((s) =>
+        s.selected && s.status === 'generating'
+          ? { ...s, status: 'failed' as const, error: err, imageUrl: undefined }
+          : s,
+      ),
+    }
+  }
+  if (typeof waveAt !== 'number') return { ...board, genWaveStartedAt: now }
+  return board
+}
+
+function finalizeStaleActiveImageTask(t: ImageGenHistoryTask): ImageGenHistoryTask {
+  const errMsg = '本地记录显示长时间未完成，可能已中断。请对未完成项重新生成。'
+  const slots = t.sceneSlots
+  if (!slots?.length) {
+    return { ...t, status: 'failed', errorMessage: errMsg, errorHintCode: 'STALE_LOCAL' }
+  }
+  const nextSlots = slots.map((s) =>
+    s.status === 'generating' || s.status === 'pending'
+      ? { ...s, status: 'failed' as const, error: errMsg }
+      : s,
+  )
+  const doneWithUrl = nextSlots.filter((s) => s.status === 'done' && s.imageUrl)
+  const failed = nextSlots.filter((s) => s.status === 'failed')
+  const outputUrls = doneWithUrl.map((s) => s.imageUrl!)
+  const sceneLabels = doneWithUrl.map((s) => s.title)
+  const sceneTeasers = doneWithUrl.map((s) =>
+    styleCardTeaser((s.description || s.imagePrompt || '').replace(/\s+/g, ' ').trim(), 42),
+  )
+  const sceneDescriptions = doneWithUrl.map((s) => {
+    const d = String(s.description || '').trim()
+    const ip = String(s.imagePrompt || '').trim()
+    if (d && ip) return `${d}\n\n${ip}`
+    return d || ip || ''
+  })
+  let status: ImageGenHistoryTask['status']
+  if (outputUrls.length === 0) status = 'failed'
+  else status = 'completed'
+  let errorMessage: string | undefined
+  let errorHintCode: string | undefined
+  if (status === 'failed') {
+    errorMessage = errMsg
+    errorHintCode = 'STALE_LOCAL'
+  } else if (failed.length) {
+    errorMessage = `部分场景未成功（${failed.length} 张）：${errMsg}`
+    errorHintCode = 'PARTIAL_STALE'
+  }
+  return {
+    ...t,
+    status,
+    outputUrls,
+    sceneLabels,
+    sceneTeasers,
+    sceneDescriptions,
+    sceneSlots: nextSlots,
+    errorMessage,
+    errorHintCode,
+  }
+}
+
+function sanitizeStaleImageGenHistoryTasks(tasks: ImageGenHistoryTask[], now: number): ImageGenHistoryTask[] {
+  return tasks.map((t) => {
+    if (t.status !== 'active') return t
+    if (now - t.ts < STALE_HISTORY_ACTIVE_MS) return t
+    const slots = t.sceneSlots
+    if (!slots?.some((s) => s.status === 'generating' || s.status === 'pending')) return t
+    return finalizeStaleActiveImageTask(t)
+  })
 }
 
 type ImageModelCaps = {
@@ -4897,6 +4990,7 @@ function ImageGenerator({
         basePrompt: String(p.basePrompt || ''),
         slots: p.slots as SceneRunSlot[],
         batchLayoutCommitted: p.batchLayoutCommitted === true,
+        genWaveStartedAt: typeof p.genWaveStartedAt === 'number' ? p.genWaveStartedAt : undefined,
       }
     }
     void (async () => {
@@ -4922,7 +5016,7 @@ function ImageGenerator({
               : 'completed',
         }))
         .slice(0, IMAGE_GEN_HISTORY_MAX) as ImageGenHistoryTask[]
-      setImageGenHistory(hMerge)
+      setImageGenHistory(sanitizeStaleImageGenHistoryTasks(hMerge, Date.now()))
 
       const bLs = boardFromRaw(loadSceneRunBoardFromLocalStorage(lsBoardKey))
       const fromIdb =
@@ -4930,7 +5024,8 @@ function ImageGenerator({
           ? boardFromRaw(bIdb as unknown as Record<string, unknown>)
           : null
       const bMerge = fromIdb || bLs
-      if (bMerge) setSceneRunBoard((cur) => mergeSceneRunBoardOnHydrate(bMerge, cur))
+      if (bMerge)
+        setSceneRunBoard((cur) => sanitizeStaleSceneRunBoard(mergeSceneRunBoardOnHydrate(bMerge, cur), Date.now()))
 
       if (refsIdb && Array.isArray(refsIdb) && refsIdb.length) setRefImages(refsIdb)
 
@@ -6850,6 +6945,7 @@ function ImageGenerator({
       if (!b || b.id !== boardId) return b
       return {
         ...b,
+        genWaveStartedAt: Date.now(),
         slots: b.slots.map((s, i) => (i === slotIndex ? { ...s, status: 'generating' as const, error: undefined } : s)),
       }
     })
@@ -6923,6 +7019,7 @@ function ImageGenerator({
     const pendingSet = new Set(indices)
     const boardGenerating: SceneRunBoard = {
       ...snapForRun,
+      genWaveStartedAt: Date.now(),
       slots: snapForRun.slots.map((s, i) =>
         pendingSet.has(i)
           ? { ...s, status: 'generating' as const, error: undefined, imageUrl: undefined }

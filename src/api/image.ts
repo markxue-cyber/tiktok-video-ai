@@ -55,6 +55,38 @@ function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms))
 }
 
+/** 单张出图请求上限：无超时则 fetch 可能永久挂起，界面卡在「生成中」与假进度 ~94% */
+const IMAGE_GENERATE_FETCH_TIMEOUT_MS = 12 * 60 * 1000
+
+/** 用户取消与超时任一触发即 abort（不依赖 AbortSignal.any 兼容性） */
+function mergeAbortWithTimeout(user: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const ctrl = new AbortController()
+  let tid: ReturnType<typeof setTimeout> | undefined
+  const cleanup = () => {
+    if (tid !== undefined) clearTimeout(tid)
+    tid = undefined
+    if (user) user.removeEventListener('abort', onUser)
+  }
+  const onUser = () => {
+    cleanup()
+    ctrl.abort(user!.reason)
+  }
+  const onTimeout = () => {
+    cleanup()
+    ctrl.abort(new DOMException('Image generate request timeout', 'TimeoutError'))
+  }
+  tid = setTimeout(onTimeout, timeoutMs)
+  if (user) {
+    if (user.aborted) {
+      cleanup()
+      ctrl.abort(user.reason)
+      return ctrl.signal
+    }
+    user.addEventListener('abort', onUser, { once: true })
+  }
+  return ctrl.signal
+}
+
 export async function generateImageAPI(params: {
   prompt: string
   negativePrompt?: string
@@ -67,6 +99,7 @@ export async function generateImageAPI(params: {
 }): Promise<{ imageUrl: string; size?: string }> {
   const callOnce = async (token: string) => {
     const idem = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`) as string
+    const mergedSignal = mergeAbortWithTimeout(params.signal, IMAGE_GENERATE_FETCH_TIMEOUT_MS)
     const resp = await fetch('/api/image-generate', {
       method: 'POST',
       headers: {
@@ -75,7 +108,7 @@ export async function generateImageAPI(params: {
         'Idempotency-Key': idem,
         'X-Confirm-Billable': 'true',
       },
-      signal: params.signal,
+      signal: mergedSignal,
       body: JSON.stringify({
         prompt: params.prompt,
         negativePrompt: params.negativePrompt,
@@ -128,6 +161,13 @@ export async function generateImageAPI(params: {
     } catch (e: any) {
       lastErr = e
       if (e?.name === 'AbortError' || params.signal?.aborted) throw e
+      if (e?.name === 'TimeoutError' || e?.code === 'CLIENT_TIMEOUT') {
+        const te: any =
+          e?.code === 'CLIENT_TIMEOUT'
+            ? e
+            : Object.assign(new Error('出图请求超时，请稍后重试或换一张较小的参考图。'), { code: 'CLIENT_TIMEOUT' })
+        throw te
+      }
       if (looksLikeAuthInvalid(e)) {
         const refreshed = await refreshAccessTokenIfPossible()
         if (!refreshed) throw e

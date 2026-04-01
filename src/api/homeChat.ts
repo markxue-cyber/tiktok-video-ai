@@ -31,6 +31,37 @@ async function readJsonOrText(resp: Response): Promise<any> {
   }
 }
 
+/** 首页对话单轮（含 SSE 分析流）上限：无超时则可能永远停在「正在输出商用分析…」 */
+const HOME_CHAT_TURN_TIMEOUT_MS = 8 * 60 * 1000
+
+function mergeAbortWithTimeout(user: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const ctrl = new AbortController()
+  let tid: ReturnType<typeof setTimeout> | undefined
+  const cleanup = () => {
+    if (tid !== undefined) clearTimeout(tid)
+    tid = undefined
+    if (user) user.removeEventListener('abort', onUser)
+  }
+  const onUser = () => {
+    cleanup()
+    ctrl.abort(user!.reason)
+  }
+  const onTimeout = () => {
+    cleanup()
+    ctrl.abort(new DOMException('Home chat turn timeout', 'TimeoutError'))
+  }
+  tid = setTimeout(onTimeout, timeoutMs)
+  if (user) {
+    if (user.aborted) {
+      cleanup()
+      ctrl.abort(user.reason)
+      return ctrl.signal
+    }
+    user.addEventListener('abort', onUser, { once: true })
+  }
+  return ctrl.signal
+}
+
 export type HomeChatTurnPayload = {
   mediaType: 'image' | 'video'
   mediaUrl: string
@@ -286,6 +317,7 @@ export async function homeChatTurnStreamAPI(
 
   const callOnce = async (t: string): Promise<HomeChatTurnResult> => {
     const { onDelta, onOps, signal } = init || {}
+    const mergedSignal = mergeAbortWithTimeout(signal, HOME_CHAT_TURN_TIMEOUT_MS)
     let deltaAccum = ''
     const wrapDelta = (chunk: string) => {
       if (chunk) deltaAccum += chunk
@@ -300,7 +332,7 @@ export async function homeChatTurnStreamAPI(
         'X-Confirm-Billable': 'true',
       },
       body: JSON.stringify({ ...body, streamAnalysis: true }),
-      signal,
+      signal: mergedSignal,
     })
 
     const ct = resp.headers.get('content-type') || ''
